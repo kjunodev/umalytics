@@ -1,0 +1,14 @@
+{
+  "name": "umalytics",
+  "version": "0.2.0",
+  "private": true,
+  "packageManager": "pnpm@9.15.4",
+  "scripts": {
+    "dev": "pnpm --filter @umalytics/extension dev",
+    "build": "pnpm --filter @umalytics/extension build",
+    "typecheck": "pnpm -r typecheck"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2"
+  }
+}
