@@ -221,7 +221,7 @@ export default function App() {
           <h1>UmaLytics</h1>
           <p className="app-credits">
             UmaLytics by{' '}
-            <a href="https://github.com/skimuic/UmaLytics" target="_blank" rel="noreferrer">
+            <a href="https://github.com/kjunodev/umalytics" target="_blank" rel="noreferrer">
               k.juno
             </a>
             {' '} - Uma Drafter by{' '}
