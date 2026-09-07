@@ -1,8 +1,14 @@
+import { browser } from 'wxt/browser';
 import { injectScript } from 'wxt/utils/inject-script';
 import type { ScriptPublicPath } from 'wxt/utils/inject-script';
 import type { DraftSnapshot, PrematchRoster } from '@umalytics/shared';
 import { extractMatchCodeFromUrl } from '../utils/matchDetection';
-import { sendDraftSnapshot, sendPrematchRoster } from '../utils/messaging';
+import {
+  isUmaLyticsContentMessage,
+  sendDraftSnapshot,
+  sendPrematchRoster,
+  type RoomDomScanResult
+} from '../utils/messaging';
 import {
   extractPrematchRosterFromRoomDom,
   extractRoomCodeFromRoomDom
@@ -63,6 +69,7 @@ export default defineContentScript({
     window.addEventListener('focus', handlePageFocus);
     window.addEventListener('pageshow', handlePageShow);
     document.addEventListener('visibilitychange', handleVisibilityChange);
+    browser.runtime.onMessage.addListener(handleRuntimeMessage);
 
     installRoomDomObserver();
     scheduleRoomDomRetries();
@@ -82,6 +89,10 @@ export default defineContentScript({
 
 function handlePageMessage(event: MessageEvent<unknown>): void {
   if (!isContentScriptActive) {
+    return;
+  }
+
+  if (event.source !== window || event.origin !== window.location.origin) {
     return;
   }
 
@@ -110,6 +121,14 @@ function handleVisibilityChange(): void {
   roomDomObserver = undefined;
 }
 
+function handleRuntimeMessage(message: unknown): Promise<RoomDomScanResult> | undefined {
+  if (!isContentScriptActive || !isUmaLyticsContentMessage(message)) {
+    return undefined;
+  }
+
+  return publishRoomDomRoster();
+}
+
 async function handleWindowMessage(message: unknown, matchCode?: string): Promise<void> {
   if (!isContentScriptActive) {
     return;
@@ -124,7 +143,7 @@ async function handleWindowMessage(message: unknown, matchCode?: string): Promis
 
   const roster = extractPrematchRosterFromSyncedDraftState(message.payload, matchCode);
 
-  if (roster === null || roster.players.length !== 10) {
+  if (roster === null) {
     return;
   }
 
@@ -199,9 +218,9 @@ function clearPendingRoomDomScan(): void {
   roomDomScanTimer = undefined;
 }
 
-async function publishRoomDomRoster(): Promise<void> {
+async function publishRoomDomRoster(): Promise<RoomDomScanResult> {
   if (!isContentScriptActive) {
-    return;
+    return { activeLobby: false };
   }
 
   await publishDomDraftSnapshot();
@@ -210,12 +229,13 @@ async function publishRoomDomRoster(): Promise<void> {
 
   if (roster === null) {
     refreshActiveRoomDomMatchCode(getCurrentMatchCode());
-    return;
+    return { activeLobby: false };
   }
 
   activeRoomDomMatchCode = roster.matchCode;
   clearRoomDomRetries();
   await publishRoster(roster, 'dom');
+  return { activeLobby: true, matchCode: roster.matchCode };
 }
 
 async function publishSyncedDraftSnapshot(payload: unknown, matchCode?: string): Promise<void> {
@@ -373,6 +393,7 @@ function deactivateContentScript(): void {
   window.removeEventListener('focus', handlePageFocus);
   window.removeEventListener('pageshow', handlePageShow);
   document.removeEventListener('visibilitychange', handleVisibilityChange);
+  browser.runtime.onMessage.removeListener(handleRuntimeMessage);
 
   clearPendingRoomDomScan();
   clearRoomDomRetries();

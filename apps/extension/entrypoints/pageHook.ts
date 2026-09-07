@@ -83,7 +83,19 @@ function inspectPossiblePayload(payload: unknown): void {
     return;
   }
 
-  const syncedDraftState = findSyncedDraftState(payload);
+  if (payload instanceof Blob) {
+    void payload.text().then(inspectPossibleJson).catch(() => {
+      // Ignore undecodable socket frames.
+    });
+    return;
+  }
+
+  if (payload instanceof ArrayBuffer) {
+    inspectPossibleJson(new TextDecoder().decode(payload));
+    return;
+  }
+
+  const syncedDraftState = findSyncedDraftStateInContainer(payload);
 
   if (syncedDraftState !== null) {
     window.postMessage(
@@ -97,15 +109,39 @@ function inspectPossiblePayload(payload: unknown): void {
 }
 
 function inspectPossibleJson(value: string): void {
-  if (!value.includes('rankedQueueRoster') && !value.includes('syncedDraftState_multiplayer')) {
+  if (
+    !value.includes('rankedQueueRoster') &&
+    !value.includes('syncedDraftState_multiplayer') &&
+    !value.includes('participants') &&
+    !value.includes('roomPlayers') &&
+    !value.includes('players') &&
+    !value.includes('actorUserId')
+  ) {
     return;
   }
 
-  try {
-    inspectPossiblePayload(JSON.parse(value));
-  } catch {
-    // Some realtime protocols wrap JSON in non-JSON frames; those can be decoded later once observed.
+  for (const candidate of getJsonCandidates(value)) {
+    try {
+      inspectPossiblePayload(JSON.parse(candidate));
+      return;
+    } catch {
+      // Try the next candidate; realtime protocols can prefix JSON with frame codes.
+    }
   }
+}
+
+function getJsonCandidates(value: string): string[] {
+  const candidates = [value];
+
+  for (let index = 0; index < value.length; index += 1) {
+    const character = value[index];
+
+    if ((character === '{' || character === '[') && index > 0) {
+      candidates.push(value.slice(index));
+    }
+  }
+
+  return candidates;
 }
 
 function findSyncedDraftState(value: unknown): JsonRecord | null {
@@ -120,6 +156,30 @@ function findSyncedDraftState(value: unknown): JsonRecord | null {
   if (Array.isArray(value.rankedQueueRoster)) {
     return {
       syncedDraftState_multiplayer: value
+    };
+  }
+
+  if (Array.isArray(value.participants) && hasMultiplayerDraftStateHint(value)) {
+    return {
+      syncedDraftState_multiplayer: value,
+      ...(typeof value.phase === 'string' ? { syncedDraftState_phase: value.phase } : {}),
+      ...(typeof value.currentTeam === 'string' ? { syncedDraftState_currentTeam: value.currentTeam } : {})
+    };
+  }
+
+  if (Array.isArray(value.players) && hasMultiplayerRoomHint(value)) {
+    return {
+      syncedDraftState_multiplayer: value,
+      ...(typeof value.phase === 'string' ? { syncedDraftState_phase: value.phase } : {}),
+      ...(typeof value.currentTeam === 'string' ? { syncedDraftState_currentTeam: value.currentTeam } : {})
+    };
+  }
+
+  if (Array.isArray(value.roomPlayers) && hasMultiplayerRoomHint(value)) {
+    return {
+      syncedDraftState_multiplayer: value,
+      ...(typeof value.phase === 'string' ? { syncedDraftState_phase: value.phase } : {}),
+      ...(typeof value.currentTeam === 'string' ? { syncedDraftState_currentTeam: value.currentTeam } : {})
     };
   }
 
@@ -152,6 +212,28 @@ function findSyncedDraftStateInContainer(value: unknown): JsonRecord | null {
   }
 
   return findSyncedDraftState(value);
+}
+
+function hasMultiplayerRoomHint(value: JsonRecord): boolean {
+  return (
+    hasMultiplayerDraftStateHint(value) ||
+    typeof value.roomCode === 'string' ||
+    typeof value.code === 'string' ||
+    typeof value.connectionType === 'string' ||
+    typeof value.localActorUserId === 'string' ||
+    typeof value.localTeam === 'string'
+  );
+}
+
+function hasMultiplayerDraftStateHint(value: JsonRecord): boolean {
+  return (
+    typeof value.roomId === 'string' ||
+    typeof value.matchId === 'string' ||
+    typeof value.team1Name === 'string' ||
+    typeof value.team2Name === 'string' ||
+    isRecord(value.team1) ||
+    isRecord(value.team2)
+  );
 }
 
 function isRecord(value: unknown): value is JsonRecord {

@@ -25,8 +25,29 @@ const UMA_PORTRAIT_ID_OVERRIDES = new Map<string, string>([
   ['103002', '103040'], // Halloween Rice Shower
   ['104502', '104540'], // Halloween Super Creek
   ['105602', '105623'], // Full Armor Matikanefukukitaru
+  ['101902', '101940'], // Halloween Agnes Digital
+  ['105802', '105840'], // Halloween Meisho Doto
+  ['102102', '102143'], // Festival Tamamo Cross
+  ['103402', '103443'], // Festival Inari One
+  ['100802', '100846'], // Christmas Vodka
+  ['100902', '100946'], // Christmas Daiwa Scarlet
+  ['102702', '102713'], // Valentine Mejiro Ryan
+  ['103102', '103113'], // Valentine Ines Fujin
+  ['106902', '106920'], // Ballroom Sakura Chiyono O
+  ['107102', '107120'], // Ballroom Mejiro Ardan
   ['100102', '100130'], // Summer Special Week
   ['100402', '100430'], // Summer Maruzensky
+  ['100202', '100230'], // Summer Silence Suzuka
+  ['103602', '103640'], // Halloween Air Shakur
+  ['108302', '108340'], // Halloween Symboli Kris S
+  ['100303', '100343'], // Festival Tokai Teio
+  ['103902', '103943'], // Festival Kawakami Princess
+  ['106402', '106446'], // Christmas Mejiro Palmer
+  ['107402', '107446'], // Christmas Mejiro Bright
+  ['103302', '103346'], // Christmas Admire Vega
+  ['107702', '107746'], // Christmas Narita Top Road
+  ['102403', '102440'], // Halloween Mayano Top Gun
+  ['104202', '104240'], // Halloween Seeking the Pearl
   ['101102', '101116'], // Fantasy Grass Wonder
   ['101402', '101416'], // Fantasy El Condor Pasa
   ['101802', '101826'], // Wedding Air Groove
@@ -58,6 +79,10 @@ export function getUmaPortraitUrl(
 }
 
 export function normalizeUmaOutfitId(umaId: string): string {
+  if (UMA_RELEASE_ENTRY_BY_OUTFIT_ID.has(umaId)) {
+    return umaId;
+  }
+
   return UMA_OUTFIT_ID_BY_PORTRAIT_ID.get(umaId) ?? umaId;
 }
 

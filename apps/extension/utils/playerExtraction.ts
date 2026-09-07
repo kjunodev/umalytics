@@ -1,17 +1,19 @@
 import type { MatchCode, PrematchPlayer, PrematchRoster, PrematchTeam, TeamId } from '@umalytics/shared';
+import { cleanTeamName } from './textCleanup';
 
 const TEAM_IDS = ['team1', 'team2'] as const satisfies readonly TeamId[];
 
 export function normalizePrematchRosterFromPlayers(
   value: unknown,
-  matchCode?: MatchCode
+  matchCode?: MatchCode,
+  context?: Record<string, unknown>
 ): PrematchRoster | null {
   if (!Array.isArray(value)) {
     return null;
   }
 
   const players = value
-    .map(normalizePrematchPlayer)
+    .map((player) => normalizePrematchPlayer(player, context))
     .filter((player): player is PrematchPlayer => player !== null);
   const dedupedPlayers = dedupePrematchPlayers(players);
 
@@ -36,9 +38,14 @@ export function extractPrematchRosterFromSyncedDraftState(
     return null;
   }
 
+  const rosterPlayers = getRosterPlayers(multiplayer);
   const roster = normalizePrematchRosterFromPlayers(
-    multiplayer.rankedQueueRoster,
-    readOptionalString(multiplayer.roomId) ?? fallbackMatchCode
+    rosterPlayers,
+    readOptionalString(multiplayer.roomId)
+      ?? readOptionalString(multiplayer.roomCode)
+      ?? readOptionalString(multiplayer.code)
+      ?? fallbackMatchCode,
+    multiplayer
   );
 
   if (roster === null) {
@@ -57,19 +64,52 @@ export function extractPrematchRosterFromSyncedDraftState(
   };
 }
 
-export function normalizePrematchPlayer(value: unknown): PrematchPlayer | null {
+export function normalizePrematchPlayer(
+  value: unknown,
+  context?: Record<string, unknown>
+): PrematchPlayer | null {
   if (!isRecord(value)) {
     return null;
   }
 
-  const { userId, discordId, displayName, partyId, partyRatingBonus } = value;
+  const userId = readOptionalString(value.userId)
+    ?? readOptionalString(value.actorUserId)
+    ?? readOptionalString(value.discordId)
+    ?? readOptionalString(value.id);
+  const discordId = readOptionalString(value.discordId)
+    ?? readOptionalString(value.actorUserId)
+    ?? readOptionalString(value.userId)
+    ?? readOptionalString(value.id);
+  const identityKeys = [userId, discordId, readOptionalString(value.actorUserId), readOptionalString(value.id)]
+    .filter((key): key is string => key !== undefined);
+  const displayName = readOptionalString(value.displayName)
+    ?? readOptionalString(value.nickname)
+    ?? readOptionalString(value.username)
+    ?? readOptionalString(value.discordUsername)
+    ?? readOptionalString(value.playerName)
+    ?? readOptionalString(value.name)
+    ?? readContextString(context, identityKeys, [
+      'participantNicknames',
+      'participantDisplayNames',
+      'participantNames',
+      'playerNicknames',
+      'playerDisplayNames',
+      'playerNames',
+      'nicknames',
+      'displayNames'
+    ]);
+  const partyId = readOptionalString(value.partyId) ?? null;
+  const partyRatingBonus = readOptionalNumber(value.partyRatingBonus) ?? 0;
+  const roomRole = (readOptionalString(value.roomRole) ?? readOptionalString(value.type))?.toLowerCase();
+
+  if (roomRole === 'staff' || roomRole === 'spectator') {
+    return null;
+  }
 
   if (
-    typeof userId !== 'string' ||
-    typeof discordId !== 'string' ||
-    typeof displayName !== 'string' ||
-    (typeof partyId !== 'string' && partyId !== null) ||
-    typeof partyRatingBonus !== 'number'
+    userId === undefined ||
+    discordId === undefined ||
+    displayName === undefined
   ) {
     return null;
   }
@@ -82,6 +122,22 @@ export function normalizePrematchPlayer(value: unknown): PrematchPlayer | null {
     partyRatingBonus,
     ...readOptionalPlayerFields(value)
   };
+}
+
+function getRosterPlayers(multiplayer: Record<string, unknown>): unknown {
+  if (Array.isArray(multiplayer.rankedQueueRoster)) {
+    return multiplayer.rankedQueueRoster;
+  }
+
+  if (Array.isArray(multiplayer.participants)) {
+    return multiplayer.participants;
+  }
+
+  if (Array.isArray(multiplayer.players)) {
+    return multiplayer.players;
+  }
+
+  return multiplayer.roomPlayers;
 }
 
 function buildPrematchTeams(
@@ -114,7 +170,7 @@ function dedupePrematchPlayers(players: PrematchPlayer[]): PrematchPlayer[] {
   const dedupedPlayers: PrematchPlayer[] = [];
 
   for (const player of players) {
-    const stableKey = `${player.discordId}:${player.userId}`;
+    const stableKey = player.discordId || player.userId;
 
     if (seenPlayerIds.has(stableKey)) {
       continue;
@@ -132,7 +188,7 @@ function readOptionalPlayerFields(value: Record<string, unknown>): Partial<Prema
   const team = readOptionalTeamId(value.team);
   const initialTeam = readOptionalTeamId(value.initialTeam);
   const finalTeam = readOptionalTeamId(value.finalTeam);
-  const role = readOptionalString(value.role);
+  const role = readOptionalString(value.role) ?? readOptionalString(value.roomRole) ?? readOptionalString(value.type);
   const isCaptain = readOptionalBoolean(value.isCaptain);
   const ratingSnapshot = readOptionalNumber(value.ratingSnapshot);
   const rdSnapshot = readOptionalNumber(value.rdSnapshot);
@@ -152,6 +208,34 @@ function readOptionalPlayerFields(value: Record<string, unknown>): Partial<Prema
   return fields;
 }
 
+function readContextString(
+  context: Record<string, unknown> | undefined,
+  keys: string[],
+  mapNames: string[]
+): string | undefined {
+  if (context === undefined || keys.length === 0) {
+    return undefined;
+  }
+
+  for (const mapName of mapNames) {
+    const map = context[mapName];
+
+    if (!isRecord(map)) {
+      continue;
+    }
+
+    for (const key of keys) {
+      const value = readOptionalString(map[key]);
+
+      if (value !== undefined) {
+        return value;
+      }
+    }
+  }
+
+  return undefined;
+}
+
 function readTeamMetadata(
   multiplayer: Record<string, unknown> | undefined,
   teamId: TeamId
@@ -162,7 +246,7 @@ function readTeamMetadata(
 
   const nameKey = `${teamId}Name`;
   const captainKey = `${teamId}CaptainActorUserId`;
-  const name = readOptionalString(multiplayer[nameKey]);
+  const name = cleanTeamName(readOptionalString(multiplayer[nameKey]));
   const captainUserId = readOptionalString(multiplayer[captainKey]);
 
   return {

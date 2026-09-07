@@ -1,7 +1,12 @@
 import { browser } from 'wxt/browser';
 import type { ScriptPublicPath } from 'wxt/utils/inject-script';
 import type { PlayerProfileSummary, PrematchRoster } from '@umalytics/shared';
-import { isUmaLyticsMessage, type LobbyReconnectResult } from '../utils/messaging';
+import {
+  isUmaLyticsMessage,
+  sendRoomDomScanRequest,
+  type LobbyReconnectResult,
+  type RoomDomScanResult
+} from '../utils/messaging';
 import { fetchPlayerProfileSummaries } from '../utils/playerProfileApi';
 import {
   getPlayerProfileSummaries,
@@ -134,17 +139,15 @@ async function getActiveDrafterTab(): Promise<Browser.tabs.Tab | undefined> {
   const tabs = await browser.tabs.query({ active: true, currentWindow: true });
   const activeCurrentWindowTab = tabs.find((tab) => tab.url?.startsWith('https://drafter.uma.guide/') === true);
 
-  if (activeCurrentWindowTab !== undefined && getTabMatchCode(activeCurrentWindowTab) !== undefined) {
+  if (activeCurrentWindowTab !== undefined) {
     return activeCurrentWindowTab;
   }
 
   const drafterTabs = await browser.tabs.query({ url: DRAFTER_URL_PATTERN });
 
   return (
-    drafterTabs.find((tab) => tab.active && getTabMatchCode(tab) !== undefined) ??
-    drafterTabs.find((tab) => getTabMatchCode(tab) !== undefined) ??
-    activeCurrentWindowTab ??
     drafterTabs.find((tab) => tab.active) ??
+    drafterTabs.find((tab) => getTabMatchCode(tab) !== undefined) ??
     drafterTabs[0]
   );
 }
@@ -157,8 +160,6 @@ async function handlePrematchRosterDetected(roster: PrematchRoster): Promise<voi
 
 async function handleLobbyReconnectRequested(): Promise<LobbyReconnectResult> {
   const activeTab = await getActiveDrafterTab();
-  const activeMatchCode = getTabMatchCode(activeTab);
-  const cachedRoster = await getLatestPrematchRoster();
 
   if (activeTab === undefined) {
     await clearActiveLobbyState();
@@ -167,15 +168,41 @@ async function handleLobbyReconnectRequested(): Promise<LobbyReconnectResult> {
 
   await injectContentScriptIntoTab(activeTab.id);
 
+  const domScanResult = await requestRoomDomScan(activeTab.id);
+  const activeMatchCode = domScanResult?.matchCode ?? getTabMatchCode(activeTab);
+
+  if (domScanResult?.activeLobby === true && activeMatchCode === undefined) {
+    return { activeLobby: true };
+  }
+
   if (activeMatchCode === undefined) {
+    if (domScanResult?.activeLobby === false) {
+      await clearActiveLobbyState();
+    }
+
     return { activeLobby: false };
   }
+
+  const cachedRoster = await getLatestPrematchRoster();
 
   if (cachedRoster !== undefined && cachedRoster.matchCode !== activeMatchCode) {
     await clearActiveLobbyState();
   }
 
   return { activeLobby: true, matchCode: activeMatchCode };
+}
+
+async function requestRoomDomScan(tabId: number | undefined): Promise<RoomDomScanResult | undefined> {
+  if (tabId === undefined) {
+    return undefined;
+  }
+
+  try {
+    return await sendRoomDomScanRequest(tabId);
+  } catch (caught) {
+    console.debug('[UmaLytics] Room DOM scan request skipped:', caught);
+    return undefined;
+  }
 }
 
 async function clearActiveLobbyState(): Promise<void> {
@@ -282,7 +309,10 @@ function getRetainedProfiles(
   return Object.fromEntries(
     discordIds
       .map((discordId) => [discordId, cachedProfiles[discordId] ?? freshProfiles[discordId]] as const)
-      .filter((entry): entry is readonly [string, PlayerProfileSummary] => entry[1] !== undefined)
+      .filter((entry): entry is readonly [string, PlayerProfileSummary] => (
+        entry[1] !== undefined &&
+        entry[1].error === undefined
+      ))
   );
 }
 
@@ -303,6 +333,7 @@ function getFreshProfiles(
 
         return (
           profile !== undefined &&
+          profile.error === undefined &&
           now - profile.fetchedAt < PROFILE_CACHE_TTL_MS &&
           hasCurrentStatsShape(profile) &&
           hasResolvedProfileStatLabels(profile) &&

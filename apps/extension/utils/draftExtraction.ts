@@ -9,6 +9,7 @@ import type {
   TeamId
 } from '@umalytics/shared';
 import { extractRoomCodeFromRoomDom } from './domLobbyExtraction';
+import { cleanTeamName } from './textCleanup';
 import { getUmaDisplayName, normalizeUmaOutfitId } from './umaPortraits';
 
 const TEAM_IDS = ['team1', 'team2'] as const satisfies readonly TeamId[];
@@ -97,13 +98,13 @@ function createEmptyTeams(multiplayer?: Record<string, unknown>): Record<TeamId,
   return {
     team1: {
       id: 'team1',
-      name: readOptionalString(multiplayer?.team1Name) ?? 'Team 1',
+      name: cleanTeamName(readOptionalString(multiplayer?.team1Name)) ?? 'Team 1',
       maps: [],
       umas: []
     },
     team2: {
       id: 'team2',
-      name: readOptionalString(multiplayer?.team2Name) ?? 'Team 2',
+      name: cleanTeamName(readOptionalString(multiplayer?.team2Name)) ?? 'Team 2',
       maps: [],
       umas: []
     }
@@ -126,7 +127,7 @@ function collectSyncedUmaActions(value: unknown): DraftUmaAction[] {
       ?? readOptionalTeamId(record.currentTeam)
       ?? readTeamFromPath(path);
 
-    if (name === undefined || team === undefined) {
+    if (name === undefined || isPlaceholderUmaText(name) || team === undefined) {
       return;
     }
 
@@ -349,7 +350,7 @@ function extractDomUmaActions(team: TeamId, panel: HTMLElement): DraftUmaAction[
   for (const image of Array.from(panel.querySelectorAll<HTMLImageElement>('img[alt]'))) {
     const name = normalizeText(image.alt);
 
-    if (name === undefined) {
+    if (name === undefined || isPlaceholderUmaText(name)) {
       continue;
     }
 
@@ -413,7 +414,11 @@ function readUmaId(record: Record<string, unknown>): string | undefined {
     ?? readOptionalNumber(record.selectedUmaId)?.toString()
     ?? readOptionalNumber(record.outfitId)?.toString();
 
-  return umaId === undefined ? undefined : normalizeUmaOutfitId(umaId);
+  if (umaId === undefined || isPlaceholderUmaText(umaId)) {
+    return undefined;
+  }
+
+  return normalizeUmaOutfitId(umaId);
 }
 
 function readUmaActionKind(record: Record<string, unknown>, path: string[]): DraftUmaActionKind {
@@ -507,7 +512,7 @@ function compareElementsByPosition(left: HTMLElement, right: HTMLElement): numbe
 
 function readFirstHeading(element: HTMLElement): string | undefined {
   for (const heading of Array.from(element.querySelectorAll<HTMLHeadingElement>('h2, h3'))) {
-    const text = normalizeText(heading.textContent);
+    const text = cleanTeamName(normalizeText(heading.textContent));
 
     if (text !== undefined && !text.toLowerCase().includes('maps') && !text.toLowerCase().includes('umamusume')) {
       return text;
@@ -544,6 +549,10 @@ function normalizeText(value: string | null | undefined): string | undefined {
   const normalized = value?.replace(/\s+/g, ' ').trim();
 
   return normalized === undefined || normalized.length === 0 ? undefined : normalized;
+}
+
+function isPlaceholderUmaText(value: string): boolean {
+  return /^(unknown|undefined|null|\?|u)$/i.test(value.trim());
 }
 
 function readOptionalString(value: unknown): string | undefined {

@@ -1,4 +1,5 @@
 import type { MatchCode, PrematchPlayer, PrematchRoster, PrematchTeam, TeamId } from '@umalytics/shared';
+import { cleanTeamName } from './textCleanup';
 
 const TEAM_IDS = ['team1', 'team2'] as const satisfies readonly TeamId[];
 
@@ -11,7 +12,7 @@ export function extractPrematchRosterFromRoomDom(document: Document): PrematchRo
     return null;
   }
 
-  const teams = findTeamSections(document).map((section) => extractTeam(section));
+  const teams = buildTeamRecord(findTeamSections(document).map((section) => extractTeam(section)));
   const players = teams.flatMap((team) => team.players);
 
   if (players.length === 0) {
@@ -97,7 +98,7 @@ function countContainedRows(element: HTMLElement, rows: HTMLElement[]): number {
 
 function readTeamName(element: HTMLElement): string | undefined {
   return Array.from(element.querySelectorAll<HTMLHeadingElement>('h2, h3'))
-    .map((heading) => normalizeText(heading.textContent))
+    .map((heading) => cleanTeamName(normalizeText(heading.textContent)))
     .find((text) => text !== undefined);
 }
 
@@ -126,6 +127,16 @@ function extractTeam(section: { id: TeamId; name?: string; element: HTMLElement 
     name: section.name ?? (section.id === 'team1' ? 'Team 1' : 'Team 2'),
     players
   };
+}
+
+function buildTeamRecord(discoveredTeams: PrematchTeam[]): PrematchTeam[] {
+  const teamsById = new Map(discoveredTeams.map((team) => [team.id, team] as const));
+
+  return TEAM_IDS.map((id) => teamsById.get(id) ?? {
+    id,
+    name: id === 'team1' ? 'Team 1' : 'Team 2',
+    players: []
+  });
 }
 
 function findPlayerRows(teamElement: HTMLElement): HTMLElement[] {

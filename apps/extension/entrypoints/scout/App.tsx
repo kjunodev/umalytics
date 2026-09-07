@@ -29,7 +29,9 @@ import {
 import { sendLobbyReconnectRequest, sendProfileRefreshRequest } from '../../utils/messaging';
 import {
   BEST_UMA_MIN_MATCHES,
+  BEST_UMA_SCORE_VERSION,
   MANUAL_PROFILE_REFRESH_COOLDOWN_MS,
+  RECENT_HISTORY_VERSION,
   RECENT_HISTORY_DISPLAY_MATCHES
 } from '../../utils/profileConstants';
 import { releaseOrder } from '../../utils/umaReleaseOrder';
@@ -124,9 +126,13 @@ export default function App() {
   const [now, setNow] = useState(Date.now());
 
   useEffect(() => {
-    void getLatestPrematchRoster().then(setRoster);
+    void getLatestPrematchRoster().then((storedRoster) => {
+      setRoster(normalizeRosterForDisplay(storedRoster));
+    });
     void getLatestDraftSnapshot().then(setDraftSnapshot);
-    void getPlayerProfileSummaries().then(setProfileSnapshot);
+    void getPlayerProfileSummaries().then((storedProfiles) => {
+      setProfileSnapshot(normalizeProfileSnapshotForDisplay(storedProfiles));
+    });
     void getStoredStatsScope().then(setStatsScope);
     void sendLobbyReconnectRequest();
 
@@ -141,7 +147,11 @@ export default function App() {
       const rosterChange = changes[LATEST_PREMATCH_ROSTER_STORAGE_KEY];
 
       if (rosterChange !== undefined) {
-        setRoster(isPrematchRoster(rosterChange.newValue) ? rosterChange.newValue : undefined);
+        setRoster(
+          isPrematchRoster(rosterChange.newValue)
+            ? normalizeRosterForDisplay(rosterChange.newValue)
+            : undefined
+        );
       }
 
       const draftChange = changes[LATEST_DRAFT_SNAPSHOT_STORAGE_KEY];
@@ -153,7 +163,11 @@ export default function App() {
       const profileChange = changes[PLAYER_PROFILE_SUMMARIES_STORAGE_KEY];
 
       if (profileChange !== undefined) {
-        setProfileSnapshot(isProfileSnapshot(profileChange.newValue) ? profileChange.newValue : undefined);
+        setProfileSnapshot(
+          isProfileSnapshot(profileChange.newValue)
+            ? normalizeProfileSnapshotForDisplay(profileChange.newValue)
+            : undefined
+        );
       }
     };
 
@@ -185,6 +199,7 @@ export default function App() {
   );
   const loadingProfiles = profileSnapshot?.loadingDiscordIds.length ?? 0;
   const hasRoster = roster !== undefined;
+  const lobbyPlayerCount = teamGroups.reduce((total, team) => total + team.players.length, 0);
   const refreshCooldownMs = getRefreshCooldownMs(profileSnapshot?.updatedAt, now);
   const canRefresh = hasRoster && loadingProfiles === 0 && refreshCooldownMs === 0;
   const profileStatusLabel = hasRoster ? getProfileSnapshotStatus(profileSnapshot, loadingProfiles, now) : undefined;
@@ -283,7 +298,7 @@ export default function App() {
               </button>
             ) : null}
             <span className={roster === undefined ? 'status-pill idle' : 'status-pill live'}>
-              {roster === undefined ? 'Waiting' : `${roster.players.length}/10`}
+              {roster === undefined ? 'Waiting' : `${lobbyPlayerCount}/10`}
             </span>
           </div>
           <div className="stats-scope-toggle" aria-label="Stats time window">
@@ -1345,7 +1360,7 @@ function PlayerRow({
   const discordId = getLookupDiscordId(player);
   const profileUrl = profile?.profileUrl ?? player.profileUrl;
   const note = getPlayerNote(profile, discordId);
-  const statsMessage = getStatsMessage(profile, isProfileLoading, discordId);
+  const statsMessage = getStatsMessage(displayedProfile, profile, isProfileLoading, discordId);
   const notableBadges = getNotableBadges(displayedProfile);
   const isCaptain = player.isCaptain === true || player.role === 'captain';
   const displayName = profile?.displayName ?? player.displayName;
@@ -1454,7 +1469,7 @@ function PlayerDetailScene({
   const discordId = getLookupDiscordId(player);
   const profileUrl = profile?.profileUrl ?? player.profileUrl;
   const note = getPlayerNote(profile, discordId);
-  const statsMessage = getStatsMessage(profile, isProfileLoading, discordId);
+  const statsMessage = getStatsMessage(displayedProfile, profile, isProfileLoading, discordId);
   const notableBadges = getNotableBadges(displayedProfile);
   const partyVisual = getPlayerPartyVisual(player, getTeamPartyVisuals(team.players));
   const isCaptain = player.isCaptain === true || player.role === 'captain';
@@ -1648,7 +1663,7 @@ function ScoutingReport({
   profile: PlayerProfileSummary | undefined;
   emptyMessage?: string;
 }) {
-  if (profile === undefined || profile.statsPrivate === true || profile.error !== undefined) {
+  if (profile === undefined || !hasUsableProfileStats(profile) || profile.error !== undefined) {
     return (
       <section className="scouting-report" aria-label="Player scouting report">
         <p>Scouting Report</p>
@@ -1986,6 +2001,135 @@ function getTeamGroups(roster: PrematchRoster | undefined): PrematchTeam[] {
   ];
 }
 
+function normalizeRosterForDisplay(roster: PrematchRoster | undefined): PrematchRoster | undefined {
+  if (roster === undefined) {
+    return undefined;
+  }
+
+  if (roster.teams === undefined) {
+    const players = dedupePlayersByIdentity(roster.players);
+
+    return {
+      ...roster,
+      players,
+      teams: {
+        team1: {
+          id: 'team1',
+          players: players.filter((player) => player.team !== 'team2')
+        },
+        team2: {
+          id: 'team2',
+          players: players.filter((player) => player.team === 'team2')
+        }
+      }
+    };
+  }
+
+  const fallbackPlayers = dedupePlayersByIdentity(roster.players);
+  const fallbackTeam1Players = fallbackPlayers.filter((player) => player.team !== 'team2');
+  const fallbackTeam2Players = fallbackPlayers.filter((player) => player.team === 'team2');
+  const team1 = roster.teams.team1;
+  const team2 = roster.teams.team2;
+  const normalizedTeams = {
+    team1: normalizeTeamForDisplay('team1', team1, fallbackTeam1Players),
+    team2: normalizeTeamForDisplay('team2', team2, fallbackTeam2Players)
+  };
+  const teams = dedupeTeamsByPlayerIdentity(normalizedTeams);
+  const teamPlayers = TEAM_IDS.flatMap((teamId) => teams[teamId].players);
+
+  return {
+    ...roster,
+    players: dedupePlayersByIdentity(teamPlayers.length > 0 ? teamPlayers : roster.players),
+    teams
+  };
+}
+
+function dedupeTeamsByPlayerIdentity(
+  teams: Record<TeamId, PrematchTeam>
+): Record<TeamId, PrematchTeam> {
+  const seenPlayerIds = new Set<string>();
+
+  return Object.fromEntries(
+    TEAM_IDS.map((teamId) => {
+      const team = teams[teamId];
+      const players = team.players.filter((player) => {
+        const playerKey = getStablePlayerIdentity(player);
+
+        if (seenPlayerIds.has(playerKey)) {
+          return false;
+        }
+
+        seenPlayerIds.add(playerKey);
+        return true;
+      });
+
+      return [teamId, { ...team, players }];
+    })
+  ) as Record<TeamId, PrematchTeam>;
+}
+
+function normalizeTeamForDisplay(
+  teamId: TeamId,
+  team: PrematchTeam | undefined,
+  fallbackPlayers: PrematchPlayer[]
+): PrematchTeam {
+  return {
+    ...team,
+    id: teamId,
+    name: team?.name ?? (teamId === 'team1' ? 'Team 1' : 'Team 2'),
+    players: dedupePlayersByIdentity(team?.players ?? fallbackPlayers)
+  };
+}
+
+function dedupePlayersByIdentity(players: PrematchPlayer[]): PrematchPlayer[] {
+  const seenPlayerIds = new Set<string>();
+  const dedupedPlayers: PrematchPlayer[] = [];
+
+  for (const player of players) {
+    const stableKey = getStablePlayerIdentity(player);
+
+    if (seenPlayerIds.has(stableKey)) {
+      continue;
+    }
+
+    seenPlayerIds.add(stableKey);
+    dedupedPlayers.push(player);
+  }
+
+  return dedupedPlayers;
+}
+
+function getStablePlayerIdentity(player: PrematchPlayer): string {
+  return player.discordId || player.userId;
+}
+
+function normalizeProfileSnapshotForDisplay(
+  snapshot: PlayerProfileSummariesSnapshot | undefined
+): PlayerProfileSummariesSnapshot | undefined {
+  if (snapshot === undefined) {
+    return undefined;
+  }
+
+  return {
+    ...snapshot,
+    profiles: Object.fromEntries(
+      Object.entries(snapshot.profiles).filter((entry): entry is [string, PlayerProfileSummary] =>
+        isDisplayableStoredProfile(entry[1])
+      )
+    )
+  };
+}
+
+function isDisplayableStoredProfile(profile: PlayerProfileSummary): boolean {
+  return (
+    profile.error === undefined &&
+    profile.bestUmaScoreVersion === BEST_UMA_SCORE_VERSION &&
+    profile.recentHistoryVersion === RECENT_HISTORY_VERSION &&
+    profile.currentSeasonStats?.recentHistoryVersion === RECENT_HISTORY_VERSION &&
+    profile.allTimeStats?.recentHistoryVersion === RECENT_HISTORY_VERSION
+  );
+}
+
 function getRosterPlayersForHitScope(roster: PrematchRoster, hitScope: UmaCatalogHitScope): PrematchPlayer[] {
   if (hitScope === 'all') {
     return roster.players;
@@ -2079,6 +2223,10 @@ function getUmaCatalogOptions(
     const umas = displayedProfile?.allUmas ?? profile.allUmas ?? [];
 
     for (const uma of umas) {
+      if (!isDisplayableUmaCatalogEntry(uma)) {
+        continue;
+      }
+
       const umaId = getUmaCatalogKey(uma.umaId, uma.name);
       const current = catalog.get(umaId);
       const profileImageUrl =
@@ -2087,7 +2235,7 @@ function getUmaCatalogOptions(
       catalog.set(umaId, {
         umaId,
         name: getUmaDisplayName(umaId, uma.name),
-        imageUrl: profileImageUrl ?? current?.imageUrl ?? getUmaPortraitUrl(umaId),
+        imageUrl: current?.imageUrl ?? profileImageUrl ?? getUmaPortraitUrl(umaId),
         order: current?.order
       });
     }
@@ -2142,6 +2290,17 @@ function compareUmaByName(left: UmaCatalogOption, right: UmaCatalogOption): numb
 
 function getUmaCatalogKey(umaId: string | undefined, name: string): string {
   return umaId === undefined ? normalizeSearchText(name) : umaId;
+}
+
+function isDisplayableUmaCatalogEntry(uma: PlayerTopUmaSummary): boolean {
+  const normalizedName = normalizeSearchText(uma.name);
+  const normalizedUmaId = typeof uma.umaId === 'string' ? uma.umaId.trim().toLowerCase() : '';
+
+  return (
+    normalizedName.length > 0 &&
+    !['unknown', 'undefined', 'null', '?', 'u'].includes(normalizedName) &&
+    !['unknown', 'undefined', 'null', '?', 'u'].includes(normalizedUmaId)
+  );
 }
 
 function filterUmaCatalogOptions(
@@ -2275,7 +2434,7 @@ function getNotableBadges(profile: PlayerProfileSummary | undefined): NotableBad
     return [];
   }
 
-  if (profile.statsPrivate === true) {
+  if (profile.statsPrivate === true && !hasUsableProfileStats(profile)) {
     return [
       {
         label: 'Private',
@@ -2360,6 +2519,15 @@ function getNotableBadges(profile: PlayerProfileSummary | undefined): NotableBad
   }
 
   return badges;
+}
+
+function hasUsableProfileStats(profile: PlayerProfileSummary | undefined): boolean {
+  return (
+    (profile?.topUmas?.length ?? 0) > 0 ||
+    (profile?.bestUmas?.length ?? 0) > 0 ||
+    (profile?.allUmas?.length ?? 0) > 0 ||
+    (profile?.recentMatches?.length ?? 0) > 0
+  );
 }
 
 function getTeamPartyVisuals(players: PrematchPlayer[]): Record<string, PartyVisual> {
@@ -2447,7 +2615,9 @@ function isDraftSnapshot(value: unknown): value is DraftSnapshot {
     value !== null &&
     'teams' in value &&
     typeof value.teams === 'object' &&
-    value.teams !== null
+    value.teams !== null &&
+    'team1' in value.teams &&
+    'team2' in value.teams
   );
 }
 
@@ -2456,6 +2626,8 @@ function isProfileSnapshot(value: unknown): value is PlayerProfileSummariesSnaps
     typeof value === 'object' &&
     value !== null &&
     'profiles' in value &&
+    typeof value.profiles === 'object' &&
+    value.profiles !== null &&
     'loadingDiscordIds' in value &&
     Array.isArray(value.loadingDiscordIds)
   );
@@ -2513,8 +2685,8 @@ function formatDraftMapDetails(map: DraftTeamSnapshot['maps'][number]): string |
   }
 
   const details = map.details
-    .replace(/\s*[-–—]\s*[x×✕✖]\s*$/i, '')
-    .replace(/\s*[x×✕✖]\s*$/i, '')
+    .replace(/\s*[-\u2013\u2014]\s*[xX\u00d7\u2715\u2716]\s*$/u, '')
+    .replace(/\s*[xX\u00d7\u2715\u2716]\s*$/u, '')
     .split(/\s*(?:[-\u2013\u2014]|\u2022)\s*/u)
     .map((part) => part.trim())
     .filter((part) => part.length > 0)
@@ -2623,7 +2795,11 @@ function getUmaInitials(name: string): string {
     .join('');
 }
 
-function normalizeUmaNameForLookup(name: string): string {
+function normalizeUmaNameForLookup(name: unknown): string {
+  if (typeof name !== 'string') {
+    return '';
+  }
+
   return name
     .toLowerCase()
     .replace(/[()[\]{}]/g, ' ')
@@ -2631,7 +2807,11 @@ function normalizeUmaNameForLookup(name: string): string {
     .trim();
 }
 
-function normalizeSearchText(value: string): string {
+function normalizeSearchText(value: unknown): string {
+  if (typeof value !== 'string') {
+    return '';
+  }
+
   return value
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, ' ')
@@ -2840,7 +3020,7 @@ function getProfileDataStatus(
     };
   }
 
-  if (profile.statsPrivate === true) {
+  if (profile.statsPrivate === true && !hasUsableProfileStats(profile)) {
     return {
       label: `Stats private - checked ${formatRelativeAge(profile.fetchedAt, now)}`,
       tone: 'warning'
@@ -2894,7 +3074,7 @@ function getPlayerNote(
     return 'Profile data has not loaded yet.';
   }
 
-  if (profile.statsPrivate === true) {
+  if (profile.statsPrivate === true && !hasUsableProfileStats(profile)) {
     return 'Stats are private.';
   }
 
@@ -2902,6 +3082,7 @@ function getPlayerNote(
 }
 
 function getStatsMessage(
+  displayedProfile: PlayerProfileSummary | undefined,
   profile: PlayerProfileSummary | undefined,
   isProfileLoading: boolean,
   discordId: string | undefined
@@ -2914,7 +3095,7 @@ function getStatsMessage(
     return 'Profile lookup is unavailable from this room page.';
   }
 
-  if (profile?.statsPrivate === true) {
+  if (profile?.statsPrivate === true && !hasUsableProfileStats(displayedProfile)) {
     return 'Ranked Uma stats are private.';
   }
 
