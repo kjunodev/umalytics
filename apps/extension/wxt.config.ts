@@ -3,6 +3,7 @@ import { defineConfig } from 'wxt';
 export default defineConfig({
   manifestVersion: 3,
   manifest: {
+    browser_specific_settings: { gecko: { id: 'umalytics@kjunodev' } },
     name: 'UmaLytics',
     version: '0.3.0',
     version_name: '0.3.0-open-beta.1',
