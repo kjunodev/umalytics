@@ -2,6 +2,8 @@
 
 Use the public package for normal release/testing.
 
+Download the [0.3.0 Open Beta browser packages](https://github.com/kjunodev/umalytics/releases/tag/v0.3.0-open-beta.1). To build from source, see the [development guide](DEVELOPMENT.md).
+
 ## Package Names
 
 - Chromium: `downloads/umalytics-chromium-0.3.0-open-beta.1.zip`
@@ -31,6 +33,8 @@ The in-app header shows the installed version.
 4. Select `manifest.json` inside the unzipped `firefox-mv3` folder.
 5. Open or refresh `https://drafter.uma.guide`.
 6. Click the UmaLytics extension icon to open the scout window.
+
+Temporary add-ons are removed when Firefox restarts. Repeat the loading steps after restarting the browser.
 
 ## Updating
 
