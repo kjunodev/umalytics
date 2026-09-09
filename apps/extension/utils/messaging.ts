@@ -28,6 +28,7 @@ export type UmaLyticsMessage = {
 
 export type UmaLyticsContentMessage = {
   type: typeof ROOM_DOM_SCAN_REQUEST_MESSAGE_TYPE;
+  force?: boolean;
 };
 
 export function isUmaLyticsMessage(value: unknown): value is UmaLyticsMessage {
@@ -81,9 +82,13 @@ export async function sendLobbyReconnectRequest(): Promise<LobbyReconnectResult 
   } satisfies UmaLyticsMessage);
 }
 
-export async function sendRoomDomScanRequest(tabId: number): Promise<RoomDomScanResult | undefined> {
+export async function sendRoomDomScanRequest(
+  tabId: number,
+  options: { force?: boolean } = {}
+): Promise<RoomDomScanResult | undefined> {
   return browser.tabs.sendMessage(tabId, {
-    type: ROOM_DOM_SCAN_REQUEST_MESSAGE_TYPE
+    type: ROOM_DOM_SCAN_REQUEST_MESSAGE_TYPE,
+    ...(options.force === true ? { force: true } : {})
   } satisfies UmaLyticsContentMessage);
 }
 

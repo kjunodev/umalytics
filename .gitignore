@@ -3,6 +3,7 @@ dist/
 .output/
 .wxt/
 releases/
+release-repo/
 
 *.log
 *.tsbuildinfo

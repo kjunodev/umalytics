@@ -12,9 +12,16 @@ export function normalizePrematchRosterFromPlayers(
     return null;
   }
 
-  const players = value
-    .map((player) => normalizePrematchPlayer(player, context))
-    .filter((player): player is PrematchPlayer => player !== null);
+  const players = value.flatMap((player) => {
+    const normalizedPlayer = normalizePrematchPlayer(player, context);
+
+    return normalizedPlayer === null
+      ? []
+      : [{
+          ...normalizedPlayer,
+          source: normalizedPlayer.source ?? 'synced-draft-state'
+        } satisfies PrematchPlayer];
+  });
   const dedupedPlayers = dedupePrematchPlayers(players);
 
   return {
@@ -268,7 +275,25 @@ function readOptionalBoolean(value: unknown): boolean | undefined {
 }
 
 function readOptionalTeamId(value: unknown): TeamId | undefined {
-  return typeof value === 'string' && isTeamId(value) ? value : undefined;
+  if (typeof value === 'number') {
+    return value === 1 ? 'team1' : value === 2 ? 'team2' : undefined;
+  }
+
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+
+  const normalizedValue = value.toLowerCase().replace(/[^a-z0-9]+/g, '');
+
+  if (normalizedValue === 'team1' || normalizedValue === '1' || normalizedValue === 'blue') {
+    return 'team1';
+  }
+
+  if (normalizedValue === 'team2' || normalizedValue === '2' || normalizedValue === 'red') {
+    return 'team2';
+  }
+
+  return isTeamId(value) ? value : undefined;
 }
 
 function isTeamId(value: string): value is TeamId {

@@ -58,6 +58,31 @@ body {
   margin: 0;
 }
 
+.app-title-row {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.app-version {
+  background: #eef2f7;
+  border: 1px solid #d9e0ea;
+  border-radius: 999px;
+  color: #475569;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+  padding: 4px 7px;
+  white-space: nowrap;
+}
+
+.app-version.private {
+  background: #fef3c7;
+  border-color: #f59e0b;
+  color: #92400e;
+}
+
 .app-header p,
 .team-header p {
   color: #64748b;
@@ -133,8 +158,77 @@ body {
 .header-actions {
   align-items: flex-end;
   display: grid;
-  gap: 8px;
+  gap: 6px;
   justify-items: end;
+}
+
+.diagnostics-copy {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #d9e0ea;
+  border-radius: 999px;
+  color: #334155;
+  cursor: pointer;
+  display: inline-flex;
+  height: 24px;
+  justify-content: center;
+  padding: 0;
+  position: relative;
+  width: 28px;
+}
+
+.clipboard-glyph {
+  border: 1.5px solid currentColor;
+  border-radius: 3px;
+  display: block;
+  height: 13px;
+  position: relative;
+  width: 11px;
+}
+
+.clipboard-glyph::before {
+  background: #ffffff;
+  border: 1.5px solid currentColor;
+  border-radius: 2px;
+  content: "";
+  height: 3px;
+  left: 50%;
+  position: absolute;
+  top: -4px;
+  transform: translateX(-50%);
+  width: 7px;
+}
+
+.diagnostics-copy-label {
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  height: 1px;
+  overflow: hidden;
+  position: absolute;
+  white-space: nowrap;
+  width: 1px;
+}
+
+.lock-button {
+  background: #ffffff;
+  border: 1px solid #d9e0ea;
+  border-radius: 999px;
+  color: #334155;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+  min-width: 74px;
+  padding: 6px 9px;
+  white-space: nowrap;
+}
+
+.diagnostics-copy:hover,
+.diagnostics-copy.active,
+.lock-button:hover,
+.lock-button.active {
+  border-color: #93c5fd;
+  color: #2563eb;
 }
 
 .header-control-row {
@@ -142,6 +236,8 @@ body {
   display: flex;
   gap: 6px;
   justify-content: flex-end;
+  min-height: 27px;
+  width: 100%;
 }
 
 .stats-scope-toggle {
@@ -182,7 +278,7 @@ body {
   font-size: 12px;
   font-weight: 800;
   line-height: 1;
-  min-width: 52px;
+  min-width: 74px;
   padding: 6px 8px;
 }
 
@@ -191,14 +287,14 @@ body {
   opacity: 0.68;
 }
 
+.refresh-button.cooldown {
+  background: #f1f5f9;
+  color: #64748b;
+}
+
 .status-pill.idle {
   background: #e5e7eb;
   color: #475569;
-}
-
-.status-pill.live {
-  background: #dff6ea;
-  color: #146c43;
 }
 
 .empty-state {
@@ -2074,6 +2170,14 @@ a.player-name:hover {
   display: none;
 }
 
+.uma-resolution-note {
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.25;
+  margin: -1px 0 0;
+}
+
 .top-umas {
   border-top: 1px solid #edf1f6;
   display: grid;
@@ -2756,11 +2860,6 @@ a.player-name:hover {
   color: #cbd5e1;
 }
 
-.status-pill.live {
-  background: #123a2a;
-  color: #86efac;
-}
-
 .empty-state h2,
 .app-header h1,
 .draft-scene-header h2,
@@ -3115,6 +3214,56 @@ a.player-name:hover {
 
 .player-note {
   color: #fbbf24;
+}
+
+.app-version {
+  background: #1f2a3a;
+  border-color: #263244;
+  color: #b6c0ce;
+}
+
+.app-version.private {
+  background: #3b2a0b;
+  border-color: #b45309;
+  color: #fbbf24;
+}
+
+.diagnostics-copy {
+  background: #0b1220;
+  border-color: #263244;
+  color: #dbe7f7;
+}
+
+.diagnostics-copy .clipboard-glyph::before {
+  background: #0b1220;
+}
+
+.lock-button {
+  background: #0b1220;
+  border-color: #263244;
+  color: #dbe7f7;
+}
+
+.diagnostics-copy:hover,
+.diagnostics-copy.active,
+.lock-button:hover {
+  border-color: #38bdf8;
+  color: #7dd3fc;
+}
+
+.lock-button.active {
+  background: #3b2a0b;
+  border-color: #b45309;
+  color: #fbbf24;
+}
+
+.refresh-button.cooldown {
+  background: #111827;
+  color: #9ca3af;
+}
+
+.uma-resolution-note {
+  color: #8f9bad;
 }
 
 .compact-scouting-grid .stat-cell strong {

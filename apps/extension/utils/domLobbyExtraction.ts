@@ -7,11 +7,6 @@ const PLAYER_ROLES = new Set(['Player', 'Captain']);
 
 export function extractPrematchRosterFromRoomDom(document: Document): PrematchRoster | null {
   const roomCode = extractRoomCodeFromRoomDom(document);
-
-  if (roomCode === undefined) {
-    return null;
-  }
-
   const teams = buildTeamRecord(findTeamSections(document).map((section) => extractTeam(section)));
   const players = teams.flatMap((team) => team.players);
 
@@ -20,7 +15,7 @@ export function extractPrematchRosterFromRoomDom(document: Document): PrematchRo
   }
 
   return {
-    matchCode: roomCode as MatchCode,
+    ...(roomCode === undefined ? {} : { matchCode: roomCode as MatchCode }),
     phase: 'room-lobby',
     players,
     teams: Object.fromEntries(teams.map((team) => [team.id, team])) as Record<TeamId, PrematchTeam>
@@ -28,9 +23,19 @@ export function extractPrematchRosterFromRoomDom(document: Document): PrematchRo
 }
 
 export function extractRoomCodeFromRoomDom(document: Document): MatchCode | undefined {
-  return normalizeText(
-    document.querySelector<HTMLButtonElement>('button[title="Copy room code"]')?.textContent
-  ) as MatchCode | undefined;
+  const copyButtonCode = normalizeRoomCode(
+    document.querySelector<HTMLButtonElement>('button[title*="room code" i]')?.textContent
+  );
+
+  if (copyButtonCode !== undefined) {
+    return copyButtonCode as MatchCode;
+  }
+
+  const labeledTextCode = Array.from(document.querySelectorAll<HTMLElement>('button, span, p, div'))
+    .map((element) => normalizeRoomCode(element.textContent))
+    .find((code) => code !== undefined);
+
+  return labeledTextCode as MatchCode | undefined;
 }
 
 function findTeamSections(document: Document): Array<{ id: TeamId; name?: string; element: HTMLElement }> {
@@ -227,4 +232,18 @@ function normalizeText(value: string | null | undefined): string | undefined {
   const normalized = value?.replace(/\s+/g, ' ').trim();
 
   return normalized === undefined || normalized.length === 0 ? undefined : normalized;
+}
+
+function normalizeRoomCode(value: string | null | undefined): string | undefined {
+  const text = normalizeText(value);
+
+  if (text === undefined) {
+    return undefined;
+  }
+
+  if (/^[A-Z0-9]{5,8}$/.test(text)) {
+    return text;
+  }
+
+  return /\broom\s+code\b\s*:?\s*([A-Z0-9]{5,8})\b/i.exec(text)?.[1]?.toUpperCase();
 }

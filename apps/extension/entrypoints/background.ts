@@ -1,16 +1,21 @@
 import { browser } from 'wxt/browser';
 import type { ScriptPublicPath } from 'wxt/utils/inject-script';
-import type { PlayerProfileSummary, PrematchRoster } from '@umalytics/shared';
+import type { PlayerProfileSummary, PrematchPlayer, PrematchRoster } from '@umalytics/shared';
 import {
   isUmaLyticsMessage,
   sendRoomDomScanRequest,
   type LobbyReconnectResult,
   type RoomDomScanResult
 } from '../utils/messaging';
-import { fetchPlayerProfileSummaries } from '../utils/playerProfileApi';
+import {
+  buildUnavailablePlayerSummary,
+  fetchPlayerProfileSummaries
+} from '../utils/playerProfileApi';
 import {
   getPlayerProfileSummaries,
-  setPlayerProfileSummaries
+  setPlayerProfileSummaries,
+  type PlayerProfileLoadState,
+  type PlayerProfileLoadStatus
 } from '../utils/profileStorage';
 import {
   BEST_UMA_SCORE_VERSION,
@@ -24,6 +29,7 @@ import {
   getLatestPrematchRoster,
   setLatestPrematchRoster
 } from '../utils/rosterStorage';
+import { getLobbyLockState } from '../utils/lobbyLockStorage';
 import { extractMatchCodeFromUrl } from '../utils/matchDetection';
 import { isHashedUmaAssetUrl } from '../utils/umaPortraits';
 
@@ -153,7 +159,12 @@ async function getActiveDrafterTab(): Promise<Browser.tabs.Tab | undefined> {
 }
 
 async function handlePrematchRosterDetected(roster: PrematchRoster): Promise<void> {
-  console.log(`[UmaLytics] Roster detected: ${roster.players.length} players`);
+  const lockState = await getLobbyLockState();
+
+  if (lockState?.locked === true && lockState.roster !== undefined) {
+    return;
+  }
+
   await setLatestPrematchRoster(roster);
   await enrichRosterProfiles(roster);
 }
@@ -168,7 +179,7 @@ async function handleLobbyReconnectRequested(): Promise<LobbyReconnectResult> {
 
   await injectContentScriptIntoTab(activeTab.id);
 
-  const domScanResult = await requestRoomDomScan(activeTab.id);
+  const domScanResult = await requestRoomDomScan(activeTab.id, { force: true });
   const activeMatchCode = domScanResult?.matchCode ?? getTabMatchCode(activeTab);
 
   if (domScanResult?.activeLobby === true && activeMatchCode === undefined) {
@@ -192,13 +203,16 @@ async function handleLobbyReconnectRequested(): Promise<LobbyReconnectResult> {
   return { activeLobby: true, matchCode: activeMatchCode };
 }
 
-async function requestRoomDomScan(tabId: number | undefined): Promise<RoomDomScanResult | undefined> {
+async function requestRoomDomScan(
+  tabId: number | undefined,
+  options: { force?: boolean } = {}
+): Promise<RoomDomScanResult | undefined> {
   if (tabId === undefined) {
     return undefined;
   }
 
   try {
-    return await sendRoomDomScanRequest(tabId);
+    return await sendRoomDomScanRequest(tabId, options);
   } catch (caught) {
     console.debug('[UmaLytics] Room DOM scan request skipped:', caught);
     return undefined;
@@ -207,7 +221,6 @@ async function requestRoomDomScan(tabId: number | undefined): Promise<RoomDomSca
 
 async function clearActiveLobbyState(): Promise<void> {
   enrichmentRunId += 1;
-  console.log('[UmaLytics] Active lobby reset');
   await Promise.all([
     clearLatestPrematchRoster(),
     clearLatestDraftSnapshot()
@@ -231,11 +244,9 @@ async function handleProfileRefreshRequested(roster: PrematchRoster): Promise<vo
   const cooldownMs = getRefreshCooldownMs(cachedSnapshot?.updatedAt, Date.now());
 
   if (cooldownMs > 0) {
-    console.log('[UmaLytics] Profile refresh skipped during cooldown:', Math.ceil(cooldownMs / 1000));
     return;
   }
 
-  console.log('[UmaLytics] Profile refresh requested:', roster.matchCode);
   await enrichRosterProfiles(roster, { forceRefresh: true });
 }
 
@@ -256,13 +267,11 @@ async function enrichRosterProfiles(
   const missingDiscordIds = lookupDiscordIds.filter(
     (discordId) => options.forceRefresh === true || freshProfiles[discordId] === undefined
   );
+  const missingPlayers = roster.players.filter((player) => missingDiscordIds.includes(player.discordId));
+  const profilesByDiscordId: Record<string, PlayerProfileSummary> = { ...retainedProfiles };
+  const profileStates = buildProfileLoadStates(retainedProfiles, missingPlayers, now);
 
-  await setPlayerProfileSummaries({
-    matchCode: roster.matchCode,
-    profiles: retainedProfiles,
-    loadingDiscordIds: missingDiscordIds,
-    updatedAt: now
-  });
+  await writeProfileSnapshot(roster.matchCode, profilesByDiscordId, profileStates);
 
   if (missingDiscordIds.length === 0) {
     return;
@@ -270,35 +279,164 @@ async function enrichRosterProfiles(
 
   try {
     const fetchedProfiles = await fetchPlayerProfileSummaries(
-      roster.players.filter((player) => missingDiscordIds.includes(player.discordId))
+      missingPlayers,
+      {
+        onStart: async (player) => {
+          if (runId !== enrichmentRunId) {
+            return;
+          }
+
+          const startedAt = Date.now();
+          profileStates[player.discordId] = {
+            discordId: player.discordId,
+            status: 'loading',
+            startedAt,
+            updatedAt: startedAt
+          };
+
+          await writeProfileSnapshot(roster.matchCode, profilesByDiscordId, profileStates);
+        },
+        onSummary: async (summary) => {
+          if (runId !== enrichmentRunId) {
+            return;
+          }
+
+          profilesByDiscordId[summary.discordId] = summary;
+          profileStates[summary.discordId] = buildCompletedProfileState(
+            summary.discordId,
+            summary,
+            Date.now()
+          );
+
+          await writeProfileSnapshot(roster.matchCode, profilesByDiscordId, profileStates);
+        }
+      }
     );
 
     if (runId !== enrichmentRunId) {
       return;
     }
 
-    await setPlayerProfileSummaries({
-      matchCode: roster.matchCode,
-      profiles: {
-        ...retainedProfiles,
-        ...fetchedProfiles
-      },
-      loadingDiscordIds: [],
-      updatedAt: Date.now()
-    });
+    for (const summary of Object.values(fetchedProfiles)) {
+      profilesByDiscordId[summary.discordId] = summary;
+      profileStates[summary.discordId] = buildCompletedProfileState(
+        summary.discordId,
+        summary,
+        Date.now()
+      );
+    }
+
+    await writeProfileSnapshot(roster.matchCode, profilesByDiscordId, profileStates);
   } catch (caught) {
     if (runId !== enrichmentRunId) {
       return;
     }
 
     console.warn('[UmaLytics] Profile scouting failed:', caught);
-    await setPlayerProfileSummaries({
-      matchCode: roster.matchCode,
-      profiles: retainedProfiles,
-      loadingDiscordIds: [],
-      updatedAt: Date.now()
-    });
+    const failedAt = Date.now();
+
+    for (const player of missingPlayers) {
+      if (!isPendingProfileState(profileStates[player.discordId])) {
+        continue;
+      }
+
+      const summary = buildUnavailablePlayerSummary(player, getErrorMessage(caught));
+      profilesByDiscordId[player.discordId] = summary;
+      profileStates[player.discordId] = buildCompletedProfileState(player.discordId, summary, failedAt);
+    }
+
+    await writeProfileSnapshot(roster.matchCode, profilesByDiscordId, profileStates);
   }
+}
+
+function buildProfileLoadStates(
+  profiles: Record<string, PlayerProfileSummary>,
+  loadingPlayers: PrematchPlayer[],
+  now: number
+): Record<string, PlayerProfileLoadState> {
+  const profileStates = Object.fromEntries(
+    Object.entries(profiles).map(([discordId, profile]) => [
+      discordId,
+      buildCompletedProfileState(discordId, profile, profile.fetchedAt)
+    ] as const)
+  );
+
+  for (const player of loadingPlayers) {
+    profileStates[player.discordId] = {
+      discordId: player.discordId,
+      status: 'queued',
+      updatedAt: now
+    };
+  }
+
+  return profileStates;
+}
+
+function buildCompletedProfileState(
+  discordId: string,
+  profile: PlayerProfileSummary,
+  finishedAt: number
+): PlayerProfileLoadState {
+  return {
+    discordId,
+    status: getProfileLoadStatus(profile),
+    startedAt: profile.fetchedAt,
+    finishedAt,
+    updatedAt: finishedAt,
+    error: profile.error
+  };
+}
+
+function getProfileLoadStatus(profile: PlayerProfileSummary): PlayerProfileLoadStatus {
+  if (profile.error !== undefined) {
+    return /timed out|taking longer/i.test(profile.error) ? 'timeout' : 'error';
+  }
+
+  if (profile.statsPrivate === true && !hasUsableProfileStats(profile)) {
+    return 'private';
+  }
+
+  return 'loaded';
+}
+
+function hasUsableProfileStats(profile: PlayerProfileSummary): boolean {
+  return (
+    typeof profile.matches === 'number' ||
+    (profile.topUmas?.length ?? 0) > 0 ||
+    (profile.bestUmas?.length ?? 0) > 0 ||
+    (profile.allUmas?.length ?? 0) > 0 ||
+    (profile.recentMatches?.length ?? 0) > 0 ||
+    (typeof profile.currentSeasonStats?.matches === 'number' && profile.currentSeasonStats.matches > 0) ||
+    (typeof profile.allTimeStats?.matches === 'number' && profile.allTimeStats.matches > 0)
+  );
+}
+
+async function writeProfileSnapshot(
+  matchCode: string | undefined,
+  profiles: Record<string, PlayerProfileSummary>,
+  profileStates: Record<string, PlayerProfileLoadState>
+): Promise<void> {
+  await setPlayerProfileSummaries({
+    matchCode,
+    profiles,
+    profileStates,
+    loadingDiscordIds: getLoadingDiscordIds(profileStates),
+    updatedAt: Date.now()
+  });
+}
+
+function getLoadingDiscordIds(profileStates: Record<string, PlayerProfileLoadState>): string[] {
+  return Object.values(profileStates)
+    .filter(isPendingProfileState)
+    .map((state) => state.discordId);
+}
+
+function getErrorMessage(caught: unknown): string {
+  return caught instanceof Error ? caught.message : String(caught);
+}
+
+function isPendingProfileState(state: PlayerProfileLoadState | undefined): boolean {
+  return state?.status === 'loading' || state?.status === 'queued';
 }
 
 function getRetainedProfiles(

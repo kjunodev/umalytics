@@ -13,13 +13,20 @@ import {
   RECENT_HISTORY_VERSION
 } from './profileConstants';
 import { releaseOrder } from './umaReleaseOrder';
-import { getUmaPortraitUrl, normalizeUmaOutfitId } from './umaPortraits';
+import { getUmaDisplayName, getUmaPortraitUrl, normalizeUmaOutfitId } from './umaPortraits';
 
 const API_ORIGIN = 'https://drafter-api.uma.guide';
 const PROFILE_ORIGIN = 'https://drafter.uma.guide';
 const UMA_LABEL_CACHE_TTL_MS = 60 * 60 * 1000;
 const API_RATE_LIMIT_BACKOFF_MS = 30 * 1000;
 const API_SERVER_ERROR_BACKOFF_MS = 10 * 1000;
+const API_REQUEST_TIMEOUT_MS = 10 * 1000;
+const PROFILE_SUMMARY_TIMEOUT_MS = 25 * 1000;
+const PROFILE_FETCH_CONCURRENCY = 5;
+const PRIVATE_PROFILE_HISTORY_PAGE_SIZE = 100;
+const PRIVATE_PROFILE_HISTORY_MAX_ENTRIES = 100;
+
+declare const __UMALYTICS_PRIVATE_PROFILE_DATA__: boolean;
 
 let apiBackoffUntil = 0;
 const RELEASE_VARIANTS_BY_OUTFIT_ID = new Map(
@@ -71,6 +78,10 @@ interface ApiPlayerHistoryEntry {
   isMvp?: boolean;
   eloDelta?: number | null;
 }
+
+type CapturedFetch<T> =
+  | { ok: true; value: T }
+  | { ok: false; error: unknown };
 
 interface ApiUmaEntry {
   umaId?: string | null;
@@ -130,7 +141,11 @@ let cachedUmaMetadata:
   | undefined;
 
 export async function fetchPlayerProfileSummaries(
-  players: PrematchPlayer[]
+  players: PrematchPlayer[],
+  options: {
+    onStart?: (player: PrematchPlayer) => void | Promise<void>;
+    onSummary?: (summary: PlayerProfileSummary) => void | Promise<void>;
+  } = {}
 ): Promise<Record<string, PlayerProfileSummary>> {
   const [leaderboard, umaMetadata] = await Promise.all([
     fetchActiveLeaderboard().catch((caught) => {
@@ -140,16 +155,26 @@ export async function fetchPlayerProfileSummaries(
     fetchUmaMetadata()
   ]);
   const uniquePlayers = uniqueByDiscordId(players);
-  const summaries = await mapWithConcurrency(uniquePlayers, 3, async (player) =>
-    fetchPlayerProfileSummary(player, leaderboard, umaMetadata).catch((caught) =>
+  const summaries = await mapWithConcurrency(uniquePlayers, PROFILE_FETCH_CONCURRENCY, async (player) => {
+    await options.onStart?.(player);
+
+    const summary = await withTimeout(
+      fetchPlayerProfileSummary(player, leaderboard, umaMetadata),
+      PROFILE_SUMMARY_TIMEOUT_MS,
+      'Profile request timed out.'
+    ).catch((caught) =>
       buildUnavailablePlayerSummary(player, getErrorMessage(caught))
-    )
-  );
+    );
+
+    await options.onSummary?.(summary);
+
+    return summary;
+  });
 
   return Object.fromEntries(summaries.map((summary) => [summary.discordId, summary]));
 }
 
-function buildUnavailablePlayerSummary(
+export function buildUnavailablePlayerSummary(
   player: PrematchPlayer,
   error: string
 ): PlayerProfileSummary {
@@ -185,6 +210,20 @@ function buildUnavailablePlayerSummary(
   };
 }
 
+async function captureFetch<T>(promise: Promise<T>): Promise<CapturedFetch<T>> {
+  try {
+    return {
+      ok: true,
+      value: await promise
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      error
+    };
+  }
+}
+
 async function fetchPlayerProfileSummary(
   player: PrematchPlayer,
   leaderboard: LeaderboardLookup,
@@ -192,80 +231,101 @@ async function fetchPlayerProfileSummary(
 ): Promise<PlayerProfileSummary> {
   const profileUrl = `${PROFILE_ORIGIN}/players/${encodeURIComponent(player.discordId)}`;
   const leaderboardEntry = leaderboard.ranksByDiscordId.get(player.discordId);
+  const profilePath = `/api/stats/players/${encodeURIComponent(player.discordId)}/profile`;
+  const allTimeStatsPath = `/api/stats/players/${encodeURIComponent(player.discordId)}/stats?mode=ranked`;
+  const currentSeasonStatsPath = leaderboard.activeSeasonId === undefined
+    ? undefined
+    : `/api/stats/players/${encodeURIComponent(player.discordId)}/stats?mode=ranked&season=${encodeURIComponent(leaderboard.activeSeasonId)}`;
   let profile: ApiPlayerProfile | undefined;
   let allTimeStats: ApiPlayerStats | undefined;
   let currentSeasonStats: ApiPlayerStats | undefined;
   let allTimeHistory: ApiPlayerHistory | undefined;
   let currentSeasonHistory: ApiPlayerHistory | undefined;
+  let allTimeStatsPrivate = false;
+  let currentSeasonStatsPrivate = false;
   let statsPrivate = false;
   let error: string | undefined;
 
-  try {
-    profile = await fetchJson<ApiPlayerProfile>(
-      `/api/stats/players/${encodeURIComponent(player.discordId)}/profile`
-    );
-  } catch (caught) {
-    error = getErrorMessage(caught);
+  const [profileResult, allTimeStatsResult, currentSeasonStatsResult] = await Promise.all([
+    captureFetch(fetchJson<ApiPlayerProfile>(profilePath)),
+    captureFetch(fetchJson<ApiPlayerStats>(allTimeStatsPath)),
+    currentSeasonStatsPath === undefined
+      ? Promise.resolve(undefined)
+      : captureFetch(fetchJson<ApiPlayerStats>(currentSeasonStatsPath))
+  ]);
+
+  if (profileResult.ok) {
+    profile = profileResult.value;
+  } else {
+    error = getErrorMessage(profileResult.error);
   }
 
-  try {
-    allTimeStats = await fetchJson<ApiPlayerStats>(
-      `/api/stats/players/${encodeURIComponent(player.discordId)}/stats?mode=ranked`
-    );
-  } catch (caught) {
-    if (caught instanceof ApiRequestError && caught.status === 403) {
+  if (allTimeStatsResult.ok) {
+    allTimeStats = allTimeStatsResult.value;
+  } else if (allTimeStatsResult.error instanceof ApiRequestError && allTimeStatsResult.error.status === 403) {
+    allTimeStatsPrivate = true;
+    statsPrivate = true;
+  } else {
+    error = error ?? getErrorMessage(allTimeStatsResult.error);
+  }
+
+  if (currentSeasonStatsResult !== undefined) {
+    if (currentSeasonStatsResult.ok) {
+      currentSeasonStats = currentSeasonStatsResult.value;
+    } else if (
+      currentSeasonStatsResult.error instanceof ApiRequestError &&
+      currentSeasonStatsResult.error.status === 403
+    ) {
+      currentSeasonStatsPrivate = true;
       statsPrivate = true;
     } else {
-      error = error ?? getErrorMessage(caught);
+      console.warn('[UmaLytics] Unable to load current season stats:', currentSeasonStatsResult.error);
     }
   }
 
-  if (allTimeStats !== undefined) {
-    try {
-      allTimeHistory = await fetchPlayerHistory(player.discordId);
-    } catch (caught) {
-      if (caught instanceof ApiRequestError && caught.status === 403) {
-        statsPrivate = true;
-      } else {
-        console.warn('[UmaLytics] Unable to load recent match history:', caught);
-      }
-    }
-  }
-
-  if (leaderboard.activeSeasonId !== undefined) {
-    try {
-      currentSeasonStats = await fetchJson<ApiPlayerStats>(
-        `/api/stats/players/${encodeURIComponent(player.discordId)}/stats?mode=ranked&season=${encodeURIComponent(leaderboard.activeSeasonId)}`
-      );
-    } catch (caught) {
-      if (caught instanceof ApiRequestError && caught.status === 403) {
-        statsPrivate = true;
-      } else {
-        console.warn('[UmaLytics] Unable to load current season stats:', caught);
-      }
-    }
-
-    if (currentSeasonStats !== undefined) {
-      try {
-        currentSeasonHistory = await fetchPlayerHistory(player.discordId, {
+  const [allTimeHistoryResult, currentSeasonHistoryResult] = await Promise.all([
+    shouldFetchPrivateHistoryFallback(allTimeStatsPrivate)
+      ? captureFetch(fetchPlayerHistory(player.discordId, getPrivateHistoryFetchOptions()))
+      : Promise.resolve(undefined),
+    shouldFetchPrivateHistoryFallback(currentSeasonStatsPrivate) && leaderboard.activeSeasonId !== undefined
+      ? captureFetch(fetchPlayerHistory(player.discordId, {
+          ...getPrivateHistoryFetchOptions(),
           seasonId: leaderboard.activeSeasonId
-        });
-      } catch (caught) {
-        if (caught instanceof ApiRequestError && caught.status === 403) {
-          statsPrivate = true;
-        } else {
-          console.warn('[UmaLytics] Unable to load current season recent match history:', caught);
-        }
-      }
+        }))
+      : Promise.resolve(undefined)
+  ]);
+
+  if (allTimeHistoryResult !== undefined) {
+    if (allTimeHistoryResult.ok) {
+      allTimeHistory = allTimeHistoryResult.value;
+    } else if (allTimeHistoryResult.error instanceof ApiRequestError && allTimeHistoryResult.error.status === 403) {
+      statsPrivate = true;
+    } else {
+      console.warn('[UmaLytics] Unable to load recent match history:', allTimeHistoryResult.error);
     }
   }
 
-  const allTimeStatsSummary = buildStatsSummary(allTimeStats, umaMetadata, allTimeHistory);
-  const currentSeasonStatsSummary = currentSeasonStats === undefined
+  if (currentSeasonHistoryResult !== undefined) {
+    if (currentSeasonHistoryResult.ok) {
+      currentSeasonHistory = currentSeasonHistoryResult.value;
+    } else if (
+      currentSeasonHistoryResult.error instanceof ApiRequestError &&
+      currentSeasonHistoryResult.error.status === 403
+    ) {
+      statsPrivate = true;
+    } else {
+      console.warn('[UmaLytics] Unable to load current season recent match history:', currentSeasonHistoryResult.error);
+    }
+  }
+
+  const allTimeStatsSummary = buildProfileStatsSummary(allTimeStats, umaMetadata, allTimeHistory);
+  const currentSeasonStatsSummary = leaderboard.activeSeasonId === undefined
     ? allTimeStatsSummary
-    : buildStatsSummary(currentSeasonStats, umaMetadata, currentSeasonHistory ?? allTimeHistory);
+    : buildProfileStatsSummary(currentSeasonStats, umaMetadata, currentSeasonHistory);
   const displayedStats = currentSeasonStatsSummary;
-  const fallbackRecord = getRecordFromUmaEntries(currentSeasonStats?.umaEntries ?? allTimeStats?.umaEntries);
+  const fallbackRecord = getRecordFromUmaEntries(
+    currentSeasonStats?.umaEntries ?? (leaderboard.activeSeasonId === undefined ? allTimeStats?.umaEntries : undefined)
+  );
   const wins = leaderboardEntry?.wins ?? fallbackRecord.wins ?? null;
   const losses = leaderboardEntry?.losses ?? fallbackRecord.losses ?? null;
 
@@ -349,7 +409,7 @@ async function fetchUmaMetadata(): Promise<UmaMetadataLookup> {
     const cardsAssetUrl = await fetchCardsAssetUrl();
     const script = await fetchText(cardsAssetUrl);
     const cards = parseUmaCards(script);
-    const metadataById: UmaMetadataLookup = new Map();
+    const metadataById: UmaMetadataLookup = buildReleaseOrderUmaMetadata();
 
     for (const card of cards) {
       const id = card.cardId;
@@ -375,8 +435,20 @@ async function fetchUmaMetadata(): Promise<UmaMetadataLookup> {
     return metadataById;
   } catch (caught) {
     console.warn('[UmaLytics] Unable to load Uma metadata:', caught);
-    return cachedUmaMetadata?.metadataById ?? new Map();
+    return cachedUmaMetadata?.metadataById ?? buildReleaseOrderUmaMetadata();
   }
+}
+
+function buildReleaseOrderUmaMetadata(): UmaMetadataLookup {
+  return new Map(
+    releaseOrder.map((entry) => {
+      const label = getUmaDisplayName(entry.outfitId, entry.name);
+      const imageUrl = getUmaPortraitUrl(entry.outfitId, PROFILE_ORIGIN);
+      const metadata: UmaMetadata = imageUrl === undefined ? { label } : { label, imageUrl };
+
+      return [entry.outfitId, metadata] as const;
+    })
+  );
 }
 
 async function fetchPlayerHistory(
@@ -393,10 +465,10 @@ async function fetchPlayerHistory(
     pageSize,
     seasonId: options.seasonId
   });
-  const maxEntries = options.maxEntries ?? pageSize;
   const total = firstPage.total ?? firstPage.playerHistory?.length ?? 0;
   const loadedEntries = [...(firstPage.playerHistory ?? [])];
-  const maxPages = Math.ceil(Math.min(total, maxEntries) / pageSize);
+  const entryLimit = Math.min(total, options.maxEntries ?? pageSize);
+  const maxPages = Math.ceil(entryLimit / pageSize);
 
   for (let page = 2; page <= maxPages; page += 1) {
     const nextPage = await fetchPlayerHistoryPage(discordId, {
@@ -407,14 +479,28 @@ async function fetchPlayerHistory(
 
     loadedEntries.push(...(nextPage.playerHistory ?? []));
 
-    if (loadedEntries.length >= maxEntries) {
+    if (loadedEntries.length >= entryLimit) {
       break;
     }
   }
 
   return {
     ...firstPage,
-    playerHistory: loadedEntries.slice(0, maxEntries)
+    playerHistory: loadedEntries.slice(0, entryLimit)
+  };
+}
+
+function shouldFetchPrivateHistoryFallback(statsPrivate: boolean): boolean {
+  return __UMALYTICS_PRIVATE_PROFILE_DATA__ && statsPrivate;
+}
+
+function getPrivateHistoryFetchOptions(): {
+  pageSize?: number;
+  maxEntries?: number;
+} {
+  return {
+    pageSize: PRIVATE_PROFILE_HISTORY_PAGE_SIZE,
+    maxEntries: PRIVATE_PROFILE_HISTORY_MAX_ENTRIES
   };
 }
 
@@ -466,10 +552,14 @@ async function fetchCardsAssetUrl(): Promise<URL> {
 }
 
 async function fetchText(url: URL): Promise<string> {
-  const response = await fetch(url, {
-    cache: 'force-cache',
-    credentials: 'omit'
-  });
+  const response = await fetchWithTimeout(
+    url,
+    {
+      cache: 'force-cache',
+      credentials: 'omit'
+    },
+    API_REQUEST_TIMEOUT_MS
+  );
 
   if (!response.ok) {
     throw new ApiRequestError(response.status, `Request failed: ${response.status}`);
@@ -653,6 +743,7 @@ function buildStatsSummary(
   const matches = stats.summary?.matchesIncluded ?? addNullable(wins, losses);
   const points = stats.summary?.totalPointsScored;
   const recentMatches = buildRecentMatchSummaries(history?.playerHistory, umaMetadata);
+  const resolutionSummary = getHistoryUmaResolutionSummary(history?.playerHistory);
 
   return {
     wins,
@@ -668,9 +759,113 @@ function buildStatsSummary(
     allUmas: getAllPlayedUmas(stats.umaEntries, umaMetadata),
     recentMatches,
     recentForm: buildRecentFormSummary(recentMatches.slice(0, RECENT_HISTORY_ANALYSIS_MATCHES)),
+    unresolvedUmaMatches: resolutionSummary.unresolvedUmaMatches,
+    disqualifiedMatches: resolutionSummary.disqualifiedMatches,
     bestUmaScoreVersion: BEST_UMA_SCORE_VERSION,
     recentHistoryVersion: RECENT_HISTORY_VERSION
   };
+}
+
+function buildProfileStatsSummary(
+  stats: ApiPlayerStats | undefined,
+  umaMetadata: UmaMetadataLookup,
+  history?: ApiPlayerHistory
+): PlayerProfileStatsSummary {
+  if (stats !== undefined) {
+    return buildStatsSummary(stats, umaMetadata, history);
+  }
+
+  if (
+    __UMALYTICS_PRIVATE_PROFILE_DATA__ &&
+    history !== undefined &&
+    (history.playerHistory?.length ?? 0) > 0
+  ) {
+    return buildStatsSummaryFromHistory(history, umaMetadata);
+  }
+
+  return buildEmptyStatsSummary(history, umaMetadata);
+}
+
+function buildStatsSummaryFromHistory(
+  history: ApiPlayerHistory,
+  umaMetadata: UmaMetadataLookup
+): PlayerProfileStatsSummary {
+  const confirmedEntries = getConfirmedRankedHistoryEntries(history.playerHistory);
+  const umaEntries = buildUmaEntriesFromHistory(confirmedEntries);
+  const recentMatches = buildRecentMatchSummaries(history.playerHistory, umaMetadata);
+  const resolutionSummary = getHistoryUmaResolutionSummary(confirmedEntries);
+  const wins = confirmedEntries.filter((entry) => entry.isWinner === true).length;
+  const losses = confirmedEntries.filter((entry) => entry.isWinner === false).length;
+  const matches = confirmedEntries.length;
+  const points = confirmedEntries.reduce((total, entry) => total + (entry.pointsScored ?? 0), 0);
+  const podiums = confirmedEntries.reduce((total, entry) => total + (entry.podiumPlacements ?? 0), 0);
+  const mvpMatches = confirmedEntries.filter((entry) => entry.isMvp === true).length;
+
+  return {
+    wins,
+    losses,
+    winRate: wins + losses > 0 ? wins / (wins + losses) : null,
+    matches,
+    points,
+    pointsPerGame: matches > 0 ? points / matches : null,
+    podiums,
+    mvpMatches,
+    topUmas: getTopPlayedUmas(umaEntries, umaMetadata),
+    bestUmas: getBestPerformingUmas(umaEntries, umaMetadata),
+    allUmas: getAllPlayedUmas(umaEntries, umaMetadata),
+    recentMatches,
+    recentForm: buildRecentFormSummary(recentMatches.slice(0, RECENT_HISTORY_ANALYSIS_MATCHES)),
+    unresolvedUmaMatches: resolutionSummary.unresolvedUmaMatches,
+    disqualifiedMatches: resolutionSummary.disqualifiedMatches,
+    bestUmaScoreVersion: BEST_UMA_SCORE_VERSION,
+    recentHistoryVersion: RECENT_HISTORY_VERSION
+  };
+}
+
+function getConfirmedRankedHistoryEntries(
+  historyEntries: ApiPlayerHistoryEntry[] | undefined
+): ApiPlayerHistoryEntry[] {
+  if (historyEntries === undefined) {
+    return [];
+  }
+
+  return historyEntries.filter((entry) => {
+    const mode = entry.mode?.toLowerCase() ?? 'ranked';
+    const verificationState = entry.verificationState?.toLowerCase() ?? 'confirmed';
+
+    return mode === 'ranked' && verificationState === 'confirmed';
+  });
+}
+
+function buildUmaEntriesFromHistory(historyEntries: ApiPlayerHistoryEntry[]): ApiUmaEntry[] {
+  const entriesByUmaId = new Map<string, Required<ApiUmaEntry>>();
+
+  for (const historyEntry of historyEntries) {
+    if (!isKnownUmaId(historyEntry.selectedUmaId)) {
+      continue;
+    }
+
+    const umaId = normalizeUmaOutfitId(historyEntry.selectedUmaId);
+    const current = entriesByUmaId.get(umaId) ?? {
+      umaId,
+      matches: 0,
+      wins: 0,
+      losses: 0,
+      pointsScored: 0,
+      podiumPlacements: 0,
+      mvpMatches: 0
+    };
+
+    current.matches += 1;
+    current.wins += historyEntry.isWinner === true ? 1 : 0;
+    current.losses += historyEntry.isWinner === false ? 1 : 0;
+    current.pointsScored += historyEntry.pointsScored ?? 0;
+    current.podiumPlacements += historyEntry.podiumPlacements ?? 0;
+    current.mvpMatches += historyEntry.isMvp === true ? 1 : 0;
+    entriesByUmaId.set(umaId, current);
+  }
+
+  return [...entriesByUmaId.values()];
 }
 
 function buildEmptyStatsSummary(
@@ -678,6 +873,7 @@ function buildEmptyStatsSummary(
   umaMetadata: UmaMetadataLookup = new Map()
 ): PlayerProfileStatsSummary {
   const recentMatches = buildRecentMatchSummaries(history?.playerHistory, umaMetadata);
+  const resolutionSummary = getHistoryUmaResolutionSummary(history?.playerHistory);
 
   return {
     wins: null,
@@ -693,6 +889,8 @@ function buildEmptyStatsSummary(
     allUmas: [],
     recentMatches,
     recentForm: buildRecentFormSummary(recentMatches.slice(0, RECENT_HISTORY_ANALYSIS_MATCHES)),
+    unresolvedUmaMatches: resolutionSummary.unresolvedUmaMatches,
+    disqualifiedMatches: resolutionSummary.disqualifiedMatches,
     bestUmaScoreVersion: BEST_UMA_SCORE_VERSION,
     recentHistoryVersion: RECENT_HISTORY_VERSION
   };
@@ -701,10 +899,14 @@ function buildEmptyStatsSummary(
 async function fetchJson<T>(path: string): Promise<T> {
   await waitForApiBackoff();
 
-  const response = await fetch(new URL(path, API_ORIGIN), {
-    cache: 'no-store',
-    credentials: 'omit'
-  });
+  const response = await fetchWithTimeout(
+    new URL(path, API_ORIGIN),
+    {
+      cache: 'no-store',
+      credentials: 'omit'
+    },
+    API_REQUEST_TIMEOUT_MS
+  );
 
   if (!response.ok) {
     registerApiBackoff(response);
@@ -758,6 +960,48 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => {
     globalThis.setTimeout(resolve, ms);
   });
+}
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timeout = globalThis.setTimeout(() => {
+      reject(new Error(message));
+    }, timeoutMs);
+
+    promise.then(resolve, reject).finally(() => {
+      globalThis.clearTimeout(timeout);
+    });
+  });
+}
+
+async function fetchWithTimeout(
+  url: URL,
+  init: RequestInit,
+  timeoutMs: number
+): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = globalThis.setTimeout(() => {
+    controller.abort();
+  }, timeoutMs);
+
+  try {
+    return await fetch(url, {
+      ...init,
+      signal: controller.signal
+    });
+  } catch (caught) {
+    if (isAbortError(caught)) {
+      throw new Error('Request timed out.');
+    }
+
+    throw caught;
+  } finally {
+    globalThis.clearTimeout(timeout);
+  }
+}
+
+function isAbortError(caught: unknown): boolean {
+  return caught instanceof DOMException && caught.name === 'AbortError';
 }
 
 function uniqueByDiscordId(players: PrematchPlayer[]): PrematchPlayer[] {
@@ -902,8 +1146,8 @@ function buildUmaSummary(
 
   return {
     umaId,
-    name: metadata?.label ?? umaId,
-    imageUrl: metadata?.imageUrl,
+    name: getUmaDisplayName(umaId, metadata?.label),
+    imageUrl: metadata?.imageUrl ?? getUmaPortraitUrl(umaId, PROFILE_ORIGIN),
     matches,
     wins,
     losses,
@@ -956,8 +1200,31 @@ function isKnownUmaId(value: unknown): value is string {
 
   return (
     trimmedValue.length > 0 &&
-    !/^(unknown|undefined|null|\?|u)$/i.test(trimmedValue)
+    !/^(unknown|undefined|null|disqualified|\?|u)$/i.test(trimmedValue)
   );
+}
+
+function getHistoryUmaResolutionSummary(
+  historyEntries: ApiPlayerHistoryEntry[] | undefined
+): { unresolvedUmaMatches: number; disqualifiedMatches: number } {
+  const summary = {
+    unresolvedUmaMatches: 0,
+    disqualifiedMatches: 0
+  };
+
+  for (const entry of historyEntries ?? []) {
+    if (isDisqualifiedUmaId(entry.selectedUmaId)) {
+      summary.disqualifiedMatches += 1;
+    } else if (!isKnownUmaId(entry.selectedUmaId)) {
+      summary.unresolvedUmaMatches += 1;
+    }
+  }
+
+  return summary;
+}
+
+function isDisqualifiedUmaId(value: unknown): boolean {
+  return typeof value === 'string' && /^disqualified$/i.test(value.trim());
 }
 
 function calculatePerformanceScore(
@@ -991,7 +1258,7 @@ function buildRecentMatchSummaries(
         mode: entry.mode ?? 'ranked',
         verificationState: entry.verificationState ?? 'unknown',
         umaId,
-        umaName: umaId === null ? 'Disqualified' : umaMetadata.get(umaId)?.label ?? umaId,
+        umaName: getHistoryUmaDisplayName(entry.selectedUmaId, umaId, umaMetadata),
         isWinner: entry.isWinner ?? null,
         pointsScored: entry.pointsScored ?? 0,
         podiums: entry.podiumPlacements ?? 0,
@@ -999,6 +1266,18 @@ function buildRecentMatchSummaries(
         eloDelta: entry.eloDelta
       };
     });
+}
+
+function getHistoryUmaDisplayName(
+  rawUmaId: string | null | undefined,
+  normalizedUmaId: string | null,
+  umaMetadata: UmaMetadataLookup
+): string {
+  if (normalizedUmaId !== null) {
+    return umaMetadata.get(normalizedUmaId)?.label ?? normalizedUmaId;
+  }
+
+  return isDisqualifiedUmaId(rawUmaId) ? 'Disqualified' : 'Unknown Uma';
 }
 
 function buildRecentFormSummary(recentMatches: PlayerRecentMatchSummary[]): PlayerRecentFormSummary {

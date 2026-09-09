@@ -1,6 +1,6 @@
 const SYNCED_DRAFT_STATE_MESSAGE_TYPE = 'umalytics:synced-draft-state';
 const SYNC_EFFECT_LOG_PREFIX = '[SYNC EFFECT] Starting sync';
-const INSTALL_FLAG = '__umalyticsPageHookInstalled';
+const INSTALL_FLAG = '__umalyticsPageHookInstalled_0_3_0';
 
 type JsonRecord = Record<string, unknown>;
 type UmaLyticsWindow = Window & {

@@ -564,7 +564,25 @@ function readOptionalNumber(value: unknown): number | undefined {
 }
 
 function readOptionalTeamId(value: unknown): TeamId | undefined {
-  return typeof value === 'string' && TEAM_IDS.includes(value as TeamId) ? value as TeamId : undefined;
+  if (typeof value === 'number') {
+    return value === 1 ? 'team1' : value === 2 ? 'team2' : undefined;
+  }
+
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+
+  const normalizedValue = value.toLowerCase().replace(/[^a-z0-9]+/g, '');
+
+  if (normalizedValue === 'team1' || normalizedValue === '1' || normalizedValue === 'blue') {
+    return 'team1';
+  }
+
+  if (normalizedValue === 'team2' || normalizedValue === '2' || normalizedValue === 'red') {
+    return 'team2';
+  }
+
+  return TEAM_IDS.includes(value as TeamId) ? value as TeamId : undefined;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

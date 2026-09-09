@@ -3,9 +3,21 @@ import type { PlayerProfileSummary } from '@umalytics/shared';
 
 export const PLAYER_PROFILE_SUMMARIES_STORAGE_KEY = 'playerProfileSummaries';
 
+export type PlayerProfileLoadStatus = 'queued' | 'loading' | 'loaded' | 'private' | 'timeout' | 'error';
+
+export interface PlayerProfileLoadState {
+  discordId: string;
+  status: PlayerProfileLoadStatus;
+  startedAt?: number;
+  finishedAt?: number;
+  updatedAt: number;
+  error?: string;
+}
+
 export interface PlayerProfileSummariesSnapshot {
   matchCode?: string;
   profiles: Record<string, PlayerProfileSummary>;
+  profileStates?: Record<string, PlayerProfileLoadState>;
   loadingDiscordIds: string[];
   updatedAt: number;
 }

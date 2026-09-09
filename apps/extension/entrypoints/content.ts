@@ -57,13 +57,6 @@ export default defineContentScript({
 
     isContentScriptActive = true;
     pageWindow[CONTENT_SCRIPT_CLEANUP_KEY] = deactivateContentScript;
-    console.log('[UmaLytics] Extension loaded');
-
-    const initialMatchCode = getCurrentMatchCode();
-
-    if (initialMatchCode !== undefined) {
-      console.log(`[UmaLytics] Match detected: ${initialMatchCode}`);
-    }
 
     window.addEventListener('message', handlePageMessage);
     window.addEventListener('focus', handlePageFocus);
@@ -126,7 +119,7 @@ function handleRuntimeMessage(message: unknown): Promise<RoomDomScanResult> | un
     return undefined;
   }
 
-  return publishRoomDomRoster();
+  return publishRoomDomRoster({ force: message.force === true });
 }
 
 async function handleWindowMessage(message: unknown, matchCode?: string): Promise<void> {
@@ -218,7 +211,9 @@ function clearPendingRoomDomScan(): void {
   roomDomScanTimer = undefined;
 }
 
-async function publishRoomDomRoster(): Promise<RoomDomScanResult> {
+async function publishRoomDomRoster(
+  options: { force?: boolean } = {}
+): Promise<RoomDomScanResult> {
   if (!isContentScriptActive) {
     return { activeLobby: false };
   }
@@ -234,7 +229,7 @@ async function publishRoomDomRoster(): Promise<RoomDomScanResult> {
 
   activeRoomDomMatchCode = roster.matchCode;
   clearRoomDomRetries();
-  await publishRoster(roster, 'dom');
+  await publishRoster(roster, 'dom', options);
   return { activeLobby: true, matchCode: roster.matchCode };
 }
 
@@ -265,8 +260,6 @@ async function publishDraftSnapshot(snapshot: DraftSnapshot): Promise<void> {
     return;
   }
 
-  lastDraftSnapshotSignature = signature;
-
   try {
     await sendDraftSnapshot(snapshot);
   } catch (caught) {
@@ -275,16 +268,27 @@ async function publishDraftSnapshot(snapshot: DraftSnapshot): Promise<void> {
       return;
     }
 
+    if (isTransientRuntimeMessageError(caught)) {
+      return;
+    }
+
     throw caught;
   }
+
+  lastDraftSnapshotSignature = signature;
 }
 
-async function publishRoster(roster: PrematchRoster, source: RosterSource): Promise<void> {
+async function publishRoster(
+  roster: PrematchRoster,
+  source: RosterSource,
+  options: { force?: boolean } = {}
+): Promise<void> {
   if (roster.players.length === 0) {
     return;
   }
 
   if (
+    options.force !== true &&
     source === 'dom' &&
     lastRosterSource === 'synced' &&
     lastRosterMatchCode === roster.matchCode
@@ -294,14 +298,9 @@ async function publishRoster(roster: PrematchRoster, source: RosterSource): Prom
 
   const rosterSignature = getRosterSignature(roster);
 
-  if (rosterSignature === lastRosterSignature) {
+  if (options.force !== true && rosterSignature === lastRosterSignature) {
     return;
   }
-
-  console.log(`[UmaLytics] Roster detected: ${roster.players.length} players`);
-  lastRosterSignature = rosterSignature;
-  lastRosterMatchCode = roster.matchCode;
-  lastRosterSource = source;
 
   try {
     await sendPrematchRoster(roster);
@@ -311,8 +310,16 @@ async function publishRoster(roster: PrematchRoster, source: RosterSource): Prom
       return;
     }
 
+    if (isTransientRuntimeMessageError(caught)) {
+      return;
+    }
+
     throw caught;
   }
+
+  lastRosterSignature = rosterSignature;
+  lastRosterMatchCode = roster.matchCode;
+  lastRosterSource = source;
 }
 
 function isStaleSyncedRoster(roster: PrematchRoster): boolean {
@@ -411,6 +418,19 @@ function deactivateContentScript(): void {
 
 function isExtensionContextInvalidatedError(caught: unknown): boolean {
   return caught instanceof Error && caught.message.includes('Extension context invalidated');
+}
+
+function isTransientRuntimeMessageError(caught: unknown): boolean {
+  if (!(caught instanceof Error)) {
+    return false;
+  }
+
+  return (
+    caught.message.includes('A listener indicated an asynchronous response') ||
+    caught.message.includes('message channel closed') ||
+    caught.message.includes('The message port closed before a response was received') ||
+    caught.message.includes('Could not establish connection. Receiving end does not exist')
+  );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

@@ -4,9 +4,24 @@ UmaLytics is a TERUMI APPROVED browser extension for Uma Drafter that opens a se
 
 It is built to help players quickly understand who is in the lobby and what each player is known for before and during draft.
 
+## Current Build
+
+The `0.3` iteration focuses on reliability and tester visibility:
+
+- DOM-first custom lobby and live draft detection
+- Manual lobby lock that freezes players while draft data keeps updating
+- Small in-app version/build label
+- One-click diagnostics copy for bug reports
+- Clear handling for unknown and disqualified match-history rows
+- Public-safe package output for Chromium and Firefox
+
 ## Privacy
 
-The public build respects Uma Drafter private profile settings. If ranked Uma stats are private or unavailable, UmaLytics shows that private/unavailable state instead of rebuilding hidden stats from match history.
+This public release respects Uma Drafter private profile settings. If ranked Uma stats are private or unavailable, UmaLytics shows that private/unavailable state instead of deriving hidden stat summaries.
+
+## Install
+
+See `INSTALL.md` for browser install and update steps.
 
 ## Source
 

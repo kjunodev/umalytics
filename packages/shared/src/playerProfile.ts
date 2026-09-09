@@ -55,6 +55,8 @@ export interface PlayerProfileStatsSummary {
   allUmas?: PlayerTopUmaSummary[];
   recentMatches?: PlayerRecentMatchSummary[];
   recentForm?: PlayerRecentFormSummary;
+  unresolvedUmaMatches?: number;
+  disqualifiedMatches?: number;
   bestUmaScoreVersion?: number;
   recentHistoryVersion?: number;
 }
@@ -81,6 +83,8 @@ export interface PlayerProfileSummary {
   allUmas?: PlayerTopUmaSummary[];
   recentMatches?: PlayerRecentMatchSummary[];
   recentForm?: PlayerRecentFormSummary;
+  unresolvedUmaMatches?: number;
+  disqualifiedMatches?: number;
   bestUmaScoreVersion?: number;
   recentHistoryVersion?: number;
   statsScope?: PlayerStatsScope;

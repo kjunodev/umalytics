@@ -4,8 +4,8 @@ export default defineConfig({
   manifestVersion: 3,
   manifest: {
     name: 'UmaLytics',
-    version: '0.2.1',
-    version_name: '0.2.1-open-beta.1',
+    version: '0.3.0',
+    version_name: '0.3.0-open-beta.1',
     description: 'Prematch scouting companion for Uma Drafter.',
     icons: {
       16: 'icon/16.png',
@@ -31,5 +31,10 @@ export default defineConfig({
       }
     ]
   },
+  vite: () => ({
+    define: {
+      __UMALYTICS_PRIVATE_PROFILE_DATA__: JSON.stringify(false)
+    }
+  }),
   modules: ['@wxt-dev/module-react']
 });
