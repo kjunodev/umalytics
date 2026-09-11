@@ -31,6 +31,7 @@ export interface PrematchTeam {
 }
 
 export interface PrematchRoster {
+  observationSource?: string;
   matchCode?: MatchCode;
   phase?: string;
   currentTeam?: TeamId;

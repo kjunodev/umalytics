@@ -1,15 +1,11 @@
 import type { MatchCode } from '@umalytics/shared';
-
-const SPECTATE_ROUTE_PATTERN = /^\/spectate\/([^/?#]+)/;
-
+export function normalizeMatchCode(value: unknown): MatchCode | undefined {
+  if (typeof value !== 'string') return undefined;
+  const code = value.trim().toUpperCase();
+  if (!/^[A-Z0-9]{3}-?[A-Z0-9]{3}$/.test(code)) return undefined;
+  return code.replace('-', '');
+}
 export function extractMatchCodeFromUrl(url: string): MatchCode | undefined {
-  const parsedUrl = new URL(url);
-  const match = SPECTATE_ROUTE_PATTERN.exec(parsedUrl.pathname);
-  const rawMatchCode = match?.[1];
-
-  if (rawMatchCode === undefined || rawMatchCode.length === 0) {
-    return undefined;
-  }
-
-  return rawMatchCode;
+  try { return normalizeMatchCode(/^\/(?:spectate|join)\/([^/?#]+)/.exec(new URL(url).pathname)?.[1]); }
+  catch { return undefined; }
 }

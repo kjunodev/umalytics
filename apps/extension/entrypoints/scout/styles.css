@@ -1824,6 +1824,8 @@ body {
 }
 
 .player-row {
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
   background: #ffffff;
   border: 1px solid #d9e0ea;
   border-radius: 8px;
@@ -3417,3 +3419,12 @@ a.player-name:hover {
     grid-column: auto;
   }
 }
+
+/* Prevent a long note or stat from widening the card's implicit grid column. */
+.player-row > * { min-width: 0; max-width: 100%; }
+.player-row .player-name { display: block; max-height: none; overflow: visible; -webkit-line-clamp: unset; }
+.player-row .player-note { overflow-wrap: anywhere; }
+.player-row .compact-scouting-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.player-row .compact-scouting-grid .stat-cell { min-width: 0; }
+.player-row .compact-scouting-grid .stat-cell strong { white-space: normal; overflow-wrap: anywhere; }
+.api-retry-notice { margin: 0; padding: 10px 14px; color: #fbbf24; overflow-wrap: anywhere; }

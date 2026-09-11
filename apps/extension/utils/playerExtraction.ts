@@ -1,3 +1,4 @@
+import { readPayloadRoomCode } from './syncPayload';
 import type { MatchCode, PrematchPlayer, PrematchRoster, PrematchTeam, TeamId } from '@umalytics/shared';
 import { cleanTeamName } from './textCleanup';
 
@@ -22,7 +23,7 @@ export function normalizePrematchRosterFromPlayers(
           source: normalizedPlayer.source ?? 'synced-draft-state'
         } satisfies PrematchPlayer];
   });
-  const dedupedPlayers = dedupePrematchPlayers(players);
+  const dedupedPlayers = dedupePrematchPlayers(players.filter(player => player.team === 'team1' || player.team === 'team2'));
 
   return {
     ...(matchCode === undefined ? {} : { matchCode }),
@@ -48,10 +49,7 @@ export function extractPrematchRosterFromSyncedDraftState(
   const rosterPlayers = getRosterPlayers(multiplayer);
   const roster = normalizePrematchRosterFromPlayers(
     rosterPlayers,
-    readOptionalString(multiplayer.roomId)
-      ?? readOptionalString(multiplayer.roomCode)
-      ?? readOptionalString(multiplayer.code)
-      ?? fallbackMatchCode,
+    readPayloadRoomCode(multiplayer) ?? fallbackMatchCode,
     multiplayer
   );
 
@@ -107,9 +105,10 @@ export function normalizePrematchPlayer(
     ]);
   const partyId = readOptionalString(value.partyId) ?? null;
   const partyRatingBonus = readOptionalNumber(value.partyRatingBonus) ?? 0;
-  const roomRole = (readOptionalString(value.roomRole) ?? readOptionalString(value.type))?.toLowerCase();
+  const excludedRole = [value.roomRole, value.role, value.type].some(role =>
+    typeof role === 'string' && ['staff', 'spectator'].includes(role.toLowerCase()));
 
-  if (roomRole === 'staff' || roomRole === 'spectator') {
+  if (excludedRole) {
     return null;
   }
 
@@ -192,7 +191,9 @@ function dedupePrematchPlayers(players: PrematchPlayer[]): PrematchPlayer[] {
 
 function readOptionalPlayerFields(value: Record<string, unknown>): Partial<PrematchPlayer> {
   const fields: Partial<PrematchPlayer> = {};
-  const team = readOptionalTeamId(value.team);
+  // An explicit null current team means the player has left the slots.
+  const team = value.team === null ? undefined :
+    readOptionalTeamId(value.team) ?? readOptionalTeamId(value.finalTeam) ?? readOptionalTeamId(value.initialTeam);
   const initialTeam = readOptionalTeamId(value.initialTeam);
   const finalTeam = readOptionalTeamId(value.finalTeam);
   const role = readOptionalString(value.role) ?? readOptionalString(value.roomRole) ?? readOptionalString(value.type);

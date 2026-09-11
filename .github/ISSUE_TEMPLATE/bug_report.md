@@ -7,18 +7,19 @@ assignees: ''
 ---
 
 ## Environment
-- UmaLytics version/build:
+- UmaLytics version:
 - Browser and version:
 - Operating system:
-- Installation: downloaded ZIP or local build?
+- Downloaded ZIP or local build:
+- Scene: starting room / draft / completed draft
+- Stats scope: Season / All-time
+- Lobby Lock: on / off
 
-## Steps to reproduce
-1.
-2.
+## What happened
+Expected behavior:
+Actual behavior:
+Steps to reproduce (if known):
+Approximate time until the problem appeared:
 
-## Expected behavior
-
-## Actual behavior
-
-## Diagnostics / screenshots
-Copy the in-app diagnostics if relevant. Review them for lobby information before posting. Do not include credentials or other private information.
+## Diagnostics
+Use Copy diagnostics shortly after the issue. Review the report before posting: it can contain room codes, player IDs and API paths. Do not include credentials or other private information. Screenshots are optional.

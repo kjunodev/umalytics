@@ -15,6 +15,7 @@ export interface DraftUmaAction {
 }
 
 export interface DraftMapSelection {
+  mapId?: string;
   team: TeamId;
   name: string;
   details?: string;
@@ -36,6 +37,8 @@ export interface DraftTeamSnapshot {
 
 export interface DraftSnapshot {
   matchCode?: MatchCode;
+  version?: number;
+  rules?: { maps: number; picks: number; bans: number; vetoes: number };
   phase?: string;
   currentTeam?: TeamId;
   tiebreakerMap?: DraftTiebreakerMap;

@@ -1,13 +1,21 @@
 import { defineConfig } from 'wxt';
 
+// Community source cannot enable history-derived profiles through an environment flag.
+if (process.env.UMALYTICS_PRIVATE_PROFILE_DATA === 'true') throw new Error('This repository supports public builds only.');
+const privateProfileDataBuild = false;
+
 export default defineConfig({
   manifestVersion: 3,
   manifest: {
-    browser_specific_settings: { gecko: { id: 'umalytics@kjunodev' } },
-    name: 'UmaLytics',
-    version: '0.3.0',
-    version_name: '0.3.0-open-beta.1',
-    description: 'Prematch scouting companion for Uma Drafter.',
+    browser_specific_settings: {
+      gecko: { id: privateProfileDataBuild ? 'umalytics-private@kjunodev' : 'umalytics@kjunodev' }
+    },
+    name: privateProfileDataBuild ? 'UmaLytics Private' : 'UmaLytics',
+    version: '0.3.5',
+    version_name: privateProfileDataBuild ? '0.3.5-private.rc.1' : '0.3.5-public.open-beta.1',
+    description: privateProfileDataBuild
+      ? 'Private prematch scouting companion for Uma Drafter.'
+      : 'Prematch scouting companion for Uma Drafter.',
     icons: {
       16: 'icon/16.png',
       32: 'icon/32.png',
@@ -23,7 +31,7 @@ export default defineConfig({
         128: 'icon/128.png'
       }
     },
-    permissions: ['storage', 'scripting'],
+    permissions: ['storage', 'scripting', 'alarms'],
     host_permissions: ['https://drafter-api.uma.guide/*', 'https://drafter.uma.guide/*'],
     web_accessible_resources: [
       {
@@ -34,7 +42,7 @@ export default defineConfig({
   },
   vite: () => ({
     define: {
-      __UMALYTICS_PRIVATE_PROFILE_DATA__: JSON.stringify(false)
+      __UMALYTICS_PRIVATE_PROFILE_DATA__: JSON.stringify(privateProfileDataBuild)
     }
   }),
   modules: ['@wxt-dev/module-react']

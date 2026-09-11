@@ -8,6 +8,9 @@ importers:
 
   .:
     devDependencies:
+      linkedom:
+        specifier: 0.18.13
+        version: 0.18.13
       typescript:
         specifier: ^5.7.2
         version: 5.9.3
