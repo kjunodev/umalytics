@@ -46,6 +46,7 @@ const pendingRosters = new Map<string, Promise<void>>();
 let draftPublishQueue = Promise.resolve();
 let lastIgnoredStaleSyncedMatchCode: string | undefined;
 let activeRoomDomMatchCode: string | undefined;
+let activeRoomPageHref: string | undefined;
 let roomDomScanTimer: number | undefined;
 let roomDomRetryTimers: number[] = [];
 let roomDomObserver: MutationObserver | undefined;
@@ -80,6 +81,7 @@ export default defineContentScript({
 
     try {
       await injectScript(PAGE_HOOK_SCRIPT_PATH, { keepInDom: true });
+      requestCapturedRoomEvents();
     } catch (caught) {
       if (isExtensionContextInvalidatedError(caught)) {
         deactivateContentScript();
@@ -103,16 +105,23 @@ function handlePageMessage(event: MessageEvent<unknown>): void {
   void handleWindowMessage(event.data, getCurrentMatchCode()).catch((error) => console.debug('[UmaLytics] Sync update failed:', error));
 }
 
+function requestCapturedRoomEvents(): void {
+  window.postMessage({ type: 'umalytics:request-room-events' }, window.location.origin);
+}
+
 function handlePageFocus(): void {
+  requestCapturedRoomEvents();
   queueRoomDomScan();
 }
 
 function handlePageShow(): void {
+  requestCapturedRoomEvents();
   queueRoomDomScan();
 }
 
 function handleVisibilityChange(): void {
   if (document.visibilityState === 'visible') {
+    requestCapturedRoomEvents();
     installRoomDomObserver();
     queueRoomDomScan();
     scheduleRoomDomRetries();
@@ -278,7 +287,7 @@ async function publishRoomDomRoster(
     return { activeLobby: false };
   }
 
-  activeRoomDomMatchCode = getCurrentMatchCode() ?? roster.matchCode;
+  refreshActiveRoomDomMatchCode(getCurrentMatchCode() ?? roster.matchCode);
   clearRoomDomRetries();
   for (const [key, pending] of pendingRoomEvents) {
     if (Date.now() - pending.at > 30_000) { pendingRoomEvents.delete(key); continue; }
@@ -433,18 +442,18 @@ function isStaleDraftSnapshot(snapshot: DraftSnapshot): boolean {
 }
 
 function refreshActiveRoomDomMatchCode(fallbackMatchCode?: string): void {
-  if (fallbackMatchCode !== undefined) {
-    activeRoomDomMatchCode = fallbackMatchCode;
-    return;
+  const previousRoom = activeRoomDomMatchCode;
+  const href = window.location.href;
+  const detectedRoom = fallbackMatchCode ?? extractRoomCodeFromRoomDom(document);
+  // /host keeps its URL when the waiting-room header disappears during draft.
+  // Absence of that label is not proof that the room changed.
+  activeRoomDomMatchCode = detectedRoom ?? (href === activeRoomPageHref ? previousRoom : undefined);
+  activeRoomPageHref = href;
+  // The initial hook handshake can precede the room-code DOM. Ask again once
+  // that identity becomes visible, without polling or reopening the socket.
+  if (activeRoomDomMatchCode !== undefined && activeRoomDomMatchCode !== previousRoom) {
+    requestCapturedRoomEvents();
   }
-  const visibleRoomDomMatchCode = extractRoomCodeFromRoomDom(document);
-  activeRoomDomMatchCode = visibleRoomDomMatchCode;
-
-  if (visibleRoomDomMatchCode !== undefined) {
-    activeRoomDomMatchCode = visibleRoomDomMatchCode;
-    return;
-  }
-
 }
 
 function getRosterSignature(roster: PrematchRoster): string {

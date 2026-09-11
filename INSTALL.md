@@ -1,4 +1,4 @@
-# Install or update UmaLytics 0.3.5
+# Install or update UmaLytics 0.3.9
 
 Download the public Chromium or Firefox package linked from the README. Extract it into a permanent folder; manifest.json is at the root of the extracted package.
 
@@ -20,7 +20,7 @@ This unsigned package is temporary and must be loaded again after Firefox restar
 
 Extract each version into its own folder. Disable the previous copy before loading the new copy so two extensions do not make duplicate requests. Keep the previous folder if you want to roll back. If you replace files in the existing extension folder instead, reload that extension explicitly.
 
-**Refresh every open drafter tab once after an upgrade, then reopen the scout.** The page hook must attach to newly created connections. Confirm v0.3.5 in the header.
+**Refresh every open drafter tab once after an upgrade, then reopen the scout.** The page hook must attach to newly created connections. Confirm v0.3.9 in the header.
 
 Updates and rollback are manual. To roll back, disable the new copy and reload the previous folder, then refresh the drafter tab. Different unpacked extension installations can have separate caches and preferences.
 
