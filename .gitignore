@@ -10,3 +10,7 @@ release-repo/
 .env
 .env.*
 !.env.example
+.releases/
+
+.releases/
+.pnpm-store/

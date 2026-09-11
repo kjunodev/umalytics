@@ -1,80 +1,54 @@
 # UmaLytics
 
-UmaLytics is a browser extension built with **TypeScript, React, and WXT** that helps competitive [Uma Drafter](https://drafter.uma.guide) players scout opponents and analyze live drafts. It opens a separate scouting window so players can review lobby participants and available player statistics while keeping the draft visible.
+UmaLytics is a TypeScript, React and WXT browser extension for [Uma Drafter](https://drafter.uma.guide). It combines versioned room events, DOM fallback, asynchronous request scheduling and local caches to keep a separate scouting window synchronized with a live draft.
 
-**Current release:** 0.3.0 Open Beta · **Browsers:** Chromium and Firefox
+**0.3.5 Open Beta — manual installation and updates.**
 
-[Download the open beta](https://github.com/kjunodev/umalytics/releases/tag/v0.3.0-open-beta.1) · [Installation guide](INSTALL.md) · [Development guide](DEVELOPMENT.md)
+| Browser | Download |
+| --- | --- |
+| Chrome, Edge, Brave, Opera GX | [Chromium ZIP](downloads/umalytics-chromium-0.3.5-open-beta.1.zip) |
+| Firefox / LibreWolf | [Firefox ZIP](downloads/umalytics-firefox-0.3.5-open-beta.1.zip) — temporary installation |
 
-## Features
+[Install or update](INSTALL.md) · [Changes](CHANGELOG.md) · [Privacy](PRIVACY.md) · [Report a bug](https://github.com/kjunodev/umalytics/issues/new?template=bug_report.md)
 
-The `0.3` iteration focuses on reliability and tester visibility:
+## Start scouting
 
-- DOM-first custom lobby and live draft detection
-- Manual lobby lock that freezes players while draft data keeps updating
-- Small in-app version/build label
-- One-click diagnostics copy for bug reports
-- Clear handling for unknown and disqualified match-history rows
-- Public-safe package output for Chromium and Firefox
+1. Extract the package and follow the installation guide.
+2. Open or refresh Uma Drafter, then enter a room or spectate a draft.
+3. Click the UmaLytics extension icon. Use Lobby for player cards, Draft for confirmed selections, and Umas for team experience.
+4. Choose Season or All-time. Leave Lobby Lock unlocked to follow room changes; lock it only when you want to keep the displayed players fixed.
+
+## What is included
+
+- Starting-room trainer identification, with companion images and spectators excluded from the roster.
+- Versioned room events and DOM fallback for lobby and draft detection.
+- Cached player summaries, selected-scope loading, and explicit private/unavailable states.
+- Paced API requests, request cancellation on room changes, and bounded automatic recovery after rate limits.
+- Confirmed picks, bans, vetoes, map order and a tiebreaker view.
+- Local diagnostics that you can copy when reporting a problem.
 
 ## Privacy
 
-This public release respects Uma Drafter private profile settings. If ranked Uma stats are private or unavailable, UmaLytics shows that private/unavailable state instead of deriving hidden stat summaries.
+This source and its packages respect private ranked stats. They do not request match history or reconstruct hidden statistics. The community configuration cannot enable that behavior with a build flag. Public identity, rank or rating may still appear when separately exposed by the site; private detailed statistics remain unavailable.
 
-## Install
+The extension contacts Uma Drafter's services with player identifiers. Scouting state and a bounded diagnostic trace stay in local extension storage. There is no UmaLytics backend, analytics service or automatic diagnostic upload. See [PRIVACY.md](PRIVACY.md).
 
-See [INSTALL.md](INSTALL.md) for browser install and update steps. Firefox currently uses a temporary add-on installation.
+## Expectations
 
-## How it works
+This is the public testing release. Cached data can appear quickly; uncached data depends on the upstream API. HTTP 429 pauses requests rather than bypassing the server's limits. Site changes can affect detection. A player whose room exposes no verified identity cannot be looked up reliably.
 
-The extension runs in the browser. This repository does not currently include a backend service or database.
+Chromium behavior has been observed during a live ranked draft on the preceding candidate. The 0.3.5 changes have automated regression coverage; see [TESTING.md](TESTING.md) for exact checks and limits. Firefox remains an unsigned temporary add-on, not a permanent store installation. Human team cards currently assume up to five slots per side; complete support for every custom mode is not claimed.
 
-| Component | Responsibility |
-| --- | --- |
-| Content script | Observes Uma Drafter's DOM, extracts lobby and draft information, and sends extension messages. |
-| Page hook | Reads available synchronized state through page-level hooks and passes it to the content script. |
-| Background script | Opens the scouting window, coordinates roster updates and profile requests, and writes extension storage. |
-| React scouting window | Displays scouting and draft information and responds to storage updates. |
-| Shared TypeScript package | Defines player, roster, match, and draft types used across the extension. |
+## Development and feedback
 
-### Engineering decisions
+Built with TypeScript, React and WXT. [DEVELOPMENT.md](DEVELOPMENT.md) documents tests and reproducible public builds. This is the engineering/portfolio repository. [The community repository](https://github.com/kjunodev/umalytics) serves public downloads and feedback. Both repositories contain the public implementation.
 
-- **Multiple detection paths:** DOM observation and synchronized state support updates as the page changes. Retry and reconnect handling help recover when data is not immediately available.
-- **Explicit asynchronous states:** Profile loading includes caching, request timeouts, and visible private/error states so users can distinguish missing data from an in-progress request.
-- **Shared contracts:** TypeScript types and extension message validation connect the content script, background script, and UI.
-- **Privacy-aware public builds:** The checked-in WXT configuration disables private-profile data derivation.
+Bug reports should include the version, browser, expected/actual behavior and diagnostics copied soon after the problem. Review the report before posting: its status section can include player IDs, room codes and API error paths. Older download assets retain their original contents.
 
-## Develop locally
+## Engineering focus
 
-The workspace pins **pnpm 9.15.4**. See [Development](DEVELOPMENT.md) for prerequisites, browser loading, troubleshooting, and the desktop/laptop workflow.
+Room identity and event authority are explicit: presence decorates known players, team assignments update one side, and authoritative rosters control membership. Version/revision checks and serialized publication prevent late events from resurrecting old state.
 
-```sh
-git clone https://github.com/skimuic/UmaLytics.git
-cd UmaLytics
-pnpm install --frozen-lockfile
-pnpm typecheck
-pnpm build
-```
+Profile requests are independent of roster display. The background cancels obsolete generations, deduplicates shared lookups, spaces request starts and respects server recovery deadlines. Complete scoped caches are reused without resetting UI freshness indicators.
 
-## Repository layout
-
-```text
-apps/extension/
-  entrypoints/       Content/background scripts, page hook, and React scout UI
-  utils/             Extraction, API requests, messaging, and storage
-  public/            Extension icons
-  wxt.config.ts      Browser manifest and build configuration
-packages/shared/     Shared TypeScript models
-downloads/           Packaged public beta builds
-```
-
-## Project and community
-
-- [Professional repository](https://github.com/skimuic/UmaLytics): project source and engineering presentation.
-- [Community repository](https://github.com/kjunodev/umalytics): public releases and community distribution.
-
-For a bug report, include the extension version, browser, steps to reproduce, and relevant diagnostics.
-
-## Current limitations
-
-UmaLytics is an open beta. Changes to Uma Drafter's DOM or synchronized data can affect detection. Profile information depends on upstream availability and privacy settings.
+The regression suite exercises those boundaries with DOM fixtures, synthetic room sequences and mocked network failures. CI repeats tests, type checks and both public browser builds. Performance claims distinguish measured request counts from unmeasured live latency. See [architecture and development](DEVELOPMENT.md) and [validation limits](TESTING.md).

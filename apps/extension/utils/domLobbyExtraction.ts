@@ -1,3 +1,4 @@
+import { normalizeMatchCode } from './matchDetection';
 import type { MatchCode, PrematchPlayer, PrematchRoster, PrematchTeam, TeamId } from '@umalytics/shared';
 import { cleanTeamName } from './textCleanup';
 
@@ -7,10 +8,12 @@ const PLAYER_ROLES = new Set(['Player', 'Captain']);
 
 export function extractPrematchRosterFromRoomDom(document: Document): PrematchRoster | null {
   const roomCode = extractRoomCodeFromRoomDom(document);
-  const teams = buildTeamRecord(findTeamSections(document).map((section) => extractTeam(section)));
+  const sections = findTeamSections(document);
+  if (sections.length === 0) return null;
+  const teams = buildTeamRecord(sections.map((section) => extractTeam(section)));
   const players = teams.flatMap((team) => team.players);
 
-  if (players.length === 0) {
+  if (teams.every(team => team.name === undefined) && players.length === 0) {
     return null;
   }
 
@@ -32,6 +35,7 @@ export function extractRoomCodeFromRoomDom(document: Document): MatchCode | unde
   }
 
   const labeledTextCode = Array.from(document.querySelectorAll<HTMLElement>('button, span, p, div'))
+    .filter((element) => /\broom\s+code\b/i.test(element.textContent ?? ''))
     .map((element) => normalizeRoomCode(element.textContent))
     .find((code) => code !== undefined);
 
@@ -40,6 +44,21 @@ export function extractRoomCodeFromRoomDom(document: Document): MatchCode | unde
 
 function findTeamSections(document: Document): Array<{ id: TeamId; name?: string; element: HTMLElement }> {
   const root = document.body ?? document.documentElement;
+  const headings = Array.from(root.querySelectorAll<HTMLElement>('h2, h3'));
+  const sections: Array<{ id: TeamId; name?: string; element: HTMLElement }> = [];
+  for (const heading of headings) {
+    let element = heading.parentElement;
+    while (element !== null && element !== root) {
+      if (element.querySelectorAll('h2, h3').length > 1) break;
+      if (element.querySelector('[data-trainer-player]') !== null ||
+          Array.from(element.querySelectorAll('p')).some(p => /Waiting for player/i.test(p.textContent ?? ''))) {
+        if (!sections.some(section => section.element === element)) sections.push({ id: 'team1', name: cleanTeamName(normalizeText(heading.textContent)), element });
+        break;
+      }
+      element = element.parentElement;
+    }
+  }
+  if (sections.length === 2) return sections.sort(compareTeamCandidates).map((section, index) => ({ ...section, id: TEAM_IDS[index]! }));
   const rows = findPlayerRows(root);
   const seen = new Set<HTMLElement>();
   const candidates: Array<{ name?: string; element: HTMLElement }> = [];
@@ -145,6 +164,9 @@ function buildTeamRecord(discoveredTeams: PrematchTeam[]): PrematchTeam[] {
 }
 
 function findPlayerRows(teamElement: HTMLElement): HTMLElement[] {
+  const marked = Array.from(teamElement.querySelectorAll<HTMLElement>('[data-trainer-player]'))
+    .filter(row => readRole(row) !== undefined);
+  if (marked.length > 0) return marked;
   const seen = new Set<HTMLElement>();
   const rows: HTMLElement[] = [];
 
@@ -169,25 +191,34 @@ function findPlayerRows(teamElement: HTMLElement): HTMLElement[] {
 }
 
 function findClosestRow(element: HTMLElement): HTMLElement | null {
+  const marked = element.closest<HTMLElement>('[data-trainer-player]');
+  if (marked !== null) return marked;
   let current: HTMLElement | null = element;
+  let candidate: HTMLElement | null = null;
 
-  while (current !== null) {
-    if (current.tagName === 'DIV' && current.querySelector('p') !== null) {
-      return current;
+  while (current !== null && current !== element.ownerDocument.body) {
+    if (current.querySelector('h2, h3') !== null) break;
+    const badges = Array.from(current.querySelectorAll<HTMLElement>('span')).filter(span =>
+      PLAYER_ROLES.has(normalizeText(span.textContent) ?? '') &&
+      !Array.from(span.querySelectorAll('span')).some(child => PLAYER_ROLES.has(normalizeText(child.textContent) ?? '')));
+    if (badges.length > 1) break;
+    if (current.tagName === 'DIV' && badges.length === 1 && current.querySelector('p') !== null) {
+      candidate = current;
     }
 
     current = current.parentElement;
   }
 
-  return null;
+  return candidate;
 }
 
 function extractPlayer(row: HTMLElement, team: TeamId, index: number): PrematchPlayer {
-  const image = row.querySelector<HTMLImageElement>('img[alt]');
-  const displayName = normalizeText(image?.alt) ?? readDisplayName(row) ?? `Unknown ${index + 1}`;
+  const images = Array.from(row.querySelectorAll<HTMLImageElement>('img'));
+  const image = images.find(image => isDiscordAvatar(image.src));
+  const displayName = readDisplayName(row) ?? normalizeText(image?.alt) ?? `Unknown ${index + 1}`;
   const role = readRole(row);
   const avatarUrl = image?.src;
-  const discordId = avatarUrl === undefined ? undefined : extractDiscordIdFromAvatarUrl(avatarUrl);
+  const discordId = extractDiscordIdFromRow(row, images);
   const stableDomId = makeStableDomId(team, index, displayName);
 
   return {
@@ -208,6 +239,9 @@ function extractPlayer(row: HTMLElement, team: TeamId, index: number): PrematchP
 }
 
 function readDisplayName(row: HTMLElement): string | undefined {
+  const nameButton = Array.from(row.querySelectorAll<HTMLElement>('[data-trainer-trigger]'))
+    .find(button => button.querySelector('img') === null && normalizeText(button.textContent) !== undefined);
+  if (nameButton !== undefined) return normalizeText(nameButton.textContent);
   return Array.from(row.querySelectorAll<HTMLParagraphElement>('p'))
     .map((paragraph) => normalizeText(paragraph.textContent))
     .find((text) => text !== undefined);
@@ -221,7 +255,43 @@ function readRole(row: HTMLElement): string | undefined {
 }
 
 function extractDiscordIdFromAvatarUrl(value: string): string | undefined {
-  return /\/avatars\/(\d+)\//.exec(value)?.[1];
+  if (!isDiscordAvatar(value)) return undefined;
+  const path = new URL(value).pathname;
+  return /^\/avatars\/(\d{16,20})\//.exec(path)?.[1] ??
+    /^\/guilds\/\d+\/users\/(\d{16,20})\/avatars\//.exec(path)?.[1];
+}
+
+function isDiscordAvatar(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return ['cdn.discordapp.com', 'media.discordapp.net'].includes(url.hostname) &&
+      /\/(?:avatars|embed\/avatars)\//.test(url.pathname);
+  } catch { return false; }
+}
+
+function extractDiscordIdFromRow(row: HTMLElement, images: HTMLImageElement[]): string | undefined {
+  const ids = new Set<string>();
+  for (const link of Array.from(row.querySelectorAll<HTMLAnchorElement>('a[href]'))) {
+    try {
+      const url = new URL(link.getAttribute('href')!, 'https://drafter.uma.guide');
+      if (url.origin === 'https://drafter.uma.guide') {
+        const id = /^\/players\/(\d{16,20})\/?$/.exec(url.pathname)?.[1];
+        if (id !== undefined) ids.add(id);
+      }
+    } catch { /* Ignore non-URL links. */ }
+  }
+  for (const element of [row, ...Array.from(row.querySelectorAll<HTMLElement>('[data-discord-id], [data-user-id], [data-actor-user-id]'))]) {
+    for (const attribute of ['data-discord-id', 'data-user-id', 'data-actor-user-id']) {
+      const id = element.getAttribute(attribute);
+      if (id !== null && /^\d{16,20}$/.test(id)) ids.add(id);
+    }
+  }
+  for (const image of images) {
+    const id = extractDiscordIdFromAvatarUrl(image.src);
+    if (id !== undefined) ids.add(id);
+  }
+  // Conflicting identities signal a bad row boundary; never guess a player.
+  return ids.size === 1 ? [...ids][0] : undefined;
 }
 
 function makeStableDomId(team: TeamId, index: number, displayName: string): string {
@@ -241,9 +311,5 @@ function normalizeRoomCode(value: string | null | undefined): string | undefined
     return undefined;
   }
 
-  if (/^[A-Z0-9]{5,8}$/.test(text)) {
-    return text;
-  }
-
-  return /\broom\s+code\b\s*:?\s*([A-Z0-9]{5,8})\b/i.exec(text)?.[1]?.toUpperCase();
+  return normalizeMatchCode(text) ?? normalizeMatchCode(/\broom\s+code\b\s*:?\s*([A-Z0-9]{3}-?[A-Z0-9]{3})\b/i.exec(text)?.[1]);
 }

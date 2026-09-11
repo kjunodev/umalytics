@@ -62,6 +62,10 @@ export interface PlayerProfileStatsSummary {
 }
 
 export interface PlayerProfileSummary {
+  /** Initial usable data, while remaining endpoints are still loading. */
+  isPartial?: boolean;
+  scopeFetchedAt?: Partial<Record<PlayerStatsScope, number>>;
+  historyDerived?: boolean;
   discordId: string;
   displayName?: string;
   discordUsername?: string;

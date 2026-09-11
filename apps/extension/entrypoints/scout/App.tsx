@@ -1,3 +1,6 @@
+import { latestStatsCheckAt, getRefreshCooldownMs } from '../../utils/profileTiming';
+import { missingUmaHistoryLabel } from '../../utils/profileAvailability';
+import { getTeamGroups, normalizeRosterForDisplay } from '../../utils/rosterDisplay';
 import { useEffect, useMemo, useState } from 'react';
 import { browser } from 'wxt/browser';
 import type {
@@ -15,6 +18,7 @@ import type {
 } from '@umalytics/shared';
 import {
   getPlayerProfileSummaries,
+  filterSnapshotForBuild,
   PLAYER_PROFILE_SUMMARIES_STORAGE_KEY,
   type PlayerProfileLoadState,
   type PlayerProfileSummariesSnapshot
@@ -135,7 +139,7 @@ const RELEASE_VARIANT_BY_OUTFIT_ID = new Map(
 export default function App() {
   const [roster, setRoster] = useState<PrematchRoster | undefined>();
   const [draftSnapshot, setDraftSnapshot] = useState<DraftSnapshot | undefined>();
-  const [profileSnapshot, setProfileSnapshot] = useState<PlayerProfileSummariesSnapshot | undefined>();
+  const [storedProfileSnapshot, setProfileSnapshot] = useState<PlayerProfileSummariesSnapshot | undefined>();
   const [statsScope, setStatsScope] = useState<PlayerStatsScope>('currentSeason');
   const [activeScene, setActiveScene] = useState<AppScene>('lobby');
   const [selectedPlayerKey, setSelectedPlayerKey] = useState<string | undefined>();
@@ -144,20 +148,36 @@ export default function App() {
   const [now, setNow] = useState(Date.now());
   const isLobbyLocked = lobbyLock?.locked === true && lobbyLock.roster !== undefined;
   const displayedRoster = isLobbyLocked ? lobbyLock.roster : roster;
+  const profileSnapshot = useMemo(() => {
+    if (displayedRoster === undefined || storedProfileSnapshot?.matchCode !== displayedRoster.matchCode) return undefined;
+    const ids = new Set(displayedRoster.players.map(player => player.discordId));
+    return storedProfileSnapshot === undefined ? undefined : {
+      ...storedProfileSnapshot,
+      profiles: Object.fromEntries(Object.entries(storedProfileSnapshot.profiles).filter(([id]) => ids.has(id))),
+      profileStates: Object.fromEntries(Object.entries(storedProfileSnapshot.profileStates ?? {}).filter(([id]) => ids.has(id))),
+      loadingDiscordIds: storedProfileSnapshot.loadingDiscordIds.filter(id => ids.has(id))
+    };
+  }, [displayedRoster, storedProfileSnapshot]);
+  const retryAt = Math.max(0, ...Object.values(profileSnapshot?.profileStates ?? {}).map(state => state.retryAt ?? 0));
+  const retrySeconds = Math.max(0, Math.ceil((retryAt - now) / 1000));
 
   useEffect(() => {
+    let rosterChanged = false;
+    let draftChanged = false;
+    let profilesChanged = false;
+    let lockChanged = false;
     void getLatestPrematchRoster().then((storedRoster) => {
-      setRoster(normalizeRosterForDisplay(storedRoster));
+      if (!rosterChanged) setRoster(normalizeRosterForDisplay(storedRoster));
     });
-    void getLatestDraftSnapshot().then(setDraftSnapshot);
+    void getLatestDraftSnapshot().then(snapshot => { if (!draftChanged) setDraftSnapshot(snapshot); });
     void getPlayerProfileSummaries().then((storedProfiles) => {
-      setProfileSnapshot(normalizeProfileSnapshotForDisplay(storedProfiles));
+      if (!profilesChanged) setProfileSnapshot(normalizeProfileSnapshotForDisplay(storedProfiles));
     });
     void getLobbyLockState().then((storedLock) => {
-      setLobbyLock(normalizeLobbyLockForDisplay(storedLock));
+      if (!lockChanged) setLobbyLock(normalizeLobbyLockForDisplay(storedLock));
     });
     void getStoredStatsScope().then(setStatsScope);
-    void sendLobbyReconnectRequest();
+    void sendLobbyReconnectRequest().catch(error => console.debug('[UmaLytics] Reconnect failed:', error));
 
     const handleStorageChange = (
       changes: Record<string, Browser.storage.StorageChange>,
@@ -170,6 +190,7 @@ export default function App() {
       const rosterChange = changes[LATEST_PREMATCH_ROSTER_STORAGE_KEY];
 
       if (rosterChange !== undefined) {
+        rosterChanged = true;
         setRoster(
           isPrematchRoster(rosterChange.newValue)
             ? normalizeRosterForDisplay(rosterChange.newValue)
@@ -180,12 +201,14 @@ export default function App() {
       const draftChange = changes[LATEST_DRAFT_SNAPSHOT_STORAGE_KEY];
 
       if (draftChange !== undefined) {
+        draftChanged = true;
         setDraftSnapshot(isDraftSnapshot(draftChange.newValue) ? draftChange.newValue : undefined);
       }
 
       const profileChange = changes[PLAYER_PROFILE_SUMMARIES_STORAGE_KEY];
 
       if (profileChange !== undefined) {
+        profilesChanged = true;
         setProfileSnapshot(
           isProfileSnapshot(profileChange.newValue)
             ? normalizeProfileSnapshotForDisplay(profileChange.newValue)
@@ -196,6 +219,7 @@ export default function App() {
       const lockChange = changes[LOBBY_LOCK_STORAGE_KEY];
 
       if (lockChange !== undefined) {
+        lockChanged = true;
         setLobbyLock(
           isLobbyLockState(lockChange.newValue)
             ? normalizeLobbyLockForDisplay(lockChange.newValue)
@@ -207,6 +231,7 @@ export default function App() {
     browser.storage.onChanged.addListener(handleStorageChange);
 
     return () => {
+      rosterChanged = draftChanged = profilesChanged = lockChanged = true;
       browser.storage.onChanged.removeListener(handleStorageChange);
     };
   }, []);
@@ -232,11 +257,11 @@ export default function App() {
   );
   const loadingProfiles = getLoadingProfileCount(profileSnapshot);
   const hasRoster = displayedRoster !== undefined;
-  const lobbyPlayerCount = teamGroups.reduce((total, team) => total + team.players.length, 0);
-  const refreshCooldownMs = getRefreshCooldownMs(profileSnapshot?.updatedAt, now);
+  const lobbyPlayerCount = displayedRoster?.players.length ?? 0;
+  const refreshCooldownMs = getRefreshCooldownMs(profileSnapshot?.manualRefreshAt, now);
   const canRefresh = hasRoster && loadingProfiles === 0 && refreshCooldownMs === 0;
   const profileStatusLabel = hasRoster
-    ? getProfileSnapshotStatus(profileSnapshot, loadingProfiles, now, isLobbyLocked)
+    ? getProfileSnapshotStatus(profileSnapshot, loadingProfiles, now, isLobbyLocked, statsScope)
     : undefined;
   const diagnostics = useMemo(
     () => getDiagnostics(
@@ -306,7 +331,8 @@ export default function App() {
   };
 
   const copyDiagnostics = () => {
-    const text = formatDiagnosticsForClipboard(diagnostics);
+    void browser.runtime.sendMessage({ type: 'diagnostic-trace-requested' }).then(trace => {
+    const text = formatDiagnosticsForClipboard(diagnostics) + '\n\nRecent event trace (no tokens or chat):\n' + JSON.stringify(trace ?? [], null, 2);
 
     void navigator.clipboard.writeText(text).then(() => {
       setDiagnosticsCopied(true);
@@ -316,6 +342,7 @@ export default function App() {
     }).catch((caught) => {
       console.warn('[UmaLytics] Unable to copy diagnostics:', caught);
     });
+    }).catch(caught => console.warn('[UmaLytics] Unable to read diagnostics:', caught));
   };
 
   return (
@@ -446,6 +473,13 @@ export default function App() {
         </div>
       </header>
 
+      {retryAt > 0 && (
+        <p className="api-retry-notice" role="status">
+          {retrySeconds > 0 ? `Stats API paused. Automatic retry in approximately ${retrySeconds}s.` : 'Waiting for the browser to resume profile requests.'}
+          {' '}Available stats remain visible.
+        </p>
+      )}
+
       {displayedRoster === undefined ? (
         <section className="empty-state">
           <h2>No lobby detected</h2>
@@ -480,7 +514,7 @@ export default function App() {
         <section className="team-list" aria-label="Detected lobby teams">
           {teamGroups.map((team) => (
             <TeamSection
-              key={team.id}
+              key={`${team.id}:${team.name ?? ""}`}
               team={team}
               profiles={profileSnapshot?.profiles ?? {}}
               loadingDiscordIds={getLoadingDiscordIdsForDisplay(profileSnapshot)}
@@ -541,6 +575,7 @@ function DraftScene({
           <DraftTeamPanel
             key={teamId}
             team={snapshot.teams[teamId]}
+            rules={snapshot.rules}
             rosterPlayers={getDraftRosterPlayersForTeam(roster, teamId)}
             profiles={profiles}
             statsScope={statsScope}
@@ -1061,7 +1096,7 @@ function UmaPlanningPlayerSlot({
     <li className={uma === undefined ? 'uma-planning-player no-history' : 'uma-planning-player'}>
       <strong>{profile?.displayName ?? player.displayName}</strong>
       {uma === undefined ? (
-        <span>No games played</span>
+        <span>{missingUmaHistoryLabel(profile, statsScope)}</span>
       ) : (
         <span className="uma-planning-stats">
           <span>
@@ -1084,11 +1119,13 @@ function UmaPlanningPlayerSlot({
 
 function DraftTeamPanel({
   team,
+  rules,
   rosterPlayers,
   profiles,
   statsScope
 }: {
   team: DraftTeamSnapshot;
+  rules?: DraftSnapshot['rules'];
   rosterPlayers: PrematchPlayer[];
   profiles: Record<string, PlayerProfileSummary>;
   statsScope: PlayerStatsScope;
@@ -1112,22 +1149,23 @@ function DraftTeamPanel({
         <p>{team.maps.length} maps - {picks.length} picks</p>
       </header>
 
-      <DraftMapList maps={team.maps} />
+      <DraftMapList teamId={team.id} maps={team.maps} count={rules?.maps} />
       <DraftPickBoard
         picks={picks}
+        count={rules?.picks}
         selectedPickKey={selectedPickKey}
         onSelectPick={setSelectedPickKey}
         rosterPlayers={rosterPlayers}
         profiles={profiles}
         statsScope={statsScope}
       />
-      <DraftBanRow bans={bans} vetoes={vetoes} />
+      <DraftBanRow bans={bans} vetoes={vetoes} rules={rules} />
     </article>
   );
 }
 
-function DraftMapList({ maps }: { maps: DraftTeamSnapshot['maps'] }) {
-  const slots = getDraftSlots(maps, DRAFT_MAP_SLOT_COUNT);
+function DraftMapList({ maps, count, teamId }: { maps: DraftTeamSnapshot['maps']; count?: number; teamId: TeamId }) {
+  const slots = getDraftSlots(maps, count ?? DRAFT_MAP_SLOT_COUNT);
 
   return (
     <section className="draft-card-section draft-map-section">
@@ -1136,13 +1174,13 @@ function DraftMapList({ maps }: { maps: DraftTeamSnapshot['maps'] }) {
         {slots.map((map, index) => (
           map === undefined ? (
             <li key={`map-placeholder:${index}`} className="placeholder">
-              <span className="draft-map-order">{index + 1}</span>
+              <span className="draft-map-order">{index * 2 + (teamId === 'team1' ? 1 : 2)}</span>
               <strong>Pending map</strong>
               <small>Waiting for draft update</small>
             </li>
           ) : (
             <li
-              key={`${map.team}:${map.order ?? map.name}:${map.name}`}
+              key={`${map.team}:${map.mapId ?? map.order ?? map.details ?? index}:${map.name}`}
               className={map.status === 'vetoed' ? 'vetoed' : ''}
             >
               <span className="draft-map-order">{map.order ?? '-'}</span>
@@ -1160,19 +1198,21 @@ function DraftMapList({ maps }: { maps: DraftTeamSnapshot['maps'] }) {
 }
 
 function DraftBanRow({
+  rules,
   bans,
   vetoes
 }: {
+  rules?: DraftSnapshot['rules'];
   bans: DraftUmaAction[];
   vetoes: DraftUmaAction[];
 }) {
   const slots = [
-    ...getDraftSlots(bans, DRAFT_BAN_SLOT_COUNT).map((action) => ({
+    ...getDraftSlots(bans, rules?.bans ?? DRAFT_BAN_SLOT_COUNT).map((action) => ({
       action,
       kind: 'ban' as const,
       label: 'Pending ban'
     })),
-    ...getDraftSlots(vetoes, DRAFT_VETO_SLOT_COUNT).map((action) => ({
+    ...getDraftSlots(vetoes, rules?.vetoes ?? DRAFT_VETO_SLOT_COUNT).map((action) => ({
       action,
       kind: 'veto' as const,
       label: 'Pending veto'
@@ -1203,6 +1243,7 @@ function DraftBanRow({
 }
 
 function DraftPickBoard({
+  count,
   picks,
   selectedPickKey,
   onSelectPick,
@@ -1210,6 +1251,7 @@ function DraftPickBoard({
   profiles,
   statsScope
 }: {
+  count?: number;
   picks: DraftUmaAction[];
   selectedPickKey: string | undefined;
   onSelectPick: (key: string) => void;
@@ -1217,7 +1259,7 @@ function DraftPickBoard({
   profiles: Record<string, PlayerProfileSummary>;
   statsScope: PlayerStatsScope;
 }) {
-  const slots = getDraftSlots(picks, DRAFT_PICK_SLOT_COUNT);
+  const slots = getDraftSlots(picks, count ?? DRAFT_PICK_SLOT_COUNT);
   const selectedPick = picks.find((pick) => getDraftActionKey(pick) === selectedPickKey);
 
   return (
@@ -1331,7 +1373,7 @@ function DraftPickExperiencePanel({
               >
                 <strong title={displayName}>{displayName}</strong>
                 {experience === undefined ? (
-                  <span className="draft-no-history-text">No games played</span>
+                  <span className="draft-no-history-text">{player === undefined ? 'Open slot' : missingUmaHistoryLabel(profiles[player.discordId], statsScope)}</span>
                 ) : (
                   <span>{experience.matches} GP - {formatDecimal(experience.pointsPerGame)} PPG</span>
                 )}
@@ -1423,7 +1465,7 @@ function TeamSection({
   statsScope: PlayerStatsScope;
   onSelectPlayer: (playerKey: string) => void;
 }) {
-  const playerSlots = Array.from({ length: TEAM_SLOT_COUNT }, (_, index) => team.players[index]);
+  const playerSlots = Array.from({ length: Math.max(TEAM_SLOT_COUNT, team.players.length) }, (_, index) => team.players[index]);
   const partyVisuals = useMemo(() => getTeamPartyVisuals(team.players), [team.players]);
 
   return (
@@ -1896,6 +1938,7 @@ function TopUmasList({
 }
 
 function UmaResolutionNote({ profile }: { profile: PlayerProfileSummary | undefined }) {
+  if (profile?.historyDerived) return <p className="profile-status-note">History-derived stats; limited to the available history sample (up to 100 matches per scope).</p>;
   const unresolvedUmaMatches = profile?.unresolvedUmaMatches ?? 0;
   const disqualifiedMatches = profile?.disqualifiedMatches ?? 0;
   const notes = [
@@ -2125,130 +2168,10 @@ function formatRecentResult(match: PlayerRecentMatchSummary): string {
   return '-';
 }
 
-function getTeamGroups(roster: PrematchRoster | undefined): PrematchTeam[] {
-  if (roster === undefined) {
-    return [];
-  }
-
-  if (roster.teams !== undefined) {
-    return TEAM_IDS.map((teamId) => roster.teams?.[teamId]).filter(
-      (team): team is PrematchTeam => team !== undefined
-    );
-  }
-
-  return [
-    {
-      id: 'team1',
-      players: roster.players
-    }
-  ];
-}
-
-function normalizeRosterForDisplay(roster: PrematchRoster | undefined): PrematchRoster | undefined {
-  if (roster === undefined) {
-    return undefined;
-  }
-
-  if (roster.teams === undefined) {
-    const players = dedupePlayersByIdentity(roster.players);
-
-    return {
-      ...roster,
-      players,
-      teams: {
-        team1: {
-          id: 'team1',
-          players: players.filter((player) => player.team !== 'team2')
-        },
-        team2: {
-          id: 'team2',
-          players: players.filter((player) => player.team === 'team2')
-        }
-      }
-    };
-  }
-
-  const fallbackPlayers = dedupePlayersByIdentity(roster.players);
-  const fallbackTeam1Players = fallbackPlayers.filter((player) => player.team !== 'team2');
-  const fallbackTeam2Players = fallbackPlayers.filter((player) => player.team === 'team2');
-  const team1 = roster.teams.team1;
-  const team2 = roster.teams.team2;
-  const normalizedTeams = {
-    team1: normalizeTeamForDisplay('team1', team1, fallbackTeam1Players),
-    team2: normalizeTeamForDisplay('team2', team2, fallbackTeam2Players)
-  };
-  const teams = dedupeTeamsByPlayerIdentity(normalizedTeams);
-  const teamPlayers = TEAM_IDS.flatMap((teamId) => teams[teamId].players);
-
-  return {
-    ...roster,
-    players: dedupePlayersByIdentity(teamPlayers.length > 0 ? teamPlayers : roster.players),
-    teams
-  };
-}
-
-function dedupeTeamsByPlayerIdentity(
-  teams: Record<TeamId, PrematchTeam>
-): Record<TeamId, PrematchTeam> {
-  const seenPlayerIds = new Set<string>();
-
-  return Object.fromEntries(
-    TEAM_IDS.map((teamId) => {
-      const team = teams[teamId];
-      const players = team.players.filter((player) => {
-        const playerKey = getStablePlayerIdentity(player);
-
-        if (seenPlayerIds.has(playerKey)) {
-          return false;
-        }
-
-        seenPlayerIds.add(playerKey);
-        return true;
-      });
-
-      return [teamId, { ...team, players }];
-    })
-  ) as Record<TeamId, PrematchTeam>;
-}
-
-function normalizeTeamForDisplay(
-  teamId: TeamId,
-  team: PrematchTeam | undefined,
-  fallbackPlayers: PrematchPlayer[]
-): PrematchTeam {
-  return {
-    ...team,
-    id: teamId,
-    name: team?.name ?? (teamId === 'team1' ? 'Team 1' : 'Team 2'),
-    players: dedupePlayersByIdentity(team?.players ?? fallbackPlayers)
-  };
-}
-
-function dedupePlayersByIdentity(players: PrematchPlayer[]): PrematchPlayer[] {
-  const seenPlayerIds = new Set<string>();
-  const dedupedPlayers: PrematchPlayer[] = [];
-
-  for (const player of players) {
-    const stableKey = getStablePlayerIdentity(player);
-
-    if (seenPlayerIds.has(stableKey)) {
-      continue;
-    }
-
-    seenPlayerIds.add(stableKey);
-    dedupedPlayers.push(player);
-  }
-
-  return dedupedPlayers;
-}
-
-function getStablePlayerIdentity(player: PrematchPlayer): string {
-  return player.discordId || player.userId;
-}
-
 function normalizeProfileSnapshotForDisplay(
   snapshot: PlayerProfileSummariesSnapshot | undefined
 ): PlayerProfileSummariesSnapshot | undefined {
+  snapshot = filterSnapshotForBuild(snapshot);
   if (snapshot === undefined) {
     return undefined;
   }
@@ -2370,7 +2293,8 @@ function getDisplayedProfileStats(
   return {
     ...profile,
     ...stats,
-    statsScope
+    statsScope,
+    ...(profile.scopeFetchedAt && profile.scopeFetchedAt[statsScope] === undefined ? { matches: null, wins: null, losses: null, winRate: null, points: null, pointsPerGame: null, mvpMatches: null, allUmas: [], bestUmas: [], topUmas: [], recentMatches: [] } : {})
   };
 }
 
@@ -2928,7 +2852,7 @@ function getDiagnostics(
   const queuedProfiles = profileStates.filter((state) => state.status === 'queued').length;
   const activelyLoadingProfiles = profileStates.filter((state) => state.status === 'loading').length;
   const readyProfiles = profileStates.length > 0
-    ? profileStates.filter((state) => ['loaded', 'private', 'timeout', 'error'].includes(state.status)).length
+    ? profileStates.filter((state) => ['loaded', 'private'].includes(state.status)).length
     : profileValues.length;
   const privateProfiles = profileValues.filter((profile) => profile.statsPrivate === true).length;
   const unresolvedUmaMatches = profileValues.reduce(
@@ -2952,15 +2876,21 @@ function getDiagnostics(
     },
     { label: 'Match Code', value: roster?.matchCode ?? draftSnapshot?.matchCode ?? 'none' },
     { label: 'Roster Source', value: getRosterSourceLabel(roster) },
+    { label: 'Roster Transport', value: roster?.observationSource ?? 'DOM or older snapshot' },
     { label: 'Draft Source', value: draftSnapshot?.source ?? 'none' },
     { label: 'Teams', value: formatDiagnosticTeamCounts(teams) },
-    { label: 'Players', value: roster === undefined ? '0' : String(teams.reduce((total, team) => total + team.players.length, 0)) },
+    { label: 'Players', value: roster === undefined ? '0' : String(roster.players.length) },
     { label: 'Profiles', value: `${readyProfiles} ready, ${activelyLoadingProfiles} loading, ${queuedProfiles} queued, ${profileErrors} errors, ${timedOutProfiles} timed out` },
+    { label: 'Profile Match', value: profileSnapshot?.matchCode ?? 'none' },
+    { label: 'Load Run', value: String(profileSnapshot?.runId ?? 'unknown') },
+    { label: 'Load Stages', value: [...new Set(profileStates.filter(isPendingProfileLoadState).map(state => state.stage ?? 'Queued'))].join(', ') || 'Idle' },
+    { label: 'Last Errors', value: [...new Set(profileStates.map(state => state.error).filter(Boolean))].join(' | ') || 'none' },
+    { label: 'Automatic Retry', value: profileStates.some(state => state.retryAt !== undefined) ? `${Math.max(0, Math.ceil((Math.max(...profileStates.map(state => state.retryAt ?? 0)) - now) / 1000))}s` : 'none' },
     { label: 'Private Profiles', value: String(privateProfiles) },
     { label: 'Uma Gaps', value: `${unresolvedUmaMatches} unresolved, ${disqualifiedMatches} disqualified` },
     {
-      label: 'Profile Updated',
-      value: profileSnapshot === undefined ? 'never' : `${formatRelativeAge(profileSnapshot.updatedAt, now)}`
+      label: 'Latest Stats Check',
+      value: latestStatsCheckAt(profileSnapshot, statsScope) === undefined ? 'never' : formatRelativeAge(latestStatsCheckAt(profileSnapshot, statsScope)!, now)
     },
     {
       label: 'Draft Updated',
@@ -3111,7 +3041,7 @@ function parseTiebreakerMapParts(
 }
 
 function formatTiebreakerDetailToken(value: string): string {
-  return value.replace(/^(\d{3,4})m$/i, '$1');
+  return value.replace(/^(\d{3,4})m?$/i, '$1m');
 }
 
 function splitCompactTiebreakerDetails(value: string): string[] {
@@ -3310,14 +3240,6 @@ function getUmaBadges(uma: PlayerTopUmaSummary): UmaBadge[] {
   return badges.slice(0, 3);
 }
 
-function getRefreshCooldownMs(updatedAt: number | undefined, now: number): number {
-  if (updatedAt === undefined) {
-    return 0;
-  }
-
-  return Math.max(updatedAt + MANUAL_PROFILE_REFRESH_COOLDOWN_MS - now, 0);
-}
-
 function getClockRefreshDelayMs(
   snapshot: PlayerProfileSummariesSnapshot | undefined,
   now: number
@@ -3330,7 +3252,7 @@ function getClockRefreshDelayMs(
     return ACTIVE_CLOCK_REFRESH_MS;
   }
 
-  return getRefreshCooldownMs(snapshot.updatedAt, now) > 0
+  return getRefreshCooldownMs(snapshot.manualRefreshAt, now) > 0
     ? ACTIVE_CLOCK_REFRESH_MS
     : IDLE_CLOCK_REFRESH_MS;
 }
@@ -3339,7 +3261,8 @@ function getProfileSnapshotStatus(
   snapshot: PlayerProfileSummariesSnapshot | undefined,
   loadingProfiles: number,
   now: number,
-  isLobbyLocked = false
+  isLobbyLocked = false,
+  scope: PlayerStatsScope = 'currentSeason'
 ): string | undefined {
   if (loadingProfiles > 0) {
     return `Refreshing ${loadingProfiles} profile${loadingProfiles === 1 ? '' : 's'}`;
@@ -3349,7 +3272,9 @@ function getProfileSnapshotStatus(
     return undefined;
   }
 
-  return `${isLobbyLocked ? 'Locked lobby - p' : 'P'}rofile data updated ${formatRelativeAge(snapshot.updatedAt, now)}`;
+  const checkedAt = latestStatsCheckAt(snapshot, scope);
+  return checkedAt === undefined ? 'Stats not checked for this scope' :
+    `${isLobbyLocked ? 'Locked lobby - l' : 'L'}atest stats check ${formatRelativeAge(checkedAt, now)}`;
 }
 
 function getProfileDataStatus(
@@ -3437,7 +3362,10 @@ function getPlayerNote(
     return 'Stats are private.';
   }
 
-  return profile.error;
+  if (profile.error === undefined) return undefined;
+  if (/API paused|HTTP (429|5\d\d)/.test(profile.error)) return 'The stats API is temporarily unavailable. Check Diagnostics for the retry status.';
+  if (/timed out/i.test(profile.error)) return 'Stats request timed out. You can retry with Refresh.';
+  return 'Some profile data could not load. See Diagnostics for details.';
 }
 
 function getStatsMessage(

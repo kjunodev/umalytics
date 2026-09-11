@@ -13,7 +13,7 @@ export type RoomDomScanResult = {
   matchCode?: string;
 };
 
-export type UmaLyticsMessage = {
+export type UmaLyticsMessage = { type: 'diagnostic-event'; event: Record<string, unknown> } | { type: 'diagnostic-trace-requested' } | {
   type: 'prematch-roster-detected';
   roster: PrematchRoster;
 } | {
@@ -36,6 +36,8 @@ export function isUmaLyticsMessage(value: unknown): value is UmaLyticsMessage {
     return false;
   }
 
+  if (value.type === 'diagnostic-event') return isRecord(value.event);
+  if (value.type === 'diagnostic-trace-requested') return true;
   if (value.type === 'lobby-reconnect-requested') {
     return true;
   }
@@ -94,4 +96,8 @@ export async function sendRoomDomScanRequest(
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
+}
+
+export async function sendDiagnosticEvent(event: Record<string, unknown>): Promise<void> {
+  await browser.runtime.sendMessage({ type: 'diagnostic-event', event } satisfies UmaLyticsMessage);
 }

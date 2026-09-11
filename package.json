@@ -1,14 +1,20 @@
 {
   "name": "umalytics",
-  "version": "0.3.0",
+  "version": "0.3.5",
   "private": true,
   "packageManager": "pnpm@9.15.4",
   "scripts": {
     "dev": "pnpm --filter @umalytics/extension dev",
     "build": "pnpm --filter @umalytics/extension build",
-    "typecheck": "pnpm -r typecheck"
+    "build:all": "node scripts/build-all.mjs",
+    "typecheck": "pnpm -r typecheck",
+    "test": "node --disable-warning=ExperimentalWarning --test tests/*.test.mjs"
   },
   "devDependencies": {
-    "typescript": "^5.7.2"
+    "typescript": "^5.7.2",
+    "linkedom": "0.18.13"
+  },
+  "engines": {
+    "node": ">=24 <25"
   }
 }

@@ -1,3 +1,4 @@
+import { readPayloadRoomCode } from './syncPayload';
 import type {
   DraftMapSelection,
   DraftSnapshot,
@@ -27,7 +28,7 @@ export function extractDraftSnapshotFromSyncedDraftState(
     : undefined;
   const phase = readOptionalString(value.syncedDraftState_phase);
   const currentTeam = readOptionalTeamId(value.syncedDraftState_currentTeam);
-  const matchCode = readOptionalString(multiplayer?.roomId) ?? fallbackMatchCode;
+  const matchCode = readPayloadRoomCode(multiplayer) ?? fallbackMatchCode;
   const teams = createEmptyTeams(multiplayer);
   const umas = collectSyncedUmaActions(value);
   const maps = collectSyncedMaps(value);
@@ -320,7 +321,7 @@ function extractDomMaps(team: TeamId, panel: HTMLElement): DraftMapSelection[] {
         team,
         name,
         ...(details.length === 0 ? {} : { details }),
-        order: index + 1,
+        order: status === 'vetoed' ? undefined : Number(lines.find(isDraftMapOrder) ?? index * 2 + (team === 'team1' ? 1 : 2)),
         status
       } satisfies DraftMapSelection];
     });

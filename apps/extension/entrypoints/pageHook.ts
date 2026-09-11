@@ -1,8 +1,12 @@
+import { decodeRoomEvent } from '../utils/roomEvents';
+import { selectRoomSyncedState } from '../utils/syncPayload';
+import { extractMatchCodeFromUrl } from '../utils/matchDetection';
+import { extractRoomCodeFromRoomDom } from '../utils/domLobbyExtraction';
 const SYNCED_DRAFT_STATE_MESSAGE_TYPE = 'umalytics:synced-draft-state';
 const SYNC_EFFECT_LOG_PREFIX = '[SYNC EFFECT] Starting sync';
-const INSTALL_FLAG = '__umalyticsPageHookInstalled_0_3_0';
+const INSTALL_FLAG = '__umalyticsPageHookInstalled_0_3_5';
 
-type JsonRecord = Record<string, unknown>;
+type HookSource = 'console' | 'websocket' | 'storage';
 type UmaLyticsWindow = Window & {
   [INSTALL_FLAG]?: boolean;
 };
@@ -17,7 +21,6 @@ export default defineUnlistedScript(() => {
   pageWindow[INSTALL_FLAG] = true;
   installSyncConsoleHook();
   installWebSocketHook();
-  scanBrowserStorageOnce();
 });
 
 function installSyncConsoleHook(): void {
@@ -29,7 +32,7 @@ function installSyncConsoleHook(): void {
     window.console[method] = (...args: unknown[]) => {
       if (args[0] === SYNC_EFFECT_LOG_PREFIX) {
         for (const arg of args.slice(1)) {
-          inspectPossiblePayload(arg);
+          inspectPossiblePayload(arg, 'console');
         }
       }
 
@@ -46,7 +49,7 @@ function installWebSocketHook(): void {
       const socket = new target(...args);
 
       socket.addEventListener('message', (event: MessageEvent<unknown>) => {
-        inspectPossiblePayload(event.data);
+        inspectPossiblePayload(event.data, 'websocket');
       });
 
       return socket;
@@ -56,60 +59,50 @@ function installWebSocketHook(): void {
   window.WebSocket.prototype = OriginalWebSocket.prototype;
 }
 
-function scanBrowserStorageOnce(): void {
-  scanStorageArea(window.localStorage);
-  scanStorageArea(window.sessionStorage);
-}
-
-function scanStorageArea(storage: Storage): void {
-  for (let index = 0; index < storage.length; index += 1) {
-    const key = storage.key(index);
-
-    if (key === null) {
-      continue;
-    }
-
-    const value = storage.getItem(key);
-
-    if (value !== null) {
-      inspectPossibleJson(value);
-    }
-  }
-}
-
-function inspectPossiblePayload(payload: unknown): void {
+function inspectPossiblePayload(payload: unknown, source: HookSource, capturedRoom = getVisibleRoomCode()): void {
   if (typeof payload === 'string') {
-    inspectPossibleJson(payload);
+    inspectPossibleJson(payload, source, capturedRoom);
     return;
   }
 
   if (payload instanceof Blob) {
-    void payload.text().then(inspectPossibleJson).catch(() => {
+    void payload.text().then(text => inspectPossibleJson(text, source, capturedRoom)).catch(() => {
       // Ignore undecodable socket frames.
     });
     return;
   }
 
   if (payload instanceof ArrayBuffer) {
-    inspectPossibleJson(new TextDecoder().decode(payload));
+    inspectPossibleJson(new TextDecoder().decode(payload), source, capturedRoom);
     return;
   }
 
-  const syncedDraftState = findSyncedDraftStateInContainer(payload);
+  if (source === 'websocket') {
+    const event = decodeRoomEvent(payload);
+    if (event !== null) window.postMessage({ type: 'umalytics:room-event', payload: event, hookVersion: 4 }, window.location.origin);
+    return;
+  }
+  // Stored snapshots are not proof of the active roster. Live console fallback
+  // is only used until a typed match snapshot has arrived.
+  if (source !== 'console') return;
+  const syncedDraftState = selectRoomSyncedState(payload, capturedRoom, true);
 
   if (syncedDraftState !== null) {
     window.postMessage(
       {
         type: SYNCED_DRAFT_STATE_MESSAGE_TYPE,
-        payload: syncedDraftState
+        payload: syncedDraftState,
+        source,
+        hookVersion: 4
       },
       window.location.origin
     );
   }
 }
 
-function inspectPossibleJson(value: string): void {
+function inspectPossibleJson(value: string, source: HookSource, capturedRoom?: string): void {
   if (
+    !value.includes('server:event') &&
     !value.includes('rankedQueueRoster') &&
     !value.includes('syncedDraftState_multiplayer') &&
     !value.includes('participants') &&
@@ -122,7 +115,7 @@ function inspectPossibleJson(value: string): void {
 
   for (const candidate of getJsonCandidates(value)) {
     try {
-      inspectPossiblePayload(JSON.parse(candidate));
+      inspectPossiblePayload(JSON.parse(candidate), source, capturedRoom);
       return;
     } catch {
       // Try the next candidate; realtime protocols can prefix JSON with frame codes.
@@ -131,111 +124,16 @@ function inspectPossibleJson(value: string): void {
 }
 
 function getJsonCandidates(value: string): string[] {
+  if (value.length > 2_000_000) return [];
   const candidates = [value];
-
-  for (let index = 0; index < value.length; index += 1) {
-    const character = value[index];
-
-    if ((character === '{' || character === '[') && index > 0) {
-      candidates.push(value.slice(index));
-    }
-  }
+  // Socket.IO numeric prefixes occur before the first JSON container. Never
+  // allocate a suffix for every bracket inside a large profile/roster frame.
+  const index = value.search(/[\[{]/);
+  if (index > 0 && index < 100) candidates.push(value.slice(index));
 
   return candidates;
 }
 
-function findSyncedDraftState(value: unknown): JsonRecord | null {
-  if (!isRecord(value)) {
-    return null;
-  }
-
-  if (isRecord(value.syncedDraftState_multiplayer)) {
-    return value;
-  }
-
-  if (Array.isArray(value.rankedQueueRoster)) {
-    return {
-      syncedDraftState_multiplayer: value
-    };
-  }
-
-  if (Array.isArray(value.participants) && hasMultiplayerDraftStateHint(value)) {
-    return {
-      syncedDraftState_multiplayer: value,
-      ...(typeof value.phase === 'string' ? { syncedDraftState_phase: value.phase } : {}),
-      ...(typeof value.currentTeam === 'string' ? { syncedDraftState_currentTeam: value.currentTeam } : {})
-    };
-  }
-
-  if (Array.isArray(value.players) && hasMultiplayerRoomHint(value)) {
-    return {
-      syncedDraftState_multiplayer: value,
-      ...(typeof value.phase === 'string' ? { syncedDraftState_phase: value.phase } : {}),
-      ...(typeof value.currentTeam === 'string' ? { syncedDraftState_currentTeam: value.currentTeam } : {})
-    };
-  }
-
-  if (Array.isArray(value.roomPlayers) && hasMultiplayerRoomHint(value)) {
-    return {
-      syncedDraftState_multiplayer: value,
-      ...(typeof value.phase === 'string' ? { syncedDraftState_phase: value.phase } : {}),
-      ...(typeof value.currentTeam === 'string' ? { syncedDraftState_currentTeam: value.currentTeam } : {})
-    };
-  }
-
-  for (const child of Object.values(value)) {
-    if (!isRecord(child) && !Array.isArray(child)) {
-      continue;
-    }
-
-    const nestedState = findSyncedDraftStateInContainer(child);
-
-    if (nestedState !== null) {
-      return nestedState;
-    }
-  }
-
-  return null;
-}
-
-function findSyncedDraftStateInContainer(value: unknown): JsonRecord | null {
-  if (Array.isArray(value)) {
-    for (const item of value) {
-      const nestedState = findSyncedDraftState(item);
-
-      if (nestedState !== null) {
-        return nestedState;
-      }
-    }
-
-    return null;
-  }
-
-  return findSyncedDraftState(value);
-}
-
-function hasMultiplayerRoomHint(value: JsonRecord): boolean {
-  return (
-    hasMultiplayerDraftStateHint(value) ||
-    typeof value.roomCode === 'string' ||
-    typeof value.code === 'string' ||
-    typeof value.connectionType === 'string' ||
-    typeof value.localActorUserId === 'string' ||
-    typeof value.localTeam === 'string'
-  );
-}
-
-function hasMultiplayerDraftStateHint(value: JsonRecord): boolean {
-  return (
-    typeof value.roomId === 'string' ||
-    typeof value.matchId === 'string' ||
-    typeof value.team1Name === 'string' ||
-    typeof value.team2Name === 'string' ||
-    isRecord(value.team1) ||
-    isRecord(value.team2)
-  );
-}
-
-function isRecord(value: unknown): value is JsonRecord {
-  return typeof value === 'object' && value !== null;
+function getVisibleRoomCode(): string | undefined {
+  return extractMatchCodeFromUrl(window.location.href) ?? extractRoomCodeFromRoomDom(document);
 }

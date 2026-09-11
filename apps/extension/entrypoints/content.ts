@@ -1,3 +1,5 @@
+import { decodeRoomEvent, RoomEventState } from '../utils/roomEvents';
+import { canReuseSyncedRoster } from '../utils/rosterIdentity';
 import { browser } from 'wxt/browser';
 import { injectScript } from 'wxt/utils/inject-script';
 import type { ScriptPublicPath } from 'wxt/utils/inject-script';
@@ -6,6 +8,7 @@ import { extractMatchCodeFromUrl } from '../utils/matchDetection';
 import {
   isUmaLyticsContentMessage,
   sendDraftSnapshot,
+  sendDiagnosticEvent,
   sendPrematchRoster,
   type RoomDomScanResult
 } from '../utils/messaging';
@@ -22,17 +25,25 @@ import { extractPrematchRosterFromSyncedDraftState } from '../utils/playerExtrac
 const SYNCED_DRAFT_STATE_MESSAGE_TYPE = 'umalytics:synced-draft-state';
 const PAGE_HOOK_SCRIPT_PATH = '/pageHook.js' as ScriptPublicPath;
 const CONTENT_SCRIPT_CLEANUP_KEY = '__umalyticsContentScriptCleanup';
-const ROOM_DOM_SCAN_DEBOUNCE_MS = 750;
+const ROOM_DOM_SCAN_DEBOUNCE_MS = 100;
 const ROOM_DOM_RETRY_DELAYS_MS = [250, 1_000, 2_500, 5_000, 10_000, 20_000] as const;
 type RosterSource = 'dom' | 'synced';
 type UmaLyticsWindow = Window & {
   [CONTENT_SCRIPT_CLEANUP_KEY]?: () => void;
 };
 
+const roomEvents = new RoomEventState();
+const pendingRoomEvents = new Map<string, { event: Record<string, unknown>; at: number }>();
 let lastRosterSignature: string | undefined;
 let lastRosterMatchCode: string | undefined;
 let lastRosterSource: RosterSource | undefined;
+let lastPublishedRoster: PrematchRoster | undefined;
 let lastDraftSnapshotSignature: string | undefined;
+let lastDraftSnapshot: DraftSnapshot | undefined;
+let rosterPublishQueue = Promise.resolve();
+let windowMessageQueue = Promise.resolve();
+const pendingRosters = new Map<string, Promise<void>>();
+let draftPublishQueue = Promise.resolve();
 let lastIgnoredStaleSyncedMatchCode: string | undefined;
 let activeRoomDomMatchCode: string | undefined;
 let roomDomScanTimer: number | undefined;
@@ -89,7 +100,7 @@ function handlePageMessage(event: MessageEvent<unknown>): void {
     return;
   }
 
-  void handleWindowMessage(event.data, getCurrentMatchCode());
+  void handleWindowMessage(event.data, getCurrentMatchCode()).catch((error) => console.debug('[UmaLytics] Sync update failed:', error));
 }
 
 function handlePageFocus(): void {
@@ -122,19 +133,54 @@ function handleRuntimeMessage(message: unknown): Promise<RoomDomScanResult> | un
   return publishRoomDomRoster({ force: message.force === true });
 }
 
-async function handleWindowMessage(message: unknown, matchCode?: string): Promise<void> {
+function handleWindowMessage(message: unknown, matchCode?: string): Promise<void> {
+  const href = typeof window === 'undefined' ? undefined : window.location.href;
+  const run = windowMessageQueue.then(() => {
+    if (href !== undefined && href !== window.location.href) return;
+    return processWindowMessage(message, matchCode);
+  });
+  windowMessageQueue = run.catch(() => {});
+  return run;
+}
+
+async function processWindowMessage(message: unknown, matchCode?: string): Promise<void> {
   if (!isContentScriptActive) {
     return;
   }
 
+  if (isRecord(message) && message.type === 'umalytics:room-event' && message.hookVersion === 4) {
+    refreshActiveRoomDomMatchCode(matchCode);
+    const event = decodeRoomEvent(message.payload);
+    if (event !== null && event.matchId !== activeRoomDomMatchCode) {
+      const key = event.matchId + ':' + event.type + ':' + (event.team ?? '');
+      const previous = pendingRoomEvents.get(key)?.event;
+      const oldVersion = previous?.version ?? previous?.revision;
+      const newVersion = event.version ?? event.revision;
+      if (typeof oldVersion === 'number' && typeof newVersion === 'number' && oldVersion > newVersion) return;
+      pendingRoomEvents.delete(key);
+      pendingRoomEvents.set(key, { event, at: Date.now() });
+      if (pendingRoomEvents.size > 8) pendingRoomEvents.delete(pendingRoomEvents.keys().next().value!);
+    }
+    const update = roomEvents.apply(message.payload, activeRoomDomMatchCode);
+    void sendDiagnosticEvent({ kind: 'room', reason: update.reason, room: activeRoomDomMatchCode,
+      version: roomEvents.version, phase: update.draft?.phase,
+      team1: update.roster?.players.filter(p => p.team === 'team1').length,
+      team2: update.roster?.players.filter(p => p.team === 'team2').length }).catch(() => {});
+    if (update.draft) await publishDraftSnapshot(update.draft);
+    if (update.roster) await publishRoster(update.roster, 'synced');
+    return;
+  }
   if (!isRecord(message) || message.type !== SYNCED_DRAFT_STATE_MESSAGE_TYPE) {
     return;
   }
 
+  if (message.hookVersion !== 4 || !['console', 'websocket', 'storage'].includes(String(message.source))) return;
   refreshActiveRoomDomMatchCode(matchCode);
-  await publishSyncedDraftSnapshot(message.payload, matchCode);
+  if (roomEvents.draft?.matchCode === activeRoomDomMatchCode && roomEvents.draft !== undefined) return;
+  const draftPublication = publishSyncedDraftSnapshot(message.payload, matchCode);
+  void draftPublication.catch(error => console.debug('[UmaLytics] Draft sync failed:', error));
 
-  const roster = extractPrematchRosterFromSyncedDraftState(message.payload, matchCode);
+  const roster = extractPrematchRosterFromSyncedDraftState(message.payload);
 
   if (roster === null) {
     return;
@@ -149,7 +195,7 @@ async function handleWindowMessage(message: unknown, matchCode?: string): Promis
     return;
   }
 
-  await publishRoster(roster, 'synced');
+  await publishRoster({ ...roster, observationSource: String(message.source) }, 'synced');
 }
 
 function installRoomDomObserver(): void {
@@ -198,7 +244,7 @@ function queueRoomDomScan(): void {
 
   roomDomScanTimer = window.setTimeout(() => {
     roomDomScanTimer = undefined;
-    void publishRoomDomRoster();
+    void publishRoomDomRoster().catch((error) => console.debug('[UmaLytics] DOM update failed:', error));
   }, ROOM_DOM_SCAN_DEBOUNCE_MS);
 }
 
@@ -224,11 +270,22 @@ async function publishRoomDomRoster(
 
   if (roster === null) {
     refreshActiveRoomDomMatchCode(getCurrentMatchCode());
+    if (options.force && lastPublishedRoster !== undefined &&
+        lastPublishedRoster.matchCode !== undefined && lastPublishedRoster.matchCode === (getCurrentMatchCode() ?? activeRoomDomMatchCode)) {
+      await publishRoster(lastPublishedRoster, lastRosterSource ?? 'synced', options);
+      return { activeLobby: true, matchCode: lastPublishedRoster.matchCode };
+    }
     return { activeLobby: false };
   }
 
-  activeRoomDomMatchCode = roster.matchCode;
+  activeRoomDomMatchCode = getCurrentMatchCode() ?? roster.matchCode;
   clearRoomDomRetries();
+  for (const [key, pending] of pendingRoomEvents) {
+    if (Date.now() - pending.at > 30_000) { pendingRoomEvents.delete(key); continue; }
+    if (pending.event.matchId !== activeRoomDomMatchCode) continue;
+    pendingRoomEvents.delete(key);
+    await handleWindowMessage({ type: 'umalytics:room-event', hookVersion: 4, payload: pending.event }, activeRoomDomMatchCode);
+  }
   await publishRoster(roster, 'dom', options);
   return { activeLobby: true, matchCode: roster.matchCode };
 }
@@ -253,7 +310,24 @@ async function publishDomDraftSnapshot(): Promise<void> {
   await publishDraftSnapshot(snapshot);
 }
 
-async function publishDraftSnapshot(snapshot: DraftSnapshot): Promise<void> {
+function publishDraftSnapshot(snapshot: DraftSnapshot): Promise<void> {
+  const publication = draftPublishQueue.then(() => publishDraftSnapshotInOrder(snapshot));
+  draftPublishQueue = publication.catch(() => {});
+  return publication;
+}
+
+async function publishDraftSnapshotInOrder(snapshot: DraftSnapshot): Promise<void> {
+  if (!isContentScriptActive) return;
+  const matchCode = snapshot.matchCode ?? getCurrentMatchCode() ?? activeRoomDomMatchCode;
+  if (matchCode === undefined) return;
+  snapshot = { ...snapshot, matchCode };
+  if (isStaleDraftSnapshot(snapshot)) return;
+  if (snapshot.source === 'draft-dom' && roomEvents.draft?.matchCode === matchCode) return;
+  if (snapshot.source === 'draft-dom' && lastDraftSnapshot?.matchCode === matchCode) {
+    // DOM picks/maps can advance, but DOM extraction has no phase/turn fields.
+    snapshot = { ...snapshot, phase: snapshot.phase ?? lastDraftSnapshot.phase,
+      currentTeam: snapshot.currentTeam ?? lastDraftSnapshot.currentTeam };
+  }
   const signature = getDraftSnapshotSignature(snapshot);
 
   if (signature === lastDraftSnapshotSignature) {
@@ -276,22 +350,38 @@ async function publishDraftSnapshot(snapshot: DraftSnapshot): Promise<void> {
   }
 
   lastDraftSnapshotSignature = signature;
+  lastDraftSnapshot = snapshot;
 }
 
-async function publishRoster(
+function publishRoster(roster: PrematchRoster, source: RosterSource, options: { force?: boolean } = {}): Promise<void> {
+  if (options.force && source === 'dom' && lastRosterSource === 'synced' &&
+      lastPublishedRoster !== undefined && canReuseSyncedRoster(lastPublishedRoster, roster)) {
+    roster = lastPublishedRoster;
+    source = 'synced';
+  }
+  const key = getRosterSignature(roster);
+  const pending = pendingRosters.get(key);
+  if (pending !== undefined) return pending;
+  const publication = rosterPublishQueue.then(() => publishRosterInOrder(roster, source, options));
+  pendingRosters.set(key, publication);
+  rosterPublishQueue = publication.catch(() => {});
+  void publication.finally(() => { if (pendingRosters.get(key) === publication) pendingRosters.delete(key); }).catch(() => {});
+  return publication;
+}
+
+async function publishRosterInOrder(
   roster: PrematchRoster,
   source: RosterSource,
   options: { force?: boolean } = {}
 ): Promise<void> {
-  if (roster.players.length === 0) {
+  if (!isContentScriptActive) {
     return;
   }
 
   if (
-    options.force !== true &&
     source === 'dom' &&
     lastRosterSource === 'synced' &&
-    lastRosterMatchCode === roster.matchCode
+    lastPublishedRoster !== undefined && canReuseSyncedRoster(lastPublishedRoster, roster)
   ) {
     return;
   }
@@ -317,9 +407,13 @@ async function publishRoster(
     throw caught;
   }
 
+  void sendDiagnosticEvent({ kind: 'roster', room: roster.matchCode, reason: source,
+    team1: roster.players.filter(p => p.team === 'team1').length,
+    team2: roster.players.filter(p => p.team === 'team2').length }).catch(() => {});
   lastRosterSignature = rosterSignature;
   lastRosterMatchCode = roster.matchCode;
   lastRosterSource = source;
+  lastPublishedRoster = roster;
 }
 
 function isStaleSyncedRoster(roster: PrematchRoster): boolean {
@@ -339,29 +433,22 @@ function isStaleDraftSnapshot(snapshot: DraftSnapshot): boolean {
 }
 
 function refreshActiveRoomDomMatchCode(fallbackMatchCode?: string): void {
+  if (fallbackMatchCode !== undefined) {
+    activeRoomDomMatchCode = fallbackMatchCode;
+    return;
+  }
   const visibleRoomDomMatchCode = extractRoomCodeFromRoomDom(document);
+  activeRoomDomMatchCode = visibleRoomDomMatchCode;
 
   if (visibleRoomDomMatchCode !== undefined) {
     activeRoomDomMatchCode = visibleRoomDomMatchCode;
     return;
   }
 
-  if (
-    fallbackMatchCode !== undefined &&
-    activeRoomDomMatchCode !== undefined &&
-    fallbackMatchCode !== activeRoomDomMatchCode
-  ) {
-    activeRoomDomMatchCode = undefined;
-  }
 }
 
-function getRosterSignature(roster: { matchCode?: string; players: Array<{ userId: string; team?: string }> }): string {
-  const playerSignature = roster.players
-    .map((player) => `${player.userId}:${player.team ?? 'unknown'}`)
-    .sort()
-    .join('|');
-
-  return `${roster.matchCode ?? 'unknown'}:${playerSignature}`;
+function getRosterSignature(roster: PrematchRoster): string {
+  return JSON.stringify({ ...roster, players: [...roster.players].sort((a, b) => a.userId.localeCompare(b.userId)) });
 }
 
 function getDraftSnapshotSignature(snapshot: DraftSnapshot): string {
@@ -383,7 +470,7 @@ function getDraftSnapshotSignature(snapshot: DraftSnapshot): string {
     ? ''
     : `${snapshot.tiebreakerMap.name}:${snapshot.tiebreakerMap.details ?? ''}`;
 
-  return `${snapshot.matchCode ?? 'unknown'}:${snapshot.phase ?? ''}:${snapshot.currentTeam ?? ''}:${tiebreakerSignature}:${teamSignature}`;
+  return `${snapshot.version ?? ''}:${JSON.stringify(snapshot.rules)}:${snapshot.matchCode ?? 'unknown'}:${snapshot.phase ?? ''}:${snapshot.currentTeam ?? ''}:${tiebreakerSignature}:${teamSignature}`;
 }
 
 function getCurrentMatchCode(): string | undefined {
