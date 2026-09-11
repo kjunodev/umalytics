@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.3.9 Open Beta — changes since 0.3.5
+
+- Improve companion-avatar and nickname handling by capturing room events at document start, before the site's realtime connection is created.
+- Replay captured, sanitized room events when the extension reconnects or the room code first appears; never reuse events from another room.
+- Keep verified room-event identities when avatar-only DOM rows or nickname updates disagree. Apply room nickname maps without changing player IDs.
+- Prevent empty initial assignment/ranked snapshots from erasing custom-room membership. Continue processing genuine departures and team moves.
+- Fix the captains-only disappearance: draft summary panels can no longer masquerade as waiting-room rosters or turn draft instructions into team names.
+- Retain room identity when the lobby header disappears during draft on the same page, while resetting that fallback on navigation.
+- Prefer trainer-card accessibility names over companion labels/avatar initials and tighten legacy player-row boundaries.
+- Public privacy behavior is unchanged: private detailed stats remain private, with no match-history reconstruction.
+
+
 ## 0.3.5 Open Beta
 
 - Fix trainer identity extraction in starting rooms, including companion-image confusion and hyphenated room codes.

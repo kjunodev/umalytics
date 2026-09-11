@@ -94,6 +94,8 @@ export class RoomEventState {
   roster?: PrematchRoster;
   draft?: DraftSnapshot;
   private authoritativeRoster = false;
+  private rankedRosterSeen = false;
+  private assignmentRosterSeen = { team1: false, team2: false };
 
   apply(payload: unknown, expectedRoom?: string): { roster?: PrematchRoster; draft?: DraftSnapshot; reason: string } {
     const event = decodeRoomEvent(payload);
@@ -102,14 +104,17 @@ export class RoomEventState {
     if (expectedRoom === undefined || event.matchId !== expectedRoom) return { reason: 'unrelated-room' };
     if (event.matchId !== this.matchCode) {
       this.matchCode = event.matchId; this.version = -1; this.revisions = { team1: -1, team2: -1 };
-      this.roster = undefined; this.draft = undefined; this.authoritativeRoster = false;
+      this.roster = undefined; this.draft = undefined; this.authoritativeRoster = false; this.rankedRosterSeen = false;
+      this.assignmentRosterSeen = { team1: false, team2: false };
     }
     if (event.type === 'match.snapshot') {
       if (event.version <= this.version) return { reason: 'old-version' };
       this.version = event.version;
       const state = event.state;
       this.draft = draftFromRoomState(state, event.matchId, event.version);
-      if (Array.isArray(state.multiplayer.rankedQueueRoster)) {
+      if (Array.isArray(state.multiplayer.rankedQueueRoster) &&
+          (state.multiplayer.rankedQueueRoster.length > 0 || this.rankedRosterSeen)) {
+        this.rankedRosterSeen = true;
         this.roster = this.normalize(state.multiplayer.rankedQueueRoster);
         this.authoritativeRoster = true;
       } else if (this.roster) this.roster = this.normalize(this.roster.players);
@@ -119,6 +124,12 @@ export class RoomEventState {
       const team = event.team as TeamId;
       if (event.revision <= this.revisions[team]) return { reason: 'old-assignment-revision' };
       this.revisions[team] = event.revision;
+      // An empty Uma-assignment list before assignments exist is not a departure.
+      // Custom rooms get their actual members and account IDs from presence.
+      if (event.roster.length === 0 && !this.assignmentRosterSeen[team]) {
+        return { roster: this.roster, reason: 'empty-assignment-without-membership' };
+      }
+      this.assignmentRosterSeen[team] = true;
       // This event is visible per team. It can update one side only.
       const next = this.normalize(event.roster.filter((p: RoomRecord) => p.team === team));
       const assignedIds = new Set(next.players.map(player => player.discordId));
@@ -134,7 +145,9 @@ export class RoomEventState {
       }));
       return { roster: this.roster, reason: 'captain-change' };
     }
-    if (Array.isArray(event.rankedQueueRoster)) {
+    if (Array.isArray(event.rankedQueueRoster) &&
+        (event.rankedQueueRoster.length > 0 || this.rankedRosterSeen)) {
+      this.rankedRosterSeen = true;
       this.roster = this.normalize(event.rankedQueueRoster); this.authoritativeRoster = true;
     } else if (Array.isArray(event.participants)) {
       const incoming = this.normalize(event.participants);

@@ -8,8 +8,11 @@ const PLAYER_ROLES = new Set(['Player', 'Captain']);
 
 export function extractPrematchRosterFromRoomDom(document: Document): PrematchRoster | null {
   const roomCode = extractRoomCodeFromRoomDom(document);
+  // Trainer rows are also used for captain summaries in draft screens. A
+  // waiting-room roster needs its own room identity and both team sections.
+  if (roomCode === undefined) return null;
   const sections = findTeamSections(document);
-  if (sections.length === 0) return null;
+  if (sections.length !== 2) return null;
   const teams = buildTeamRecord(sections.map((section) => extractTeam(section)));
   const players = teams.flatMap((team) => team.players);
 
@@ -27,7 +30,7 @@ export function extractPrematchRosterFromRoomDom(document: Document): PrematchRo
 
 export function extractRoomCodeFromRoomDom(document: Document): MatchCode | undefined {
   const copyButtonCode = normalizeRoomCode(
-    document.querySelector<HTMLButtonElement>('button[title*="room code" i]')?.textContent
+    document.querySelector<HTMLButtonElement>('button[aria-label="Copy room code" i], button[title*="room code" i]')?.textContent
   );
 
   if (copyButtonCode !== undefined) {
@@ -50,7 +53,7 @@ function findTeamSections(document: Document): Array<{ id: TeamId; name?: string
     let element = heading.parentElement;
     while (element !== null && element !== root) {
       if (element.querySelectorAll('h2, h3').length > 1) break;
-      if (element.querySelector('[data-trainer-player]') !== null ||
+      if (findPlayerRows(element).length > 0 ||
           Array.from(element.querySelectorAll('p')).some(p => /Waiting for player/i.test(p.textContent ?? ''))) {
         if (!sections.some(section => section.element === element)) sections.push({ id: 'team1', name: cleanTeamName(normalizeText(heading.textContent)), element });
         break;
@@ -194,7 +197,6 @@ function findClosestRow(element: HTMLElement): HTMLElement | null {
   const marked = element.closest<HTMLElement>('[data-trainer-player]');
   if (marked !== null) return marked;
   let current: HTMLElement | null = element;
-  let candidate: HTMLElement | null = null;
 
   while (current !== null && current !== element.ownerDocument.body) {
     if (current.querySelector('h2, h3') !== null) break;
@@ -203,13 +205,13 @@ function findClosestRow(element: HTMLElement): HTMLElement | null {
       !Array.from(span.querySelectorAll('span')).some(child => PLAYER_ROLES.has(normalizeText(child.textContent) ?? '')));
     if (badges.length > 1) break;
     if (current.tagName === 'DIV' && badges.length === 1 && current.querySelector('p') !== null) {
-      candidate = current;
+      return current;
     }
 
     current = current.parentElement;
   }
 
-  return candidate;
+  return null;
 }
 
 function extractPlayer(row: HTMLElement, team: TeamId, index: number): PrematchPlayer {
@@ -239,7 +241,12 @@ function extractPlayer(row: HTMLElement, team: TeamId, index: number): PrematchP
 }
 
 function readDisplayName(row: HTMLElement): string | undefined {
-  const nameButton = Array.from(row.querySelectorAll<HTMLElement>('[data-trainer-trigger]'))
+  // The avatar trigger may contain an initial or companion, not a player name.
+  const triggers = Array.from(row.querySelectorAll<HTMLElement>('[data-trainer-trigger]'));
+  const labeledName = triggers.map(button => /^View (.+)'s trainer card$/.exec(button.getAttribute('aria-label') ?? '')?.[1])
+    .map(normalizeText).find(name => name !== undefined);
+  if (labeledName !== undefined) return labeledName;
+  const nameButton = triggers
     .find(button => button.querySelector('img') === null && normalizeText(button.textContent) !== undefined);
   if (nameButton !== undefined) return normalizeText(nameButton.textContent);
   return Array.from(row.querySelectorAll<HTMLParagraphElement>('p'))

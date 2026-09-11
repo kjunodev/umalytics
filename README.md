@@ -2,12 +2,12 @@
 
 UmaLytics opens a separate scouting window beside [Uma Drafter](https://drafter.uma.guide). See the players in team slots, their available ranked statistics, and the confirmed live draft.
 
-**0.3.5 Open Beta — manual installation and updates.**
+**0.3.9 Open Beta — manual installation and updates.**
 
 | Browser | Download |
 | --- | --- |
-| Chrome, Edge, Brave, Opera GX | [Chromium ZIP](downloads/umalytics-chromium-0.3.5-open-beta.1.zip) |
-| Firefox / LibreWolf | [Firefox ZIP](downloads/umalytics-firefox-0.3.5-open-beta.1.zip) — temporary installation |
+| Chrome, Edge, Brave, Opera GX | [Chromium ZIP](downloads/umalytics-chromium-0.3.9-open-beta.1.zip) |
+| Firefox / LibreWolf | [Firefox ZIP](downloads/umalytics-firefox-0.3.9-open-beta.1.zip) — temporary installation |
 
 [Install or update](INSTALL.md) · [Changes](CHANGELOG.md) · [Privacy](PRIVACY.md) · [Report a bug](https://github.com/kjunodev/umalytics/issues/new?template=bug_report.md)
 
@@ -20,7 +20,7 @@ UmaLytics opens a separate scouting window beside [Uma Drafter](https://drafter.
 
 ## What is included
 
-- Starting-room trainer identification, with companion images and spectators excluded from the roster.
+- Starting-room trainer identification, with player identities kept independent of companion images and spectators excluded from the roster.
 - Versioned room events and DOM fallback for lobby and draft detection.
 - Cached player summaries, selected-scope loading, and explicit private/unavailable states.
 - Paced API requests, request cancellation on room changes, and bounded automatic recovery after rate limits.
@@ -37,7 +37,7 @@ The extension contacts Uma Drafter's services with player identifiers. Scouting 
 
 This is the public testing release. Cached data can appear quickly; uncached data depends on the upstream API. HTTP 429 pauses requests rather than bypassing the server's limits. Site changes can affect detection. A player whose room exposes no verified identity cannot be looked up reliably.
 
-Chromium behavior has been observed during a live ranked draft on the preceding candidate. The 0.3.5 changes have automated regression coverage; see [TESTING.md](TESTING.md) for exact checks and limits. Firefox remains an unsigned temporary add-on, not a permanent store installation. Human team cards currently assume up to five slots per side; complete support for every custom mode is not claimed.
+Chromium behavior has been observed during a live ranked draft on the preceding candidate. The 0.3.9 changes have automated regression coverage; see [TESTING.md](TESTING.md) for exact checks and limits. Firefox remains an unsigned temporary add-on, not a permanent store installation. Human team cards currently assume up to five slots per side; complete support for every custom mode is not claimed.
 
 ## Development and feedback
 

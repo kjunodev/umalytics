@@ -10,10 +10,11 @@ const deferred = () => { let resolve; const promise = new Promise(r => { resolve
 const tick = () => new Promise(r => setImmediate(r));
 const sleep = ms => new Promise(r => setTimeout(r,ms));
 function context(globals = {}) {
-  return vm.createContext({console, URL, URLSearchParams, AbortController, DOMException, setTimeout, clearTimeout,
+  return vm.createContext({window:{location:{origin:'https://drafter.uma.guide'},postMessage(){}},console, URL, URLSearchParams, AbortController, DOMException, setTimeout, clearTimeout,
     defineBackground: () => {}, defineContentScript: () => {}, recordDiagnostic: () => {}, sendDiagnosticEvent: async () => {}, getLatestDraftSnapshot: async () => undefined, clearLatestDraftSnapshot: async () => {}, ...globals});
 }
 function evaluate(c, file, options = {}) {
+  if (file === 'entrypoints/pageHook.ts') evaluate(c,'utils/pageHookRuntime.ts');
   if (file === 'entrypoints/content.ts') { evaluate(c,'utils/roomEvents.ts'); evaluate(c,'utils/rosterIdentity.ts'); }
   let source = options.source ?? read(file);
   source = source.replace(/^import[\s\S]*?;\r?\n/gm,'').replace(/^export default /gm,'').replace(/^export /gm,'');
@@ -631,7 +632,7 @@ test('recorder caps the trace and never stores arbitrary payloads, identifiers, 
 function contentRoomHarness({delayDraft}={}) {
   let visibleRoom;let domRoster=null;const sent=[];
   const c=context({cleanTeamName:x=>x,getUmaDisplayName:(id,name)=>name??id,normalizeUmaOutfitId:x=>x,
-    document:{},window:{location:{href:'https://drafter.uma.guide/host'},clearTimeout},
+    document:{},window:{location:{href:'https://drafter.uma.guide/host'},postMessage(){},clearTimeout},
     extractRoomCodeFromRoomDom:()=>visibleRoom,extractPrematchRosterFromRoomDom:()=>domRoster,
     extractDraftSnapshotFromDraftDom:()=>null,extractDraftSnapshotFromSyncedDraftState:()=>null,
     sendDraftSnapshot:async()=>{if(delayDraft)await delayDraft.promise;},sendPrematchRoster:async roster=>sent.push(structuredClone(roster))});
@@ -736,7 +737,7 @@ test('confirmed maps use the drafter combined order and preserve distinct course
 });
 
 test('page hook startup never reads site localStorage or sessionStorage',()=>{
-  const w={location:{origin:'https://drafter.uma.guide'},console:{debug(){},log(){},info(){}},WebSocket:class {addEventListener(){} }};
+  const w={location:{origin:'https://drafter.uma.guide'},console:{debug(){},log(){},info(){}},addEventListener(){},WebSocket:class {addEventListener(){} }};
   Object.defineProperties(w,{localStorage:{get(){throw new Error('Unexpected storage read');}},sessionStorage:{get(){throw new Error('Unexpected storage read');}}});
   const c=context({window:w,defineUnlistedScript:fn=>fn()}); evaluate(c,'entrypoints/pageHook.ts');
 });
@@ -746,4 +747,132 @@ test('DOM fallback preserves visible combined map numbers and leaves vetoes unnu
   const c=context();evaluate(c,'utils/draftExtraction.ts');
   const maps=c.extractDomMaps('team1',document.querySelector('section'));
   assert.equal(maps[0].order,3);assert.equal(maps[1].order,undefined);assert.equal(maps[1].status,'vetoed');
+});
+
+
+test('custom-room nickname and companion identities survive empty initialization snapshots',()=>{
+  for (const nickname of [null,'Mimi','Rumi']) {
+    const {state,c}=roomHarness();evaluate(c,'utils/rosterIdentity.ts');
+    state.apply(matchEvent({room:'CUSTOM',phase:'lobby',members:null}),'CUSTOM');
+    const participant={actorUserId:'actor-rumi',discordId:'436071695955263509',displayName:'Rumi',nickname,role:'captain',team:'team1'};
+    state.apply({type:'room.presence.updated',matchId:'CUSTOM',participants:[participant],rankedQueueRoster:[]},'CUSTOM');
+    state.apply({type:'participant.uma-assignments.snapshot',matchId:'CUSTOM',team:'team1',revision:0,roster:[]},'CUSTOM');
+    state.apply(matchEvent({room:'CUSTOM',phase:'lobby',version:2,members:[]}),'CUSTOM');
+    const name=nickname??'Rumi';
+    assert.equal(state.roster.players.length,1);
+    assert.equal(state.roster.players[0].discordId,participant.discordId);
+    assert.equal(state.roster.players[0].displayName,name);
+    const dom=domHarness(lobbyFixture(realTrainerRow(name,'/uma/companion.png'),'<p>Waiting for player...</p>'));
+    const visible=dom.c.extractPrematchRosterFromRoomDom(dom.document);visible.matchCode='CUSTOM';
+    assert.equal(c.canReuseSyncedRoster(state.roster,visible),true);
+    state.apply(matchEvent({room:'CUSTOM',phase:'map-pick',version:3,members:[]}),'CUSTOM');
+    assert.equal(state.roster.players[0].discordId,participant.discordId);
+  }
+});
+
+test('custom-room presence still updates nicknames, teams and genuine lobby departures',()=>{
+  const {state}=roomHarness();state.apply(matchEvent({phase:'lobby',members:[]}),'M95Z2Z');
+  const person={...players(1)[0],nickname:'Mimi',role:'captain'};
+  state.apply({type:'room.presence.updated',matchId:'M95Z2Z',participants:[person]},'M95Z2Z');
+  state.apply({type:'participant.uma-assignments.snapshot',matchId:'M95Z2Z',team:'team1',revision:0,roster:[]},'M95Z2Z');
+  state.apply({type:'room.presence.updated',matchId:'M95Z2Z',participants:[{...person,nickname:'New nick',team:'team2'}]},'M95Z2Z');
+  assert.equal(state.roster.players[0].displayName,'New nick');assert.equal(state.roster.players[0].team,'team2');
+  state.apply({type:'room.presence.updated',matchId:'M95Z2Z',participants:[]},'M95Z2Z');
+  assert.equal(state.roster.players.length,0);
+});
+
+test('avatar initials do not replace trainer names',()=>{
+  const row=realTrainerRow('Mimi').replace(/<img alt="Mimi"[^>]+>/,'<div>M</div>');
+  const {c,document}=domHarness(lobbyFixture(row,'<p>Waiting for player...</p>'));
+  assert.equal(c.extractPrematchRosterFromRoomDom(document).players[0].displayName,'Mimi');
+});
+
+test('legacy row boundaries exclude surrounding team-label paragraphs',()=>{
+  const row='<div><p>Team 1</p><div><p>Rumi</p><span>Captain</span><img src="https://cdn.discordapp.com/avatars/436071695955263509/a.png"></div></div>';
+  const {c,document}=domHarness(lobbyFixture(row,'<p>Waiting for player...</p>'));
+  const roster=c.extractPrematchRosterFromRoomDom(document);
+  assert.equal(roster.players.length,1);assert.equal(roster.players[0].displayName,'Rumi');
+  assert.equal(roster.players[0].discordId,'436071695955263509');
+});
+
+
+test('initial empty assignment for either side cannot clear ranked membership',()=>{
+  const {state}=roomHarness();state.apply(matchEvent(),'M95Z2Z');
+  for(const team of ['team1','team2'])state.apply({type:'participant.uma-assignments.snapshot',matchId:'M95Z2Z',team,revision:0,roster:[]},'M95Z2Z');
+  assert.equal(state.roster.players.length,10);
+  state.apply({type:'participant.uma-assignments.snapshot',matchId:'M95Z2Z',team:'team1',revision:1,roster:players(10).filter(p=>p.team==='team1')},'M95Z2Z');
+  state.apply({type:'participant.uma-assignments.snapshot',matchId:'M95Z2Z',team:'team1',revision:2,roster:[]},'M95Z2Z');
+  assert.equal(state.roster.teams.team1.players.length,0);assert.equal(state.roster.teams.team2.players.length,5);
+});
+
+
+test('companion DOM and nickname races cannot erase live room identities; presence departures still apply',async()=>{
+  const h=contentRoomHarness();h.show('M95Z2Z',roster('M95Z2Z',10));
+  await h.send({type:'room.presence.updated',matchId:'M95Z2Z',participants:players(10)});
+  const visible={...roster('M95Z2Z',10),phase:'room-lobby',players:players(10).map((p,i)=>({...p,discordId:'room-dom:'+i,userId:'room-dom:'+i,displayName:'Nickname '+i,profileLookupUnavailable:true}))};
+  h.show('M95Z2Z',visible);await h.c.publishRoomDomRoster();
+  assert.equal(h.sent.length,1);assert.equal(h.sent[0].players.length,10);
+  await h.send({type:'room.presence.updated',matchId:'M95Z2Z',participants:players(2)});
+  assert.equal(h.sent.at(-1).players.length,2);
+  h.show('NEXT01',{...visible,matchCode:'NEXT01'});await h.c.publishRoomDomRoster();
+  assert.equal(h.sent.at(-1).matchCode,'NEXT01');assert(h.sent.at(-1).players.every(p=>p.profileLookupUnavailable));
+});
+
+test('room nickname maps override old display names without changing account identity',()=>{
+  const {c}=roomHarness();const p={...players(1)[0],actorUserId:'actor-one',userId:'actor-one',displayName:'Original'};
+  const result=c.normalizePrematchPlayer(p,{participantNicknames:{'actor-one':'New nickname'}});
+  assert.equal(result.displayName,'New nickname');assert.equal(result.discordId,p.discordId);
+});
+
+test('early hook captures socket events before listener startup and replays only the active room',()=>{
+  const {c}=roomHarness();const messages=[];let room='M95Z2Z';let socketListener;
+  const w={location:{origin:'https://drafter.uma.guide',href:'https://drafter.uma.guide/host'},
+    console:{log(){},debug(){},info(){}},addEventListener(){},postMessage:m=>messages.push(m),
+    WebSocket:class {addEventListener(type,fn){socketListener=fn;}}};
+  Object.assign(c,{window:w,document:{},extractRoomCodeFromRoomDom:()=>room,Blob,ArrayBuffer,TextDecoder,defineUnlistedScript:fn=>fn()});
+  evaluate(c,'entrypoints/pageHook.ts');new w.WebSocket('wss://drafter-api.uma.guide/socket.io/');
+  socketListener({data:'42'+JSON.stringify(['server:event',matchEvent({version:5})])});
+  socketListener({data:'42'+JSON.stringify(['server:event',matchEvent({version:3})])});
+  socketListener({data:'42'+JSON.stringify(['server:event',{type:'room.presence.updated',matchId:'M95Z2Z',participants:players(10),secret:'DO-NOT-COPY'}])});
+  socketListener({data:'42'+JSON.stringify(['server:event',matchEvent({room:'OTHER1'})])});
+  messages.length=0;
+  c.replayRoomEvents({source:{},origin:w.location.origin,data:{type:'umalytics:request-room-events'}});assert.equal(messages.length,0);
+  c.replayRoomEvents({source:w,origin:w.location.origin,data:{type:'umalytics:request-room-events'}});
+  assert.equal(messages.length,2);assert.equal(messages[0].payload.version,5);
+  assert(messages.every(m=>m.payload.matchId==='M95Z2Z'));assert(!JSON.stringify(messages).includes('DO-NOT-COPY'));
+  messages.length=0;room='NEXT01';c.replayRoomEvents({source:w,origin:w.location.origin,data:{type:'umalytics:request-room-events'}});assert.equal(messages.length,0);
+  const original=w.WebSocket;c.installPageHook();assert.equal(w.WebSocket,original);
+});
+
+
+test('room identity appearing after startup requests captured events once per room',()=>{
+  const h=contentRoomHarness();const requests=[];h.c.window.postMessage=m=>requests.push(m);
+  h.c.refreshActiveRoomDomMatchCode();assert.equal(requests.length,0);
+  h.show('M95Z2Z',roster());h.c.refreshActiveRoomDomMatchCode();h.c.refreshActiveRoomDomMatchCode();
+  assert.equal(requests.length,1);assert.equal(requests[0].type,'umalytics:request-room-events');
+  h.show('NEXT01',roster('NEXT01'));h.c.refreshActiveRoomDomMatchCode();assert.equal(requests.length,2);
+});
+
+
+test('draft captain summaries cannot masquerade as a waiting-room roster',()=>{
+  const captains=realTrainerRow('Captain A','/uma/a.png')+realTrainerRow('Captain B','/uma/b.png');
+  for(const code of ['', '<button aria-label="Copy room code">284-QNV</button>']) {
+    const h=domHarness(code+'<section><h2>Veto Opponent’s Umamusume</h2>'+captains+'</section>');
+    assert.equal(h.c.extractPrematchRosterFromRoomDom(h.document),null);
+  }
+  const h=domHarness(lobbyFixture(realTrainerRow(),'<p>Waiting for player...</p>').replace(/<button[^>]*>6XN-84X<\/button>/,''));
+  assert.equal(h.c.extractPrematchRosterFromRoomDom(h.document),null);
+});
+
+test('idle host draft keeps ten members when lobby header vanishes and later sync arrives',async()=>{
+  const h=contentRoomHarness();h.show('284QNV',roster('284QNV',10));
+  const sync=()=>h.c.handleWindowMessage({type:'umalytics:synced-draft-state',source:'console',hookVersion:4,payload:{syncedDraftState_phase:'uma-veto',syncedDraftState_multiplayer:{roomCode:'284QNV',rankedQueueRoster:players(10)}}});
+  await sync();assert.equal(h.sent.at(-1).players.length,10);
+  h.show(undefined,null);
+  for(let scan=0;scan<10;scan++) {await h.c.publishRoomDomRoster();await sync();}
+  assert.equal(h.sent.length,1);assert.equal(h.sent[0].matchCode,'284QNV');
+  assert.equal(h.c.isStaleSyncedRoster(roster('OTHER1')),true);
+  await h.c.publishRoomDomRoster({force:true});assert.equal(h.sent.at(-1).players.length,10);
+  h.c.window.location.href='https://drafter.uma.guide/';h.c.refreshActiveRoomDomMatchCode();
+  assert.equal(vm.runInContext('activeRoomDomMatchCode',h.c),undefined);
 });

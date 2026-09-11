@@ -22,6 +22,8 @@ function sameVisibleIdentity(candidate: PrematchPlayer, visible: PrematchPlayer)
 export function canReuseSyncedRoster(synced: PrematchRoster, visible: PrematchRoster): boolean {
   if (synced.matchCode === undefined) return matchesVisibleTeamSlots(synced, visible);
   if (synced.matchCode !== visible.matchCode) return false;
+  // Live membership events own the roster. Avatar/name-only DOM cannot negate them.
+  if (synced.observationSource === 'room-events') return true;
   if (synced.phase !== 'lobby' && synced.phase !== 'room-lobby') return true;
   return matchesVisibleTeamSlots({ ...synced, matchCode: undefined }, { ...visible, matchCode: undefined });
 }

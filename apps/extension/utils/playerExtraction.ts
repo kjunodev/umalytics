@@ -87,8 +87,9 @@ export function normalizePrematchPlayer(
     ?? readOptionalString(value.id);
   const identityKeys = [userId, discordId, readOptionalString(value.actorUserId), readOptionalString(value.id)]
     .filter((key): key is string => key !== undefined);
-  const displayName = readOptionalString(value.displayName)
+  const displayName = readContextString(context, identityKeys, ['participantNicknames', 'playerNicknames', 'nicknames'])
     ?? readOptionalString(value.nickname)
+    ?? readOptionalString(value.displayName)
     ?? readOptionalString(value.username)
     ?? readOptionalString(value.discordUsername)
     ?? readOptionalString(value.playerName)
