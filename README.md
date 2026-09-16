@@ -20,6 +20,10 @@ UmaLytics opens a separate scouting window beside [Uma Drafter](https://drafter.
 
 ## What is included
 
+The development branch adds **Live / History / Profiles** navigation. History accepts a match code or match-page URL and displays the saved completed draft with the same maps, picks, bans and vetoes layout as Live. Profiles accepts a username, Discord ID or profile URL and opens single-player scouting details. These changes are not yet in the linked 0.3.9 downloads.
+
+History keeps its selected match separate from the live lobby. Any accompanying player statistics are current, not historical snapshots. Name searches show selectable directory matches (up to 50); refine the name or use an exact ID if needed. Neither feature requires an active lobby. Results remain while switching views, but match/search selections reset when the scouting window closes. Unavailable saved drafts and API errors are shown explicitly.
+
 - Starting-room trainer identification, with player identities kept independent of companion images and spectators excluded from the roster.
 - Versioned room events and DOM fallback for lobby and draft detection.
 - Cached player summaries, selected-scope loading, and explicit private/unavailable states.
@@ -29,7 +33,7 @@ UmaLytics opens a separate scouting window beside [Uma Drafter](https://drafter.
 
 ## Privacy
 
-This source and its packages respect private ranked stats. They do not request match history or reconstruct hidden statistics. The community configuration cannot enable that behavior with a build flag. Public identity, rank or rating may still appear when separately exposed by the site; private detailed statistics remain unavailable.
+This source and its packages respect private ranked stats. They do not request player match-history feeds or reconstruct hidden statistics. Loading a completed match by code displays that match's publicly exposed draft. The community configuration cannot enable hidden-profile reconstruction with a build flag. Public identity, rank or rating may still appear when separately exposed by the site; private detailed statistics remain unavailable, including in profile lookup.
 
 The extension contacts Uma Drafter's services with player identifiers. Scouting state and a bounded diagnostic trace stay in local extension storage. There is no UmaLytics backend, analytics service or automatic diagnostic upload. See [PRIVACY.md](PRIVACY.md).
 

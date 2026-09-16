@@ -1,0 +1,713 @@
+{
+  "id": "TG7YT2",
+  "status": "completed",
+  "report": {
+    "matchId": "TG7YT2",
+    "finishedAt": "2026-09-12T09:10:56.841Z",
+    "participants": [
+      {
+        "discordId": "683595295841452134",
+        "displayDiscordUsername": "isaacwoooo",
+        "team": "team1",
+        "role": "captain"
+      },
+      {
+        "discordId": "634868914484019202",
+        "displayDiscordUsername": "k.juno",
+        "team": "team2",
+        "role": "captain"
+      },
+      {
+        "discordId": "612938227833110530",
+        "displayDiscordUsername": "constellations8206",
+        "team": "team2",
+        "role": "player"
+      },
+      {
+        "discordId": "196928284703850496",
+        "displayDiscordUsername": "tygrak",
+        "team": "team2",
+        "role": "player"
+      },
+      {
+        "discordId": "183449189454184449",
+        "displayDiscordUsername": "chainpullz",
+        "team": "team2",
+        "role": "player"
+      },
+      {
+        "discordId": "951304830796824596",
+        "displayDiscordUsername": "palkia_.",
+        "team": "team1",
+        "role": "player"
+      },
+      {
+        "discordId": "585690227855589377",
+        "displayDiscordUsername": "crowsend",
+        "team": "team1",
+        "role": "player"
+      },
+      {
+        "discordId": "630414628568039436",
+        "displayDiscordUsername": "yunaka__",
+        "team": "team2",
+        "role": "player"
+      },
+      {
+        "discordId": "133872420170891265",
+        "displayDiscordUsername": ".renko",
+        "team": "team1",
+        "role": "player"
+      },
+      {
+        "discordId": "297796505010700288",
+        "displayDiscordUsername": "rengshu",
+        "team": "team1",
+        "role": "player"
+      }
+    ],
+    "draftSnapshot": {
+      "phase": "complete",
+      "rules": {
+        "map": {
+          "bansPerTeam": 1,
+          "picksPerTeam": 4,
+          "maxDirtPerTeam": 2,
+          "surfaceRestrictions": true,
+          "distanceRestrictions": true,
+          "maxPerDistanceCategory": 2
+        },
+        "uma": {
+          "teamSize": 6,
+          "preBanOrder": [
+            "team1",
+            "team2",
+            "team2",
+            "team1"
+          ],
+          "preBansPerTeam": 2,
+          "postBansPerTeam": 1
+        },
+        "preset": "ranked",
+        "variant": "standard",
+        "augments": [],
+        "rulesVersion": 0
+      },
+      "team1": {
+        "bannedMaps": [
+          {
+            "id": "hanshin-1600-turf-outer",
+            "name": "Hanshin - 1600m Turf (Outer)",
+            "track": "Hanshin",
+            "surface": "Turf",
+            "variant": "Outer",
+            "distance": 1600,
+            "direction": "right",
+            "conditions": {
+              "ground": "Heavy",
+              "season": "Spring",
+              "weather": "Rainy"
+            }
+          }
+        ],
+        "bannedUmas": [
+          {
+            "id": "102602",
+            "name": "Mihono Bourbon",
+            "title": "Valentine"
+          }
+        ],
+        "pickedMaps": [
+          {
+            "id": "kyoto-2000-turf-inner",
+            "name": "Kyoto - 2000m Turf (Inner)",
+            "track": "Kyoto",
+            "surface": "Turf",
+            "variant": "Inner",
+            "distance": 2000,
+            "direction": "right",
+            "conditions": {
+              "ground": "Soft",
+              "season": "Winter",
+              "weather": "Snowy"
+            }
+          },
+          {
+            "id": "kyoto-2200-turf-outer",
+            "name": "Kyoto - 2200m Turf (Outer)",
+            "track": "Kyoto",
+            "surface": "Turf",
+            "variant": "Outer",
+            "distance": 2200,
+            "direction": "right",
+            "conditions": {
+              "ground": "Firm",
+              "season": "Summer",
+              "weather": "Sunny"
+            }
+          },
+          {
+            "id": "nakayama-1800-turf-inner",
+            "name": "Nakayama - 1800m Turf (Inner)",
+            "track": "Nakayama",
+            "surface": "Turf",
+            "variant": "Inner",
+            "distance": 1800,
+            "direction": "right",
+            "conditions": {
+              "ground": "Soft",
+              "season": "Winter",
+              "weather": "Snowy"
+            }
+          }
+        ],
+        "pickedUmas": [
+          {
+            "id": "100601",
+            "name": "Oguri Cap"
+          },
+          {
+            "id": "102102",
+            "name": "Tamamo Cross",
+            "title": "Festival"
+          },
+          {
+            "id": "101601",
+            "name": "Narita Brian"
+          },
+          {
+            "id": "102901",
+            "name": "Yukino Bijin"
+          },
+          {
+            "id": "103401",
+            "name": "Inari One"
+          },
+          {
+            "id": "100701",
+            "name": "Gold Ship"
+          }
+        ],
+        "preBannedUmas": [
+          {
+            "id": "100201",
+            "name": "Silence Suzuka"
+          },
+          {
+            "id": "102001",
+            "name": "Seiun Sky"
+          }
+        ]
+      },
+      "team2": {
+        "bannedMaps": [
+          {
+            "id": "hanshin-2600-turf-outer",
+            "name": "Hanshin - 2600m Turf (Outer)",
+            "track": "Hanshin",
+            "surface": "Turf",
+            "variant": "Outer",
+            "distance": 2600,
+            "direction": "right",
+            "conditions": {
+              "ground": "Good",
+              "season": "Spring",
+              "weather": "Sunny"
+            }
+          }
+        ],
+        "bannedUmas": [
+          {
+            "id": "103301",
+            "name": "Admire Vega"
+          }
+        ],
+        "pickedMaps": [
+          {
+            "id": "nakayama-2000-turf-inner",
+            "name": "Nakayama - 2000m Turf (Inner)",
+            "track": "Nakayama",
+            "surface": "Turf",
+            "variant": "Inner",
+            "distance": 2000,
+            "direction": "right",
+            "conditions": {
+              "ground": "Good",
+              "season": "Summer",
+              "weather": "Cloudy"
+            }
+          },
+          {
+            "id": "nakayama-2200-turf-outer",
+            "name": "Nakayama - 2200m Turf (Outer)",
+            "track": "Nakayama",
+            "surface": "Turf",
+            "variant": "Outer",
+            "distance": 2200,
+            "direction": "right",
+            "conditions": {
+              "ground": "Good",
+              "season": "Summer",
+              "weather": "Sunny"
+            }
+          },
+          {
+            "id": "nakayama-2500-turf-inner",
+            "name": "Nakayama - 2500m Turf (Inner)",
+            "track": "Nakayama",
+            "surface": "Turf",
+            "variant": "Inner",
+            "distance": 2500,
+            "direction": "right",
+            "conditions": {
+              "ground": "Good",
+              "season": "Spring",
+              "weather": "Sunny"
+            }
+          }
+        ],
+        "pickedUmas": [
+          {
+            "id": "101002",
+            "name": "Taiki Shuttle",
+            "title": "Camping"
+          },
+          {
+            "id": "105002",
+            "name": "Narita Taishin",
+            "title": "Steampunk"
+          },
+          {
+            "id": "100101",
+            "name": "Special Week"
+          },
+          {
+            "id": "106801",
+            "name": "Kitasan Black"
+          },
+          {
+            "id": "106401",
+            "name": "Mejiro Palmer"
+          },
+          {
+            "id": "101201",
+            "name": "Hishi Amazon"
+          }
+        ],
+        "preBannedUmas": [
+          {
+            "id": "100602",
+            "name": "Oguri Cap",
+            "title": "Christmas"
+          },
+          {
+            "id": "105802",
+            "name": "Meisho Doto",
+            "title": "Halloween"
+          }
+        ]
+      },
+      "multiplayer": {
+        "team1Name": "Prolly",
+        "team2Name": "Not again"
+      },
+      "wildcardMap": {
+        "id": "hanshin-1800-turf-outer",
+        "name": "Hanshin - 1800m Turf (Outer)",
+        "track": "Hanshin",
+        "surface": "Turf",
+        "variant": "Outer",
+        "distance": 1800,
+        "direction": "right",
+        "conditions": {
+          "ground": "Good",
+          "season": "Summer",
+          "weather": "Cloudy"
+        }
+      },
+      "draftActionHistory": [
+        {
+          "map": {
+            "id": "kyoto-2000-turf-inner",
+            "name": "Kyoto - 2000m Turf (Inner)",
+            "track": "Kyoto",
+            "surface": "Turf",
+            "variant": "Inner",
+            "distance": 2000,
+            "direction": "right",
+            "conditions": {
+              "ground": "Soft",
+              "season": "Winter",
+              "weather": "Snowy"
+            }
+          },
+          "phase": "map-pick",
+          "action": "map-pick",
+          "actorTeam": "team1"
+        },
+        {
+          "map": {
+            "id": "nakayama-2000-turf-inner",
+            "name": "Nakayama - 2000m Turf (Inner)",
+            "track": "Nakayama",
+            "surface": "Turf",
+            "variant": "Inner",
+            "distance": 2000,
+            "direction": "right",
+            "conditions": {
+              "ground": "Good",
+              "season": "Summer",
+              "weather": "Cloudy"
+            }
+          },
+          "phase": "map-pick",
+          "action": "map-pick",
+          "actorTeam": "team2"
+        },
+        {
+          "map": {
+            "id": "kyoto-2200-turf-outer",
+            "name": "Kyoto - 2200m Turf (Outer)",
+            "track": "Kyoto",
+            "surface": "Turf",
+            "variant": "Outer",
+            "distance": 2200,
+            "direction": "right",
+            "conditions": {
+              "ground": "Firm",
+              "season": "Summer",
+              "weather": "Sunny"
+            }
+          },
+          "phase": "map-pick",
+          "action": "map-pick",
+          "actorTeam": "team1"
+        },
+        {
+          "map": {
+            "id": "nakayama-2200-turf-outer",
+            "name": "Nakayama - 2200m Turf (Outer)",
+            "track": "Nakayama",
+            "surface": "Turf",
+            "variant": "Outer",
+            "distance": 2200,
+            "direction": "right",
+            "conditions": {
+              "ground": "Good",
+              "season": "Summer",
+              "weather": "Sunny"
+            }
+          },
+          "phase": "map-pick",
+          "action": "map-pick",
+          "actorTeam": "team2"
+        },
+        {
+          "map": {
+            "id": "nakayama-1800-turf-inner",
+            "name": "Nakayama - 1800m Turf (Inner)",
+            "track": "Nakayama",
+            "surface": "Turf",
+            "variant": "Inner",
+            "distance": 1800,
+            "direction": "right",
+            "conditions": {
+              "ground": "Soft",
+              "season": "Winter",
+              "weather": "Snowy"
+            }
+          },
+          "phase": "map-pick",
+          "action": "map-pick",
+          "actorTeam": "team1"
+        },
+        {
+          "map": {
+            "id": "hanshin-2600-turf-outer",
+            "name": "Hanshin - 2600m Turf (Outer)",
+            "track": "Hanshin",
+            "surface": "Turf",
+            "variant": "Outer",
+            "distance": 2600,
+            "direction": "right",
+            "conditions": {
+              "ground": "Good",
+              "season": "Spring",
+              "weather": "Sunny"
+            }
+          },
+          "phase": "map-pick",
+          "action": "map-pick",
+          "actorTeam": "team2"
+        },
+        {
+          "map": {
+            "id": "hanshin-1600-turf-outer",
+            "name": "Hanshin - 1600m Turf (Outer)",
+            "track": "Hanshin",
+            "surface": "Turf",
+            "variant": "Outer",
+            "distance": 1600,
+            "direction": "right",
+            "conditions": {
+              "ground": "Heavy",
+              "season": "Spring",
+              "weather": "Rainy"
+            }
+          },
+          "phase": "map-pick",
+          "action": "map-pick",
+          "actorTeam": "team1"
+        },
+        {
+          "map": {
+            "id": "nakayama-2500-turf-inner",
+            "name": "Nakayama - 2500m Turf (Inner)",
+            "track": "Nakayama",
+            "surface": "Turf",
+            "variant": "Inner",
+            "distance": 2500,
+            "direction": "right",
+            "conditions": {
+              "ground": "Good",
+              "season": "Spring",
+              "weather": "Sunny"
+            }
+          },
+          "phase": "map-pick",
+          "action": "map-pick",
+          "actorTeam": "team2"
+        },
+        {
+          "map": {
+            "id": "hanshin-2600-turf-outer",
+            "name": "Hanshin - 2600m Turf (Outer)",
+            "track": "Hanshin",
+            "surface": "Turf",
+            "variant": "Outer",
+            "distance": 2600,
+            "direction": "right",
+            "conditions": {
+              "ground": "Good",
+              "season": "Spring",
+              "weather": "Sunny"
+            }
+          },
+          "phase": "map-ban",
+          "action": "map-veto",
+          "actorTeam": "team1",
+          "targetTeam": "team2"
+        },
+        {
+          "map": {
+            "id": "hanshin-1600-turf-outer",
+            "name": "Hanshin - 1600m Turf (Outer)",
+            "track": "Hanshin",
+            "surface": "Turf",
+            "variant": "Outer",
+            "distance": 1600,
+            "direction": "right",
+            "conditions": {
+              "ground": "Heavy",
+              "season": "Spring",
+              "weather": "Rainy"
+            }
+          },
+          "phase": "map-ban",
+          "action": "map-veto",
+          "actorTeam": "team2",
+          "targetTeam": "team1"
+        },
+        {
+          "uma": {
+            "id": "100201",
+            "name": "Silence Suzuka"
+          },
+          "phase": "uma-pre-ban",
+          "action": "uma-pre-ban",
+          "actorTeam": "team1"
+        },
+        {
+          "uma": {
+            "id": "100602",
+            "name": "Oguri Cap",
+            "title": "Christmas"
+          },
+          "phase": "uma-pre-ban",
+          "action": "uma-pre-ban",
+          "actorTeam": "team2"
+        },
+        {
+          "uma": {
+            "id": "105802",
+            "name": "Meisho Doto",
+            "title": "Halloween"
+          },
+          "phase": "uma-pre-ban",
+          "action": "uma-pre-ban",
+          "actorTeam": "team2"
+        },
+        {
+          "uma": {
+            "id": "102001",
+            "name": "Seiun Sky"
+          },
+          "phase": "uma-pre-ban",
+          "action": "uma-pre-ban",
+          "actorTeam": "team1"
+        },
+        {
+          "uma": {
+            "id": "102602",
+            "name": "Mihono Bourbon",
+            "title": "Valentine"
+          },
+          "phase": "uma-pick",
+          "action": "uma-pick",
+          "actorTeam": "team1"
+        },
+        {
+          "uma": {
+            "id": "101002",
+            "name": "Taiki Shuttle",
+            "title": "Camping"
+          },
+          "phase": "uma-pick",
+          "action": "uma-pick",
+          "actorTeam": "team2"
+        },
+        {
+          "uma": {
+            "id": "103301",
+            "name": "Admire Vega"
+          },
+          "phase": "uma-pick",
+          "action": "uma-pick",
+          "actorTeam": "team2"
+        },
+        {
+          "uma": {
+            "id": "100601",
+            "name": "Oguri Cap"
+          },
+          "phase": "uma-pick",
+          "action": "uma-pick",
+          "actorTeam": "team1"
+        },
+        {
+          "uma": {
+            "id": "102102",
+            "name": "Tamamo Cross",
+            "title": "Festival"
+          },
+          "phase": "uma-pick",
+          "action": "uma-pick",
+          "actorTeam": "team1"
+        },
+        {
+          "uma": {
+            "id": "105002",
+            "name": "Narita Taishin",
+            "title": "Steampunk"
+          },
+          "phase": "uma-pick",
+          "action": "uma-pick",
+          "actorTeam": "team2"
+        },
+        {
+          "uma": {
+            "id": "100101",
+            "name": "Special Week"
+          },
+          "phase": "uma-pick",
+          "action": "uma-pick",
+          "actorTeam": "team2"
+        },
+        {
+          "uma": {
+            "id": "101601",
+            "name": "Narita Brian"
+          },
+          "phase": "uma-pick",
+          "action": "uma-pick",
+          "actorTeam": "team1"
+        },
+        {
+          "uma": {
+            "id": "102901",
+            "name": "Yukino Bijin"
+          },
+          "phase": "uma-pick",
+          "action": "uma-pick",
+          "actorTeam": "team1"
+        },
+        {
+          "uma": {
+            "id": "106801",
+            "name": "Kitasan Black"
+          },
+          "phase": "uma-pick",
+          "action": "uma-pick",
+          "actorTeam": "team2"
+        },
+        {
+          "uma": {
+            "id": "102602",
+            "name": "Mihono Bourbon",
+            "title": "Valentine"
+          },
+          "phase": "uma-ban",
+          "action": "uma-veto",
+          "actorTeam": "team2",
+          "targetTeam": "team1"
+        },
+        {
+          "uma": {
+            "id": "103301",
+            "name": "Admire Vega"
+          },
+          "phase": "uma-ban",
+          "action": "uma-veto",
+          "actorTeam": "team1",
+          "targetTeam": "team2"
+        },
+        {
+          "uma": {
+            "id": "106401",
+            "name": "Mejiro Palmer"
+          },
+          "phase": "uma-pick",
+          "action": "uma-pick",
+          "actorTeam": "team2"
+        },
+        {
+          "uma": {
+            "id": "103401",
+            "name": "Inari One"
+          },
+          "phase": "uma-pick",
+          "action": "uma-pick",
+          "actorTeam": "team1"
+        },
+        {
+          "uma": {
+            "id": "100701",
+            "name": "Gold Ship"
+          },
+          "phase": "uma-pick",
+          "action": "uma-pick",
+          "actorTeam": "team1"
+        },
+        {
+          "uma": {
+            "id": "101201",
+            "name": "Hishi Amazon"
+          },
+          "phase": "uma-pick",
+          "action": "uma-pick",
+          "actorTeam": "team2"
+        }
+      ]
+    }
+  }
+}

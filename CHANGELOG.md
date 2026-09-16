@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- Add Live / History / Profiles navigation while preserving the live lobby independently.
+- Load a completed draft by match code or match URL using the same draft layout, including final picks, bans, vetoed maps and the tiebreaker.
+- Add single-player lookup by name, Discord ID or profile URL, with selectable search results and Season / All-time details.
+- Share API pacing and profile caches with live scouting; cancel replaced lookups and preserve available stats through partial failures.
+- Keep community private-profile protections in lookup. Historical match selections are labeled separately from current player statistics.
+
+These changes do not replace the published 0.3.9 packages yet.
+
 ## 0.3.9 Open Beta — changes since 0.3.5
 
 - Improve companion-avatar and nickname handling by capturing room events at document start, before the site's realtime connection is created.
