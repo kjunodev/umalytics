@@ -2,12 +2,12 @@
 
 UmaLytics opens a separate scouting window beside [Uma Drafter](https://drafter.uma.guide). See the players in team slots, their available ranked statistics, and the confirmed live draft.
 
-**0.3.9 Open Beta — manual installation and updates.**
+**0.4.0 Open Beta — manual installation and updates.**
 
 | Browser | Download |
 | --- | --- |
-| Chrome, Edge, Brave, Opera GX | [Chromium ZIP](downloads/umalytics-chromium-0.3.9-open-beta.1.zip) |
-| Firefox / LibreWolf | [Firefox ZIP](downloads/umalytics-firefox-0.3.9-open-beta.1.zip) — temporary installation |
+| Chrome, Edge, Brave, Opera GX | [Chromium ZIP](https://github.com/kjunodev/umalytics/releases/download/v0.4.0-open-beta.1/umalytics-chromium-0.4.0-open-beta.1.zip) |
+| Firefox / LibreWolf | [Firefox ZIP](https://github.com/kjunodev/umalytics/releases/download/v0.4.0-open-beta.1/umalytics-firefox-0.4.0-open-beta.1.zip) — temporary installation |
 
 [Install or update](INSTALL.md) · [Changes](CHANGELOG.md) · [Privacy](PRIVACY.md) · [Report a bug](https://github.com/kjunodev/umalytics/issues/new?template=bug_report.md)
 
@@ -20,7 +20,7 @@ UmaLytics opens a separate scouting window beside [Uma Drafter](https://drafter.
 
 ## What is included
 
-The development branch adds **Live / History / Profiles** navigation. History accepts a match code or match-page URL and displays the saved completed draft with the same maps, picks, bans and vetoes layout as Live. Profiles accepts a username, Discord ID or profile URL and opens single-player scouting details. These changes are not yet in the linked 0.3.9 downloads.
+Version 0.4.0 adds **Live / History / Profiles** navigation in a fixed header. History accepts a match code or match-page URL and offers the same **Lobby / Draft / Umas** scenes as Live, including player details and matching pick portraits. Profiles accepts a username, Discord ID or profile URL and opens single-player scouting details. All modes use the header's **Season / All-time** control and retain their own scope selection.
 
 History keeps its selected match separate from the live lobby. Any accompanying player statistics are current, not historical snapshots. Name searches show selectable directory matches (up to 50); refine the name or use an exact ID if needed. Neither feature requires an active lobby. Results remain while switching views, but match/search selections reset when the scouting window closes. Unavailable saved drafts and API errors are shown explicitly.
 
@@ -41,7 +41,7 @@ The extension contacts Uma Drafter's services with player identifiers. Scouting 
 
 This is the public testing release. Cached data can appear quickly; uncached data depends on the upstream API. HTTP 429 pauses requests rather than bypassing the server's limits. Site changes can affect detection. A player whose room exposes no verified identity cannot be looked up reliably.
 
-Chromium behavior has been observed during a live ranked draft on the preceding candidate. The 0.3.9 changes have automated regression coverage; see [TESTING.md](TESTING.md) for exact checks and limits. Firefox remains an unsigned temporary add-on, not a permanent store installation. Human team cards currently assume up to five slots per side; complete support for every custom mode is not claimed.
+Chromium behavior has been observed during a live ranked draft on the preceding candidate. The 0.4.0 changes have automated regression coverage; see [TESTING.md](TESTING.md) for exact checks and limits. Firefox remains an unsigned temporary add-on, not a permanent store installation. Human team cards currently assume up to five slots per side; complete support for every custom mode is not claimed.
 
 ## Development and feedback
 

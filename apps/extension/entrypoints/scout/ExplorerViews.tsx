@@ -5,15 +5,8 @@ import type { HistoricalMatch, PlayerSearchResult } from '../../utils/explorerTy
 import { mergeExplorerProfiles } from '../../utils/explorerState';
 
 type Profiles = Record<string, PlayerProfileSummary>;
-type DraftView = ComponentType<{ snapshot: DraftSnapshot | undefined; roster: PrematchRoster | undefined; profiles: Profiles; statsScope: PlayerStatsScope; historical?: boolean }>;
+type HistoryScene = ComponentType<{ snapshot: DraftSnapshot; roster: PrematchRoster; profiles: Profiles; statsScope: PlayerStatsScope; scene: 'lobby' | 'draft' | 'umas'; loading: boolean; navigation: number }>;
 type DetailView = ComponentType<{ team?: PrematchTeam; player: PrematchPlayer; profile?: PlayerProfileSummary; isProfileLoading: boolean; statsScope: PlayerStatsScope; now: number; onBack: () => void; backLabel?: string }>;
-
-function ScopeSwitch({ scope, onChange }: { scope: PlayerStatsScope; onChange: (scope: PlayerStatsScope) => void }) {
-  return <div className="stats-scope-toggle" aria-label="Lookup stats time window">
-    <button type="button" aria-pressed={scope === 'currentSeason'} className={scope === 'currentSeason' ? 'active' : ''} onClick={() => onChange('currentSeason')}>Season</button>
-    <button type="button" aria-pressed={scope === 'allTime'} className={scope === 'allTime' ? 'active' : ''} onClick={() => onChange('allTime')}>All-time</button>
-  </div>;
-}
 
 function useProfiles(players: PrematchPlayer[], scope: PlayerStatsScope) {
   const [profiles, setProfiles] = useState<Profiles>({});
@@ -46,12 +39,11 @@ function useProfiles(players: PrematchPlayer[], scope: PlayerStatsScope) {
 
 const EMPTY_PLAYERS: PrematchPlayer[] = [];
 
-export function HistoryView({ Draft }: { Draft: DraftView }) {
+export function HistoryView({ Scene, scene, scope, navigation }: { Scene: HistoryScene; scene: 'lobby' | 'draft' | 'umas'; scope: PlayerStatsScope; navigation: number }) {
   const [input, setInput] = useState('');
   const [match, setMatch] = useState<HistoricalMatch>();
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [scope, setScope] = useState<PlayerStatsScope>('currentSeason');
   const request = useRef<AbortController | undefined>(undefined);
   const { profiles, loading: profilesLoading, error: profileError, retry } = useProfiles(match?.roster.players ?? EMPTY_PLAYERS, scope);
   useEffect(() => () => request.current?.abort(), []);
@@ -79,23 +71,22 @@ export function HistoryView({ Draft }: { Draft: DraftView }) {
       <div className="explorer-context"><div><h2>Historical match · {match.matchCode}</h2>
         <p>Completed draft · <a href={`https://drafter.uma.guide/matches/${match.matchCode}`} target="_blank" rel="noreferrer">Open match on Uma Drafter</a></p>
         <p>Player statistics are current, not snapshots from the date of this match.</p></div>
-        <ScopeSwitch scope={scope} onChange={setScope} /></div>
+        </div>
       {match.warnings.map(warning => <p role="status" key={warning}>{warning}</p>)}
       {profilesLoading && <p role="status">Loading current player stats… The completed draft is ready.</p>}
       {profileError && <p className="explorer-error" role="status">{profileError} <button type="button" disabled={profilesLoading} onClick={retry}>Retry stats</button></p>}
-      <Draft key={match.matchCode} snapshot={match.draft} roster={match.roster} profiles={profiles} statsScope={scope} historical />
+      <Scene key={match.matchCode} snapshot={match.draft} roster={match.roster} profiles={profiles} statsScope={scope} scene={scene} loading={profilesLoading} navigation={navigation} />
     </>}
   </section>;
 }
 
-export function ProfilesView({ Detail }: { Detail: DetailView }) {
+export function ProfilesView({ Detail, scope }: { Detail: DetailView; scope: PlayerStatsScope }) {
   const [input, setInput] = useState('');
   const [submitted, setSubmitted] = useState('');
   const [results, setResults] = useState<PlayerSearchResult>();
   const [selected, setSelected] = useState<PrematchPlayer>();
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [scope, setScope] = useState<PlayerStatsScope>('currentSeason');
   const request = useRef<AbortController | undefined>(undefined);
   const { profiles, loading: profileLoading, error: profileError, retry } = useProfiles(selected ? [selected] : EMPTY_PLAYERS, scope);
   useEffect(() => () => request.current?.abort(), []);
@@ -133,7 +124,7 @@ export function ProfilesView({ Detail }: { Detail: DetailView }) {
       </nav>}
     </>}
     {selected && <>
-      <div className="explorer-context"><p>Current player stats</p><ScopeSwitch scope={scope} onChange={setScope} /></div>
+      <div className="explorer-context"><p>Current player stats</p></div>
       {profileLoading && <p role="status">Loading player details…</p>}
       {profileError && <p className="explorer-error" role="status">{profileError} <button type="button" disabled={profileLoading} onClick={retry}>Retry stats</button></p>}
       <Detail player={selected} profile={profiles[selected.discordId]} isProfileLoading={profileLoading} statsScope={scope} now={Date.now()} backLabel="Back to search" onBack={() => setSelected(undefined)} />

@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.4.0 Open Beta
 
 - Add Live / History / Profiles navigation while preserving the live lobby independently.
 - Load a completed draft by match code or match URL using the same draft layout, including final picks, bans, vetoed maps and the tiebreaker.
@@ -8,7 +8,10 @@
 - Share API pacing and profile caches with live scouting; cancel replaced lookups and preserve available stats through partial failures.
 - Keep community private-profile protections in lookup. Historical match selections are labeled separately from current player statistics.
 
-These changes do not replace the published 0.3.9 packages yet.
+- Keep navigation and header sizing stable across Live, History and Profiles.
+- Add Lobby / Draft / Umas scenes to completed matches, including player details.
+- Match picked-Uma portraits and shared button styles across modes.
+- Keep the Uma catalog internally scrollable and restore Lobby navigation from History player details.
 
 ## 0.3.9 Open Beta — changes since 0.3.5
 
