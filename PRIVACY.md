@@ -2,6 +2,8 @@
 
 Updated for 0.3.5.
 
+Development update: History requests a public completed match by the code you submit. Profiles searches the public player directory using the name you submit, or looks up the exact ID from your input/profile URL. These requests omit browser credentials and use the same API pacing and cache as live scouting. Match and search selections remain in window memory, separate from the live roster; fetched profile summaries may enter the existing bounded profile archive.
+
 UmaLytics is a browser extension for Uma Drafter. It observes room/team membership and confirmed draft state on drafter.uma.guide, then requests available player profiles, ranked statistics, seasons and leaderboard information from drafter-api.uma.guide. Requests contain the player identifiers required by those endpoints. API fetches omit browser credentials. Refer to Uma Drafter for its own service practices.
 
 The public source does not retrieve player match history or reconstruct private ranked statistics. Public identity, rank or rating can be displayed independently of hidden detailed statistics.

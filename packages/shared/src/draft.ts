@@ -1,7 +1,7 @@
 import type { MatchCode } from './match';
 import type { TeamId } from './prematch';
 
-export type DraftSnapshotSource = 'synced-draft-state' | 'draft-dom';
+export type DraftSnapshotSource = 'synced-draft-state' | 'draft-dom' | 'match-history';
 
 export type DraftUmaActionKind = 'pick' | 'ban' | 'veto';
 

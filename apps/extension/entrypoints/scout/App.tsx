@@ -1,3 +1,4 @@
+import { HistoryView, ProfilesView } from './ExplorerViews';
 import { latestStatsCheckAt, getRefreshCooldownMs } from '../../utils/profileTiming';
 import { missingUmaHistoryLabel } from '../../utils/profileAvailability';
 import { getTeamGroups, normalizeRosterForDisplay } from '../../utils/rosterDisplay';
@@ -137,6 +138,11 @@ const RELEASE_VARIANT_BY_OUTFIT_ID = new Map(
 );
 
 export default function App() {
+  const [mode, setMode] = useState<'live' | 'history' | 'profiles'>('live');
+  const [historyScene, setHistoryScene] = useState<AppScene>('draft');
+  const [historyNavigation, setHistoryNavigation] = useState(0);
+  const [historyScope, setHistoryScope] = useState<PlayerStatsScope>('currentSeason');
+  const [lookupScope, setLookupScope] = useState<PlayerStatsScope>('currentSeason');
   const [roster, setRoster] = useState<PrematchRoster | undefined>();
   const [draftSnapshot, setDraftSnapshot] = useState<DraftSnapshot | undefined>();
   const [storedProfileSnapshot, setProfileSnapshot] = useState<PlayerProfileSummariesSnapshot | undefined>();
@@ -345,8 +351,12 @@ export default function App() {
     }).catch(caught => console.warn('[UmaLytics] Unable to read diagnostics:', caught));
   };
 
+  const visibleScene = mode === 'history' ? historyScene : activeScene;
+  const visibleScope = mode === 'live' ? statsScope : mode === 'history' ? historyScope : lookupScope;
+  const changeScope = mode === 'live' ? selectStatsScope : mode === 'history' ? setHistoryScope : setLookupScope;
   return (
-    <main className={`app-shell surface-scout scene-${activeScene}`}>
+    <main className="app-shell surface-scout">
+
       <header className="app-header">
         <div>
           <div className="app-title-row">
@@ -375,44 +385,13 @@ export default function App() {
               Terumi
             </a>
           </p>
-          <p>{displayedRoster?.matchCode === undefined ? 'Lobby scouting' : `Match ${displayedRoster.matchCode}`}</p>
-          {profileStatusLabel === undefined ? null : (
-            <p className="profile-freshness">{profileStatusLabel}</p>
-          )}
-          <div className="scene-toggle" aria-label="UmaLytics scene">
-            <button
-              type="button"
-              className={activeScene === 'lobby' ? 'active' : ''}
-              onClick={() => {
-                setSelectedPlayerKey(undefined);
-                setActiveScene('lobby');
-              }}
-            >
-              Lobby
-            </button>
-            <button
-              type="button"
-              className={activeScene === 'draft' ? 'active' : ''}
-              onClick={() => {
-                setSelectedPlayerKey(undefined);
-                setActiveScene('draft');
-              }}
-            >
-              Draft
-            </button>
-            <button
-              type="button"
-              className={activeScene === 'umas' ? 'active' : ''}
-              onClick={() => {
-                setSelectedPlayerKey(undefined);
-                setActiveScene('umas');
-              }}
-            >
-              Umas
-            </button>
+          <div className="header-context">
+            <p>{mode === 'live' ? (displayedRoster?.matchCode === undefined ? 'Lobby scouting' : `Match ${displayedRoster.matchCode}`) : mode === 'history' ? 'Completed match scouting' : 'Single player lookup'}</p>
+            <p className="profile-freshness">{mode === 'live' ? (profileStatusLabel ?? 'Waiting for lobby data') : 'Player statistics reflect the selected time window'}</p>
           </div>
         </div>
         <div className="header-actions">
+          <div className="live-header-controls" style={{ visibility: mode === 'live' ? 'visible' : 'hidden' }} aria-hidden={mode !== 'live'} inert={mode !== 'live'}>
           <div className="header-control-row">
             {hasRoster ? (
               <button
@@ -448,31 +427,43 @@ export default function App() {
               </button>
             </div>
           ) : null}
+          </div>
           <div className="stats-scope-toggle" aria-label="Stats time window">
             <button
               type="button"
-              className={statsScope === 'currentSeason' ? 'active' : ''}
+              aria-pressed={visibleScope === 'currentSeason'} className={visibleScope === 'currentSeason' ? 'active' : ''}
               title="Show current season records, scoring, and Uma stats."
               onClick={() => {
-                selectStatsScope('currentSeason');
+                changeScope('currentSeason');
               }}
             >
               Season
             </button>
             <button
               type="button"
-              className={statsScope === 'allTime' ? 'active' : ''}
+              aria-pressed={visibleScope === 'allTime'} className={visibleScope === 'allTime' ? 'active' : ''}
               title="Show all-time ranked records, scoring, and Uma stats. Rank still uses the active season leaderboard."
               onClick={() => {
-                selectStatsScope('allTime');
+                changeScope('allTime');
               }}
             >
               All-time
             </button>
           </div>
         </div>
+        <nav className="app-navigation" aria-label="Scout navigation">
+          <div className="scene-toggle mode-toggle" aria-label="UmaLytics mode">
+            {(['live', 'history', 'profiles'] as const).map(value => <button key={value} type="button" aria-pressed={mode === value} className={mode === value ? 'active' : ''} onClick={() => setMode(value)}>{value === 'live' ? 'Live' : value === 'history' ? 'History' : 'Profiles'}</button>)}
+          </div>
+          <div className="scene-toggle subscene-toggle" aria-label="UmaLytics scene" style={{ visibility: mode === 'profiles' ? 'hidden' : 'visible' }} aria-hidden={mode === 'profiles'} inert={mode === 'profiles'}>
+            {(['lobby', 'draft', 'umas'] as const).map(scene => <button key={scene} type="button" aria-pressed={visibleScene === scene} className={visibleScene === scene ? 'active' : ''} onClick={() => { if (mode === 'history') { setHistoryScene(scene); setHistoryNavigation(value => value + 1); } else { setSelectedPlayerKey(undefined); setActiveScene(scene); } }}>{scene === 'lobby' ? 'Lobby' : scene === 'draft' ? 'Draft' : 'Umas'}</button>)}
+          </div>
+        </nav>
       </header>
 
+      <div hidden={mode !== 'history'}><HistoryView Scene={HistoricalScene} scene={historyScene} scope={historyScope} navigation={historyNavigation} /></div>
+      <div hidden={mode !== 'profiles'}><ProfilesView Detail={PlayerDetailScene} scope={lookupScope} /></div>
+      <div hidden={mode !== 'live'}>
       {retryAt > 0 && (
         <p className="api-retry-notice" role="status">
           {retrySeconds > 0 ? `Stats API paused. Automatic retry in approximately ${retrySeconds}s.` : 'Waiting for the browser to resume profile requests.'}
@@ -524,16 +515,33 @@ export default function App() {
           ))}
         </section>
       )}
+      </div>
     </main>
   );
+}
+
+function HistoricalScene({ snapshot, roster, profiles, statsScope, scene, loading, navigation }: {
+  snapshot: DraftSnapshot; roster: PrematchRoster; profiles: Record<string, PlayerProfileSummary>;
+  statsScope: PlayerStatsScope; scene: AppScene; loading: boolean; navigation: number;
+}) {
+  const [selected, setSelected] = useState<string>();
+  useEffect(() => setSelected(undefined), [scene, navigation]);
+  const teams = getTeamGroups(roster);
+  const context = getSelectedPlayerContext(teams, selected);
+  if (context && scene === 'lobby') return <PlayerDetailScene team={context.team} player={context.player} profile={profiles[context.player.discordId]} isProfileLoading={loading && !profiles[context.player.discordId]} statsScope={statsScope} now={Date.now()} onBack={() => setSelected(undefined)} />;
+  if (scene === 'draft') return <DraftScene snapshot={snapshot} roster={roster} profiles={profiles} statsScope={statsScope} historical />;
+  if (scene === 'umas') return <UmaPlannerScene roster={roster} profiles={profiles} statsScope={statsScope} />;
+  return <section className="team-list" aria-label="Historical lobby teams">{teams.map(team => <TeamSection key={team.id} team={team} profiles={profiles} loadingDiscordIds={loading ? roster.players.filter(player => !profiles[player.discordId]).map(player => player.discordId) : []} statsScope={statsScope} onSelectPlayer={setSelected} />)}</section>;
 }
 
 function DraftScene({
   snapshot,
   roster,
   profiles,
-  statsScope
+  statsScope,
+  historical = false
 }: {
+  historical?: boolean;
   snapshot: DraftSnapshot | undefined;
   roster: PrematchRoster | undefined;
   profiles: Record<string, PlayerProfileSummary>;
@@ -551,10 +559,10 @@ function DraftScene({
   }
 
   return (
-    <section className="draft-scene" aria-label="Live draft view">
+    <section className="draft-scene" aria-label={historical ? 'Completed draft view' : 'Live draft view'}>
       <header className="draft-scene-header">
         <div>
-          <h2>Live Draft</h2>
+          <h2>{historical ? 'Completed Draft' : 'Live Draft'}</h2>
           <p>
             {snapshot.phase === undefined ? 'Draft phase unknown' : formatDraftPhase(snapshot.phase)}
             {snapshot.currentTeam === undefined ? '' : ` - ${formatTeamName(snapshot.teams[snapshot.currentTeam])} turn`}
@@ -566,7 +574,7 @@ function DraftScene({
           )}
         </div>
         <span title={`Uma experience checks each team's loaded ${scopeLabel} ranked Uma history.`}>
-          Using team {formatStatsScopeShortLabel(statsScope)} history
+          {historical ? 'Current team' : 'Using team'} {formatStatsScopeShortLabel(statsScope)} history
         </span>
       </header>
 
@@ -1306,7 +1314,8 @@ function DraftPickSlot({
   isSelected: boolean;
   onSelect: () => void;
 }) {
-  const imageUrl = action.imageUrl ?? (action.umaId === undefined ? undefined : getUmaPortraitUrl(action.umaId));
+  const imageUrl = (action.umaId !== undefined && isKnownUmaOutfitId(action.umaId)
+    ? getUmaPortraitUrl(action.umaId) : undefined) ?? action.imageUrl;
 
   return (
     <li className="draft-pick-slot">
@@ -1615,9 +1624,11 @@ function PlayerDetailScene({
   isProfileLoading,
   statsScope,
   now,
-  onBack
+  onBack,
+  backLabel = 'Back to lobby'
 }: {
-  team: PrematchTeam;
+  team?: PrematchTeam;
+  backLabel?: string;
   player: PrematchPlayer;
   profile?: PlayerProfileSummary;
   isProfileLoading: boolean;
@@ -1632,17 +1643,17 @@ function PlayerDetailScene({
   const note = getPlayerNote(profile, discordId);
   const statsMessage = getStatsMessage(displayedProfile, profile, isProfileLoading, discordId);
   const notableBadges = getNotableBadges(displayedProfile);
-  const partyVisual = getPlayerPartyVisual(player, getTeamPartyVisuals(team.players));
+  const partyVisual = getPlayerPartyVisual(player, getTeamPartyVisuals(team?.players ?? []));
   const isCaptain = player.isCaptain === true || player.role === 'captain';
 
   return (
     <section className="player-detail-scene" aria-label={`${player.displayName} scouting details`}>
       <header className="detail-header">
         <button type="button" className="back-button" onClick={onBack}>
-          Back to lobby
+          {backLabel}
         </button>
         <div className="detail-title">
-          <span>{team.name ?? team.id}</span>
+          <span>{team ? team.name ?? team.id : 'Player profile'}</span>
           {profileUrl === undefined ? (
             <h2>{profile?.displayName ?? player.displayName}</h2>
           ) : (
