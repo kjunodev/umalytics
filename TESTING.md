@@ -2,7 +2,7 @@
 
 ## History and profile lookup release checks
 
-The updated public suite passes 103 tests, including a transport test file with 14 internal checks. New cases cover code/URL validation, exact-ID lookup, duplicate names, directory pagination, completed-match mapping, unsupported saved formats, cancellation, cache scope, privacy changes and partial API failures. The completed-match fixture is a reduced public response for TG7YT2, retaining only the data needed to test the adapter.
+The updated public suite passes 104 tests, including a transport test file with 14 internal checks. New cases cover code/URL validation, exact-ID lookup, duplicate names, directory pagination, completed-match mapping, unsupported saved formats, cancellation, cache scope, privacy changes and partial API failures. The completed-match fixture is a reduced public response for TG7YT2, retaining only the data needed to test the adapter.
 
 Shared and extension TypeScript checks and production Chromium/Firefox builds pass. Public bundle verification continues to require the player-history endpoint to be absent. These local results do not claim a CI run.
 
@@ -30,4 +30,4 @@ The five tests in tests/explorer-scenes.test.mjs cover historical scene routing,
 
 ### Release publication checks
 
-Ten release tests cover public-only assets, draft-before-publish ordering, upload failures, API failures, mismatched existing tags/drafts, and incomplete published assets. The main-only release workflow reruns tests, types and public builds before attaching Chromium/Firefox ZIPs and SHA256SUMS.txt. Existing published versions are not overwritten.
+Eleven release tests cover public-only assets, draft-before-publish ordering, upload failures, API failures, mismatched existing tags/drafts, and incomplete published assets. The main-only release workflow reruns tests, types and public builds before attaching Chromium/Firefox ZIPs and SHA256SUMS.txt. Existing published versions are not overwritten.
