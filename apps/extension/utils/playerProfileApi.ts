@@ -492,7 +492,7 @@ function buildEmptyStatsSummary(
   };
 }
 
-async function fetchJson<T>(path: string, signal?: AbortSignal): Promise<T> {
+export async function fetchJson<T>(path: string, signal?: AbortSignal): Promise<T> {
   signal?.throwIfAborted();
   const cached = responseCache.get(path);
   if (cached !== undefined && cached.expiresAt > Date.now()) { recordDiagnostic({ kind: 'cache', reason: 'hit' }); return cached.value as T; }

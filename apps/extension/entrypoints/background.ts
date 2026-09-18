@@ -1,4 +1,5 @@
 import { recordDiagnostic, getDiagnosticTrace } from '../utils/diagnosticRecorder';
+import { registerExplorerService } from '../utils/explorerService';
 import { normalizeRosterForDisplay } from '../utils/rosterDisplay';
 import { browser } from 'wxt/browser';
 import type { ScriptPublicPath } from 'wxt/utils/inject-script';
@@ -72,6 +73,7 @@ let recoveryWrites = Promise.resolve();
 let initialization = Promise.resolve();
 
 export default defineBackground(() => {
+  registerExplorerService(() => initialization);
   initialization = Promise.all([restoreManualRefresh(), restoreProfileRecovery(), browser.storage.local.get('statsScope').then(values => {
     selectedStatsScope = values.statsScope === 'allTime' ? 'allTime' : 'currentSeason';
   })]).then(() => {});

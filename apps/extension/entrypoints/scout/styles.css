@@ -2,6 +2,8 @@
   box-sizing: border-box;
 }
 
+html { scrollbar-gutter: stable; }
+
 body {
   background: #080d18;
   margin: 0;
@@ -834,6 +836,7 @@ body {
 }
 
 .uma-planner-scene {
+  height: max(560px, calc(100dvh - 244px));
   display: grid;
   grid-template-rows: minmax(0, 1fr);
   min-height: 0;
@@ -3320,6 +3323,8 @@ a.player-name:hover {
 }
 
 @media (max-width: 700px) {
+  .uma-planner-scene { height: auto; overflow: visible; }
+  .uma-catalog-panel { height: 620px; }
   .app-shell {
     padding: 14px;
   }
@@ -3428,3 +3433,39 @@ a.player-name:hover {
 .player-row .compact-scouting-grid .stat-cell { min-width: 0; }
 .player-row .compact-scouting-grid .stat-cell strong { white-space: normal; overflow-wrap: anywhere; }
 .api-retry-notice { margin: 0; padding: 10px 14px; color: #fbbf24; overflow-wrap: anywhere; }
+:root [hidden] { display: none !important; }
+.mode-toggle { margin-bottom: 0; }
+.explorer-view { display: grid; gap: 16px; }
+.explorer-search { display: grid; gap: 8px; padding: 18px; border: 1px solid #29384c; border-radius: 12px; background: #101826; }
+.explorer-search label { font-weight: 650; }
+.explorer-input-row { display: flex; gap: 10px; }
+.explorer-input-row input { min-width: 0; flex: 1; color: #e2e8f0; background: #080e19; border: 1px solid #41536c; border-radius: 7px; padding: 11px 12px; font: inherit; }
+:is(.explorer-search, .explorer-results, .explorer-pagination, .explorer-error) button { cursor: pointer; color: #dbeafe; background: #1e2c40; border: 1px solid #3a4e68; border-radius: 7px; padding: 9px 13px; font: inherit; }
+.explorer-view button:disabled { cursor: default; opacity: .5; }
+.explorer-view button:focus-visible, .explorer-view input:focus-visible, .mode-toggle button:focus-visible { outline: 2px solid #65d8ff; outline-offset: 3px; }
+.explorer-context { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+.explorer-context p { color: #9baec7; margin: 6px 0; }
+.explorer-context a { color: #65d8ff; }
+.explorer-view .stats-scope-toggle button[aria-pressed="true"] { background: #284563; border-color: #65d8ff; }
+.explorer-error { color: #ffca75; }
+.explorer-error button { margin-left: 8px; }
+.explorer-results { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
+.explorer-results button { display: flex; align-items: center; justify-content: space-between; gap: 16px; width: 100%; text-align: left; }
+.explorer-results span { color: #9baec7; overflow-wrap: anywhere; }
+.explorer-pagination { display: flex; align-items: center; justify-content: center; gap: 16px; }
+@media (max-width: 600px) { .explorer-input-row, .explorer-context { flex-direction: column; align-items: stretch; } .explorer-results button { flex-wrap: wrap; } }
+
+/* Shared header slots keep navigation and scope controls stationary in every mode. */
+.app-header { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px 20px; align-items: start; }
+.header-context { height: 40px; overflow: hidden; }
+.header-context p { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.live-header-controls { height: 56px; display: grid; gap: 6px; justify-items: end; }
+.app-navigation { grid-column: 1 / -1; display: grid; justify-items: start; gap: 8px; }
+.app-navigation .scene-toggle { width: 258px; max-width: 100%; margin: 0; }
+.app-navigation .subscene-toggle { width: 222px; }
+.app-header .header-actions { justify-items: end; }
+@media (max-width: 480px) {
+  .app-header { grid-template-columns: minmax(0, 1fr); }
+  .app-header .header-actions { position: static; grid-row: 3; display: flex; justify-content: space-between; width: 100%; }
+  .live-header-controls { display: flex; align-items: center; height: 28px; }
+}
