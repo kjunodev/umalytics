@@ -23,6 +23,7 @@ function run({privateBuild=false, existing, uploadFails=false, listFails=false, 
         if(uploaded) return JSON.stringify([{tag_name:'v0.4.0-open-beta.1',draft:true,target_commitish:sha,assets:['umalytics-chromium-0.4.0-open-beta.1.zip','umalytics-firefox-0.4.0-open-beta.1.zip','SHA256SUMS.txt'].map(name=>({name,size:3}))}]);
         return JSON.stringify(existing?[existing]:[]);
       }
+      if(args[1]==='download') {files.set(path.join(args[args.indexOf('--dir')+1],args[args.indexOf('--pattern')+1]),'ORIGINAL_PUBLISHED_ZIP');return '';}
       if(args[1]==='upload'){if(uploadFails)throw Error('Upload failed');uploaded=true;}return '';}};
   let error;try{vm.runInNewContext(source,context);}catch(e){error=e;}
   return {calls,error,sha,files};
@@ -42,3 +43,11 @@ test('release rejects an existing tag pointing at another commit',()=>{const r=r
 test('release rejects incomplete assets on a published rerun',()=>{const r=run({existing:{tag_name:'v0.4.0-open-beta.1',draft:false,assets:[]}});assert.match(r.error.message,/asset set/);assert(!r.calls.some(c=>c[1]==='release'));});
 test('release refuses a build from a different checkout commit',()=>{const r=run({wrongSource:true});assert.match(r.error.message,/source commit mismatch/);assert.equal(r.calls.length,0);});
 test('release refuses an existing tag with a different package version',()=>{const r=run({wrongVersion:true});assert.match(r.error.message,/source version mismatch/);assert.equal(r.calls.length,0);});
+test('release adds checksums to older published ZIPs without overwriting them',()=>{
+  const r=run({existing:{tag_name:'v0.4.0-open-beta.1',draft:false,assets:['umalytics-chromium-0.4.0-open-beta.1.zip','umalytics-firefox-0.4.0-open-beta.1.zip'].map(name=>({name,size:3}))}});
+  assert.equal(r.error,undefined); const uploads=r.calls.filter(c=>c[2]==='upload');assert.equal(uploads.length,1);
+  assert(uploads[0][4].endsWith('SHA256SUMS.txt'));assert(!uploads[0].includes('--clobber'));
+  assert(!r.calls.some(c=>c[2]==='edit'||c[2]==='create'));
+  const checksum=r.files.get(path.join(root,'.releases/assets/published/SHA256SUMS.txt'));
+  assert(checksum.includes(createHash('sha256').update('ORIGINAL_PUBLISHED_ZIP').digest('hex')));
+});

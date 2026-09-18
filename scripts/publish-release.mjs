@@ -53,6 +53,17 @@ const verifyAssets=release=>{
 const existing=JSON.parse(gh('api',`repos/${repo}/releases?per_page=100`)).find(r=>r.tag_name===tag);
 if(existing && !existing.draft) {
   if(!ref) throw Error('Published release tag is missing');
+  const zipNames=assets.filter(file=>file.endsWith('.zip')).map(file=>path.basename(file));
+  if(existing.assets?.length===2 && zipNames.every(name=>existing.assets.some(asset=>asset.name===name && asset.size>0))) {
+    // Older published releases have only the browser ZIPs. Hash those exact downloads;
+    // never replace their archives or generate checksums from a newly rebuilt ZIP.
+    const downloaded=path.join(output,'published');fs.mkdirSync(downloaded,{recursive:true});
+    for(const name of zipNames) gh('release','download',tag,'--repo',repo,'--pattern',name,'--dir',downloaded);
+    const publishedSums=path.join(downloaded,'SHA256SUMS.txt');
+    fs.writeFileSync(publishedSums,zipNames.map(name=>`${createHash('sha256').update(fs.readFileSync(path.join(downloaded,name))).digest('hex')}  ${name}`).join('\n')+'\n');
+    gh('release','upload',tag,publishedSums,'--repo',repo);
+    existing.assets.push({name:'SHA256SUMS.txt',size:fs.readFileSync(publishedSums).length});
+  }
   verifyAssets(existing);
   console.log(`Release already published: ${existing.html_url}`);
 } else {
