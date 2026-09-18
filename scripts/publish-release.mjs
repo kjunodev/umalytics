@@ -7,10 +7,12 @@ import {fileURLToPath} from 'node:url';
 const root=fileURLToPath(new URL('../',import.meta.url));
 const version=JSON.parse(fs.readFileSync(path.join(root,'package.json'))).version;
 if(!/^\d+\.\d+\.\d+$/.test(version)) throw Error('Invalid release version');
+if(process.env.RELEASE_VERSION && process.env.RELEASE_VERSION!==version) throw Error('Release source version mismatch');
 const repo=process.env.GITHUB_REPOSITORY;
 if(!['skimuic/UmaLytics','kjunodev/umalytics'].includes(repo)) throw Error('Unexpected release repository');
-const sha=process.env.GITHUB_SHA;
+const sha=process.env.RELEASE_SOURCE_SHA ?? process.env.GITHUB_SHA;
 if(!/^[a-f0-9]{40}$/.test(sha??'')) throw Error('Missing exact release commit');
+if(execFileSync('git',['rev-parse','HEAD'],{cwd:root,encoding:'utf8'}).trim()!==sha) throw Error('Release source commit mismatch');
 const tag=`v${version}-open-beta.1`;
 const notes=path.join(root,`RELEASE-${version}.md`);
 if(!fs.existsSync(notes)) throw Error('Release notes are required');
@@ -57,7 +59,10 @@ if(existing && !existing.draft) {
   if(existing && existing.target_commitish!==sha) throw Error('Existing draft belongs to a different commit');
   if(!existing) gh('release','create',tag,'--repo',repo,'--target',sha,'--title',`UmaLytics ${version} Open Beta`,'--notes-file',notes,'--draft','--prerelease');
   gh('release','upload',tag,...assets,'--repo',repo,'--clobber');
-  verifyAssets(JSON.parse(gh('api',`repos/${repo}/releases/tags/${tag}`)));
+  // GitHub's by-tag endpoint can return 404 for drafts; the authenticated list includes them.
+  const uploaded=JSON.parse(gh('api',`repos/${repo}/releases?per_page=100`)).find(r=>r.tag_name===tag);
+  if(!uploaded?.draft || uploaded.target_commitish!==sha) throw Error('Draft target verification failed');
+  verifyAssets(uploaded);
   gh('release','edit',tag,'--repo',repo,'--draft=false','--prerelease','--latest=false');
   console.log(`Published https://github.com/${repo}/releases/tag/${tag}`);
 }
