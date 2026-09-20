@@ -290,6 +290,8 @@ async function fetchPlayerProfileSummary(
     ? buildEmptyStatsSummary()
     : buildProfileStatsSummary(currentSeasonStats, umaMetadata);
   const displayedStats = scope === 'allTime' ? allTimeStatsSummary : currentSeasonStatsSummary;
+  allTimeStatsSummary.recentHistoryStatus = allTimeStatsPrivate ? 'private' : 'unavailable';
+  currentSeasonStatsSummary.recentHistoryStatus = currentSeasonStatsPrivate ? 'private' : 'unavailable';
   const fallbackRecord = getRecordFromUmaEntries(
     currentSeasonStats?.umaEntries
   );

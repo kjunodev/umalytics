@@ -3,6 +3,7 @@ import type { PlayerProfileSummary, PrematchPlayer } from '@umalytics/shared';
 import { fetchJson, fetchPlayerProfileSummaries, getApiCooldown } from './playerProfileApi';
 import { getCachedPlayerProfiles, rememberCachedPlayerProfiles } from './profileStorage';
 import { BEST_UMA_SCORE_VERSION, PROFILE_CACHE_TTL_MS, RECENT_HISTORY_VERSION } from './profileConstants';
+import { hasCurrentHistoryState } from './profileMerge';
 import { lookupPlayer, parseHistoricalMatch, parseHistoryInput, parsePlayerInput, parsePlayerSearch } from './explorerData';
 import { EXPLORER_PORT, type ExplorerRequest, type ExplorerReply, type ExplorerResult } from './explorerTypes';
 
@@ -44,6 +45,7 @@ export async function executeExplorerRequest(request: ExplorerRequest, signal: A
   const pending = request.players.filter(player => {
     const cached = archive[player.discordId];
     if (cached && !cached.error && !cached.isPartial && cached.statsScope === request.scope &&
+      hasCurrentHistoryState(cached, request.scope) &&
       cached.bestUmaScoreVersion === BEST_UMA_SCORE_VERSION && cached.recentHistoryVersion === RECENT_HISTORY_VERSION &&
       Date.now() - cached.fetchedAt < PROFILE_CACHE_TTL_MS) {
       profiles[player.discordId] = cached;

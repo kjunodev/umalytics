@@ -1,4 +1,5 @@
 import { HistoryView, ProfilesView } from './ExplorerViews';
+import { recentHistoryEmptyMessage } from '../../utils/profileMerge';
 import { latestStatsCheckAt, getRefreshCooldownMs } from '../../utils/profileTiming';
 import { missingUmaHistoryLabel } from '../../utils/profileAvailability';
 import { getTeamGroups, normalizeRosterForDisplay } from '../../utils/rosterDisplay';
@@ -1732,7 +1733,7 @@ function PlayerDetailScene({
           <RecentMatchesList
             recentMatches={displayedProfile?.recentMatches}
             playerName={player.displayName}
-            emptyMessage={statsMessage}
+            emptyMessage={recentHistoryEmptyMessage(displayedProfile)}
           />
         </div>
         <div className="detail-card detail-full">
@@ -2305,7 +2306,7 @@ function getDisplayedProfileStats(
     ...profile,
     ...stats,
     statsScope,
-    ...(profile.scopeFetchedAt && profile.scopeFetchedAt[statsScope] === undefined ? { matches: null, wins: null, losses: null, winRate: null, points: null, pointsPerGame: null, mvpMatches: null, allUmas: [], bestUmas: [], topUmas: [], recentMatches: [] } : {})
+    ...(profile.scopeFetchedAt && profile.scopeFetchedAt[statsScope] === undefined ? { matches: null, wins: null, losses: null, winRate: null, points: null, pointsPerGame: null, mvpMatches: null, allUmas: [], bestUmas: [], topUmas: [], recentMatches: [], recentHistoryStatus: 'unavailable' as const } : {})
   };
 }
 

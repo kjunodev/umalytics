@@ -11,8 +11,8 @@ export default defineConfig({
       gecko: { id: privateProfileDataBuild ? 'umalytics-private@kjunodev' : 'umalytics@kjunodev' }
     },
     name: privateProfileDataBuild ? 'UmaLytics Private' : 'UmaLytics',
-    version: '0.4.0',
-    version_name: privateProfileDataBuild ? '0.4.0-private.rc.1' : '0.4.0-public.open-beta.1',
+    version: '0.4.1',
+    version_name: privateProfileDataBuild ? '0.4.1-private.rc.1' : '0.4.1-public.open-beta.1',
     description: privateProfileDataBuild
       ? 'Private prematch scouting companion for Uma Drafter.'
       : 'Prematch scouting companion for Uma Drafter.',

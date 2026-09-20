@@ -42,6 +42,7 @@ export interface PlayerRecentFormSummary {
 export type PlayerStatsScope = 'currentSeason' | 'allTime';
 
 export interface PlayerProfileStatsSummary {
+  recentHistoryStatus?: 'loading' | 'loaded' | 'unavailable' | 'private';
   wins?: number | null;
   losses?: number | null;
   winRate?: number | null;
@@ -62,6 +63,7 @@ export interface PlayerProfileStatsSummary {
 }
 
 export interface PlayerProfileSummary {
+  recentHistoryStatus?: PlayerProfileStatsSummary['recentHistoryStatus'];
   /** Initial usable data, while remaining endpoints are still loading. */
   isPartial?: boolean;
   scopeFetchedAt?: Partial<Record<PlayerStatsScope, number>>;

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.1
+
+- Correct Recent Matches status in player Details: unavailable or private history is no longer described as a successful empty result.
+- Preserve already-loaded scoped profile data when switching Season / All-time and during partial refreshes or request failures.
+- Clear stale history after a confirmed privacy denial and prevent history from leaking between players or seasons.
+- Keep public private-profile protections unchanged; this release does not add history retrieval or hidden-stat reconstruction to community builds.
+- Publish downloadable browser releases on skimuic/UmaLytics; kjunodev/umalytics mirrors the same source without publishing releases.
+
 ## 0.4.0 Open Beta
 
 - Add Live / History / Profiles navigation while preserving the live lobby independently.

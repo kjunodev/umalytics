@@ -14,6 +14,7 @@ function context(globals = {}) {
     defineBackground: () => {}, defineContentScript: () => {}, recordDiagnostic: () => {}, sendDiagnosticEvent: async () => {}, getLatestDraftSnapshot: async () => undefined, clearLatestDraftSnapshot: async () => {}, ...globals});
 }
 function evaluate(c, file, options = {}) {
+  if (file === 'utils/profileCache.ts') evaluate(c, 'utils/profileMerge.ts');
   if (file === 'entrypoints/pageHook.ts') evaluate(c,'utils/pageHookRuntime.ts');
   if (file === 'entrypoints/content.ts') { evaluate(c,'utils/roomEvents.ts'); evaluate(c,'utils/rosterIdentity.ts'); }
   let source = options.source ?? read(file);

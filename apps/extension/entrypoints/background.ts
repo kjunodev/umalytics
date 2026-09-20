@@ -1,4 +1,5 @@
 import { recordDiagnostic, getDiagnosticTrace } from '../utils/diagnosticRecorder';
+import { hasCurrentHistoryState, mergeProfileScopes } from '../utils/profileMerge';
 import { registerExplorerService } from '../utils/explorerService';
 import { normalizeRosterForDisplay } from '../utils/rosterDisplay';
 import { browser } from 'wxt/browser';
@@ -633,12 +634,6 @@ function retainUsableProfile(previous: PlayerProfileSummary | undefined, next: P
   return mergeProfileScopes(previous, next);
 }
 
-function mergeProfileScopes(previous: PlayerProfileSummary | undefined, next: PlayerProfileSummary): PlayerProfileSummary {
-  if (!previous || !next.scopeFetchedAt || next.statsPrivate) return next;
-  return { ...next, scopeFetchedAt: { ...previous.scopeFetchedAt, ...next.scopeFetchedAt },
-    currentSeasonStats: next.scopeFetchedAt.currentSeason ? next.currentSeasonStats : previous.currentSeasonStats ?? next.currentSeasonStats,
-    allTimeStats: next.scopeFetchedAt.allTime ? next.allTimeStats : previous.allTimeStats ?? next.allTimeStats };
-}
 
 function buildProfileLoadStates(
   profiles: Record<string, PlayerProfileSummary>,
@@ -771,6 +766,7 @@ function getFreshProfiles(
           profile.isPartial !== true &&
           now - (profile.scopeFetchedAt === undefined ? profile.fetchedAt : profile.scopeFetchedAt[selectedStatsScope] ?? 0) < PROFILE_CACHE_TTL_MS &&
           hasCurrentStatsShape(profile) &&
+          hasCurrentHistoryState(profile, selectedStatsScope) &&
           profile.bestUmaScoreVersion === BEST_UMA_SCORE_VERSION &&
           profile.recentHistoryVersion === RECENT_HISTORY_VERSION &&
           profile.currentSeasonStats?.recentHistoryVersion === RECENT_HISTORY_VERSION &&

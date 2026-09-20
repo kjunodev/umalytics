@@ -9,11 +9,12 @@ const version=JSON.parse(fs.readFileSync(path.join(root,'package.json'))).versio
 if(!/^\d+\.\d+\.\d+$/.test(version)) throw Error('Invalid release version');
 if(process.env.RELEASE_VERSION && process.env.RELEASE_VERSION!==version) throw Error('Release source version mismatch');
 const repo=process.env.GITHUB_REPOSITORY;
-if(!['skimuic/UmaLytics','kjunodev/umalytics'].includes(repo)) throw Error('Unexpected release repository');
+const packageOnly=process.argv.includes('--package-only');
+if(!packageOnly && repo!=='skimuic/UmaLytics') throw Error('Unexpected release repository');
 const sha=process.env.RELEASE_SOURCE_SHA ?? process.env.GITHUB_SHA;
-if(!/^[a-f0-9]{40}$/.test(sha??'')) throw Error('Missing exact release commit');
-if(execFileSync('git',['rev-parse','HEAD'],{cwd:root,encoding:'utf8'}).trim()!==sha) throw Error('Release source commit mismatch');
-const tag=`v${version}-open-beta.1`;
+if(!packageOnly && !/^[a-f0-9]{40}$/.test(sha??'')) throw Error('Missing exact release commit');
+if(!packageOnly && execFileSync('git',['rev-parse','HEAD'],{cwd:root,encoding:'utf8'}).trim()!==sha) throw Error('Release source commit mismatch');
+const tag=`v${version}`;
 const notes=path.join(root,`RELEASE-${version}.md`);
 if(!fs.existsSync(notes)) throw Error('Release notes are required');
 const release=JSON.parse(fs.readFileSync(path.join(root,'.releases/latest.json')));
@@ -31,12 +32,18 @@ for(const family of ['chromium','firefox']) {
   const asset=path.join(output,`umalytics-${family}-${version}-open-beta.1.zip`);
   // The release runner is Linux; fresh output avoids adding stale files to an existing ZIP.
   if(fs.existsSync(asset)) throw Error('Asset already exists; use a fresh build directory');
-  execFileSync('zip',['-qr',asset,'.'],{cwd:dir,stdio:'inherit'});
+  if(process.platform==='win32') {
+    execFileSync('pwsh',['-NoProfile','-Command',"$ErrorActionPreference='Stop'; Compress-Archive -Path (Join-Path $env:UMALYTICS_ZIP_SOURCE '*') -DestinationPath $env:UMALYTICS_ZIP_DESTINATION"],
+      {cwd:dir,stdio:'inherit',env:{...process.env,UMALYTICS_ZIP_SOURCE:dir,UMALYTICS_ZIP_DESTINATION:asset}});
+  } else execFileSync('zip',['-qr',asset,'.'],{cwd:dir,stdio:'inherit'});
   assets.push(asset);
 }
 const sums=path.join(output,'SHA256SUMS.txt');
 fs.writeFileSync(sums,assets.map(file=>`${createHash('sha256').update(fs.readFileSync(file)).digest('hex')}  ${path.basename(file)}`).join('\n')+'\n');
 assets.push(sums);
+if(packageOnly) {
+  console.log(`Local public assets verified and packaged: ${output}`);
+} else {
 const gh=(...args)=>execFileSync('gh',args,{cwd:root,encoding:'utf8'}).trim();
 const refs=JSON.parse(gh('api',`repos/${repo}/git/matching-refs/tags/${tag}`));
 const ref=refs.find(r=>r.ref===`refs/tags/${tag}`);
@@ -68,12 +75,13 @@ if(existing && !existing.draft) {
   console.log(`Release already published: ${existing.html_url}`);
 } else {
   if(existing && existing.target_commitish!==sha) throw Error('Existing draft belongs to a different commit');
-  if(!existing) gh('release','create',tag,'--repo',repo,'--target',sha,'--title',`UmaLytics ${version} Open Beta`,'--notes-file',notes,'--draft','--prerelease');
+  if(!existing) gh('release','create',tag,'--repo',repo,'--target',sha,'--title',`UmaLytics ${version}`,'--notes-file',notes,'--draft');
   gh('release','upload',tag,...assets,'--repo',repo,'--clobber');
   // GitHub's by-tag endpoint can return 404 for drafts; the authenticated list includes them.
   const uploaded=JSON.parse(gh('api',`repos/${repo}/releases?per_page=100`)).find(r=>r.tag_name===tag);
   if(!uploaded?.draft || uploaded.target_commitish!==sha) throw Error('Draft target verification failed');
   verifyAssets(uploaded);
-  gh('release','edit',tag,'--repo',repo,'--draft=false','--prerelease','--latest=false');
+  gh('release','edit',tag,'--repo',repo,'--draft=false','--prerelease=false','--latest');
   console.log(`Published https://github.com/${repo}/releases/tag/${tag}`);
+}
 }

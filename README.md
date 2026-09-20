@@ -2,12 +2,12 @@
 
 UmaLytics opens a separate scouting window beside [Uma Drafter](https://drafter.uma.guide). See the players in team slots, their available ranked statistics, and the confirmed live draft.
 
-**0.4.0 Open Beta — manual installation and updates.**
+**0.4.1 Open Beta — manual installation and updates.**
 
 | Browser | Download |
 | --- | --- |
-| Chrome, Edge, Brave, Opera GX | [Chromium ZIP](https://github.com/kjunodev/umalytics/releases/download/v0.4.0-open-beta.1/umalytics-chromium-0.4.0-open-beta.1.zip) |
-| Firefox / LibreWolf | [Firefox ZIP](https://github.com/kjunodev/umalytics/releases/download/v0.4.0-open-beta.1/umalytics-firefox-0.4.0-open-beta.1.zip) — temporary installation |
+| Chrome, Edge, Brave, Opera GX | [Chromium ZIP](https://github.com/skimuic/UmaLytics/releases/download/v0.4.1/umalytics-chromium-0.4.1-open-beta.1.zip) |
+| Firefox / LibreWolf | [Firefox ZIP](https://github.com/skimuic/UmaLytics/releases/download/v0.4.1/umalytics-firefox-0.4.1-open-beta.1.zip) — temporary installation |
 
 [Install or update](INSTALL.md) · [Changes](CHANGELOG.md) · [Privacy](PRIVACY.md) · [Report a bug](https://github.com/kjunodev/umalytics/issues/new?template=bug_report.md)
 
@@ -41,10 +41,10 @@ The extension contacts Uma Drafter's services with player identifiers. Scouting 
 
 This is the public testing release. Cached data can appear quickly; uncached data depends on the upstream API. HTTP 429 pauses requests rather than bypassing the server's limits. Site changes can affect detection. A player whose room exposes no verified identity cannot be looked up reliably.
 
-Chromium behavior has been observed during a live ranked draft on the preceding candidate. The 0.4.0 changes have automated regression coverage; see [TESTING.md](TESTING.md) for exact checks and limits. Firefox remains an unsigned temporary add-on, not a permanent store installation. Human team cards currently assume up to five slots per side; complete support for every custom mode is not claimed.
+Chromium behavior has been observed during a live ranked draft on the preceding candidate. The 0.4.1 changes have automated regression coverage; see [TESTING.md](TESTING.md) for exact checks and limits. Firefox remains an unsigned temporary add-on, not a permanent store installation. Human team cards currently assume up to five slots per side; complete support for every custom mode is not claimed.
 
 ## Development and feedback
 
-Built with TypeScript, React and WXT. [DEVELOPMENT.md](DEVELOPMENT.md) documents tests and reproducible public builds. [The portfolio repository](https://github.com/skimuic/UmaLytics) describes the engineering; this repository serves community downloads and feedback.
+Built with TypeScript, React and WXT. [DEVELOPMENT.md](DEVELOPMENT.md) documents tests and reproducible public builds. [skimuic/UmaLytics](https://github.com/skimuic/UmaLytics) hosts community releases; [kjunodev/umalytics](https://github.com/kjunodev/umalytics) mirrors the same source.
 
 Bug reports should include the version, browser, expected/actual behavior and diagnostics copied soon after the problem. Review the report before posting: its status section can include player IDs, room codes and API error paths. Older download assets retain their original contents.

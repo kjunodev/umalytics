@@ -1,4 +1,5 @@
 import type { PlayerProfileSummary } from '@umalytics/shared';
+import { mergeProfileScopes } from './profileMerge';
 
 const MAX_PROFILE_AGE_MS = 24 * 60 * 60 * 1000;
 const MAX_CACHED_PROFILES = 100;
@@ -14,7 +15,7 @@ export function mergeProfileCache(
   for (const [id, profile] of Object.entries(incoming)) {
     if (profile.isPartial === true || !Number.isFinite(profile.fetchedAt)) continue;
     const previous = merged[id];
-    if (previous === undefined || profile.fetchedAt >= previous.fetchedAt) merged[id] = profile;
+    if (previous === undefined || profile.fetchedAt >= previous.fetchedAt) merged[id] = mergeProfileScopes(previous, profile);
   }
   let bytes = 0;
   return Object.fromEntries(Object.entries(merged)

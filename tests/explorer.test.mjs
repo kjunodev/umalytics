@@ -7,6 +7,7 @@ import { stripTypeScriptTypes } from 'node:module';
 const fixture = JSON.parse(fs.readFileSync(new URL('./fixtures/completed-match.json', import.meta.url)));
 const root = new URL('../apps/extension/utils/', import.meta.url);
 function load(context, file) {
+  if (file === 'explorerState.ts' || file === 'explorerService.ts') load(context, 'profileMerge.ts');
   const source = fs.readFileSync(new URL(file, root), 'utf8').replace(/^import[\s\S]*?;\r?\n/gm, '').replace(/^export /gm, '');
   vm.runInContext(stripTypeScriptTypes(source, { mode: 'transform' }), context);
 }
@@ -152,4 +153,3 @@ test('retry failures retain useful displayed stats, but a confirmed private resp
   const updated = h.mergeExplorerProfiles({ '1': old }, { '1': { ...old, matches: 21, error: 'Profile identity failed' } });
   assert.equal(updated['1'].matches, 21);
 });
-

@@ -1,4 +1,5 @@
 import type { PlayerProfileSummary } from '@umalytics/shared';
+import { mergeProfileScopes } from './profileMerge';
 
 /** Preserve a usable result on retry failures, but always apply confirmed privacy changes. */
 export function mergeExplorerProfiles(previous: Record<string, PlayerProfileSummary>, incoming: Record<string, PlayerProfileSummary>): Record<string, PlayerProfileSummary> {
@@ -11,7 +12,7 @@ export function mergeExplorerProfiles(previous: Record<string, PlayerProfileSumm
       result[id] = { ...old, error: profile.error, isPartial: false };
     } else if (oldHasStats && !incomingHasStats && !old.error && !old.isPartial && profile.isPartial && profile.statsPrivate !== true) {
       result[id] = old;
-    } else result[id] = profile;
+    } else result[id] = mergeProfileScopes(old, profile);
   }
   return result;
 }
