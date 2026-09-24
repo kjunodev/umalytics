@@ -39,7 +39,9 @@ let apiCooldown: ApiCooldown | undefined;
 const responseCache = new Map<string, { value: unknown; expiresAt: number }>();
 const inFlightRequests = new Map<string, { promise: Promise<unknown>; controller: AbortController; consumers: number }>();
 let persistentCacheLoad: Promise<void> | undefined;
-let persistentCacheWrites = Promise.resolve();
+let persistentCacheWriteTimer: ReturnType<typeof setTimeout> | undefined;
+let persistentCacheWriteInFlight = false;
+let persistentCacheDirty = false;
 
 export function getApiCooldown(): ApiCooldown | undefined { return apiCooldown; }
 export function restoreApiCooldown(value: ApiCooldown): void {
@@ -546,15 +548,32 @@ function loadPersistentResponses(): Promise<void> {
   })();
 }
 
-function persistResponses(): Promise<void> {
-  if (typeof browser === 'undefined' || browser.storage?.session === undefined) return Promise.resolve();
+function persistResponses(): void {
+  if (typeof browser === 'undefined' || browser.storage?.session === undefined) return;
+  persistentCacheDirty = true;
+  if (persistentCacheWriteTimer !== undefined || persistentCacheWriteInFlight) return;
+  persistentCacheWriteTimer = setTimeout(() => {
+    persistentCacheWriteTimer = undefined;
+    void flushPersistentResponses();
+  }, 250);
+}
+
+async function flushPersistentResponses(): Promise<void> {
+  if (!persistentCacheDirty || persistentCacheWriteInFlight) return;
+  persistentCacheDirty = false;
+  persistentCacheWriteInFlight = true;
   const entries = [...responseCache].filter(([path, entry]) => isPersistentResponse(path) && entry.expiresAt > Date.now())
     .sort((a, b) => b[1].expiresAt - a[1].expiresAt);
   const shared = entries.filter(([path]) => !path.endsWith('/profile'));
   const profiles = entries.filter(([path]) => path.endsWith('/profile')).slice(0, 200);
   const snapshot = Object.fromEntries([...shared, ...profiles]);
-  persistentCacheWrites = persistentCacheWrites.then(() => browser.storage.session.set({ [RESPONSE_CACHE_STORAGE_KEY]: snapshot })).catch(() => {});
-  return persistentCacheWrites;
+  try {
+    await browser.storage.session.set({ [RESPONSE_CACHE_STORAGE_KEY]: snapshot });
+  } catch { /* Session storage can be unavailable; the memory cache still works. */ }
+  finally {
+    persistentCacheWriteInFlight = false;
+    if (persistentCacheDirty) persistResponses();
+  }
 }
 
 export async function fetchJson<T>(path: string, signal?: AbortSignal, priority: RequestPriority = 'background'): Promise<T> {
@@ -562,18 +581,33 @@ export async function fetchJson<T>(path: string, signal?: AbortSignal, priority:
   let shared = inFlightRequests.get(path);
   if (shared === undefined) {
     const controller = new AbortController();
-    const promise = fetchJsonOnce<T>(path, controller.signal, priority).finally(() => inFlightRequests.delete(path));
-    shared = { promise, controller, consumers: 0 };
+    shared = { promise: fetchJsonOnce<T>(path, controller.signal, priority), controller, consumers: 0 };
     inFlightRequests.set(path, shared);
+    const request = shared;
+    void request.promise.finally(() => {
+      if (inFlightRequests.get(path) === request) inFlightRequests.delete(path);
+    }).catch(() => {});
   }
   shared.consumers += 1;
+  const request = shared;
   const budget = deadline(signal, PROFILE_SUMMARY_TIMEOUT_MS, `Request queue timed out: ${path}`);
+  let released = false;
+  const release = () => {
+    if (released) return;
+    released = true;
+    request.consumers -= 1;
+    if (request.consumers === 0) {
+      if (inFlightRequests.get(path) === request) inFlightRequests.delete(path);
+      request.controller.abort(new Error('Request cancelled.'));
+    }
+  };
+  budget.signal.addEventListener('abort', release, { once: true });
   try {
-    return await abortable(shared.promise as Promise<T>, budget.signal);
+    return await abortable(request.promise as Promise<T>, budget.signal);
   } finally {
+    budget.signal.removeEventListener('abort', release);
     budget.dispose();
-    shared.consumers -= 1;
-    if (shared.consumers === 0) shared.controller.abort(new Error('Request cancelled.'));
+    release();
   }
 }
 
@@ -619,7 +653,7 @@ async function fetchJsonOnce<T>(path: string, signal: AbortSignal, priority: Req
       for (const [key, entry] of responseCache) if (entry.expiresAt <= Date.now()) responseCache.delete(key);
       if (responseCache.size >= 256) responseCache.delete(responseCache.keys().next().value!);
       responseCache.set(path, { value, expiresAt: Date.now() + cacheTtl(path) });
-      if (isPersistentResponse(path)) await persistResponses();
+      if (isPersistentResponse(path)) persistResponses();
       return value;
       } catch (error) {
         if (!(error instanceof ApiRequestError)) recordDiagnostic({ kind: 'request', endpoint,

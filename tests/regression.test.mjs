@@ -7,6 +7,13 @@ const evaluate = loadModule;
 const deferred = () => { let resolve; const promise = new Promise(r => { resolve = r; }); return {promise,resolve}; };
 const tick = () => new Promise(r => setImmediate(r));
 const sleep = ms => new Promise(r => setTimeout(r,ms));
+async function waitUntil(predicate,timeoutMs=1000) {
+  const deadline=performance.now()+timeoutMs;
+  while(!predicate()) {
+    if(performance.now()>deadline) throw new Error('Timed out waiting for fixture condition');
+    await sleep(5);
+  }
+}
 function context(globals = {}) {
   return vm.createContext({window:{location:{origin:'https://drafter.uma.guide'},postMessage(){}},console, URL, URLSearchParams, AbortController, DOMException, setTimeout, clearTimeout,
     defineBackground: () => {}, defineContentScript: () => {}, recordDiagnostic: () => {}, sendDiagnosticEvent: async () => {}, getLatestDraftSnapshot: async () => undefined, clearLatestDraftSnapshot: async () => {}, ...globals});
@@ -99,6 +106,47 @@ test('identical in-flight profile requests share one fetch and one caller can ca
   assert.equal(h.aborts,0);
 });
 
+test('last consumer cancellation removes the shared request before an immediate retry',async()=>{
+  let started=0;
+  const h=apiHarness({latency:30,responder:()=>++started===1?{hang:true}:undefined});
+  const path=`/api/stats/players/${players(1)[0].discordId}/profile`;
+  const first=new AbortController();
+  const a=h.c.fetchJson(path,first.signal,'profile');
+  await waitUntil(()=>h.calls.length===1);
+  first.abort(new Error('Switched rooms'));
+  const b=h.c.fetchJson(path,undefined,'profile');
+  await assert.rejects(a,/Switched rooms/);
+  const c=h.c.fetchJson(path,undefined,'profile');
+  assert.equal((await b).displayName,'Fixture');
+  assert.equal((await c).displayName,'Fixture');
+  assert.equal(h.calls.length,2);
+});
+
+test('slow session storage does not occupy queue slots or delay paced starts',async()=>{
+  const gate=deferred();let writes=0;
+  const sessionStorage={get:async()=>({}),set:async()=>{writes++;await gate.promise;}};
+  const h=apiHarness({sessionStorage,latency:5,fast:false});
+  const paths=players(4).map(player=>`/api/stats/players/${player.discordId}/profile`);
+  const pending=Promise.all(paths.map(path=>h.c.fetchJson(path,undefined,'profile')));
+  try {
+    await waitUntil(()=>h.calls.length===4,2500);
+    await pending;
+    assert(writes>=1);
+    assert(h.callTimes.slice(1).every((time,i)=>time-h.callTimes[i]>=450));
+  } finally { gate.resolve(); }
+});
+
+test('session writes coalesce recent responses into one latest snapshot',async()=>{
+  const saved={};let writes=0;
+  const sessionStorage={get:async()=>({}),set:async values=>{writes++;Object.assign(saved,structuredClone(values));}};
+  const h=apiHarness({sessionStorage,latency:0});
+  await Promise.all(players(6).map(player=>h.c.fetchJson(`/api/stats/players/${player.discordId}/profile`,undefined,'profile')));
+  await waitUntil(()=>writes===1);
+  assert.equal(Object.keys(saved.profileApiResponsesV1).length,6);
+  await sleep(270);
+  assert.equal(writes,1);
+});
+
 test('session response cache survives restart and obeys 10-minute and 24-hour TTLs',async()=>{
   const saved={};const sessionStorage={
     get:async key=>({[key]:structuredClone(saved[key])}),
@@ -108,6 +156,7 @@ test('session response cache survives restart and obeys 10-minute and 24-hour TT
   const paths=['/api/seasons','/api/leaderboard?season=S1',`/api/stats/players/${players(1)[0].discordId}/profile`];
   const fetchAll=async h=>{h.c.Date=Clock;await Promise.all(paths.map(path=>h.c.fetchJson(path)));};
   const first=apiHarness({sessionStorage});await fetchAll(first);assert.equal(first.calls.length,3);
+  await waitUntil(()=>Object.keys(saved.profileApiResponsesV1??{}).length===3);
   const restarted=apiHarness({sessionStorage});await fetchAll(restarted);assert.equal(restarted.calls.length,0);
   now+=10*60*1000+1;
   const staleShared=apiHarness({sessionStorage});await fetchAll(staleShared);
@@ -119,8 +168,10 @@ test('session response cache survives restart and obeys 10-minute and 24-hour TT
 
 test('session response cache bounds profile entries',async()=>{
   const saved={};const sessionStorage={get:async key=>({[key]:saved[key]}),set:async values=>Object.assign(saved,values)};
-  const h=apiHarness({sessionStorage,latency:0});
+  const h=apiHarness({sessionStorage,latency:0,fast:false});
+  vm.runInContext('requestQueue.setStartInterval(0)',h.c);
   await Promise.all(Array.from({length:205},(_,i)=>h.c.fetchJson(`/api/stats/players/${String(100000000000000000n+BigInt(i))}/profile`,undefined,'profile')));
+  await waitUntil(()=>Object.keys(saved.profileApiResponsesV1??{}).length===200);
   const cache=saved.profileApiResponsesV1;
   assert(Object.keys(cache).filter(path=>path.endsWith('/profile')).length<=200);
 });
