@@ -43,6 +43,26 @@ export const MODULES = {
   textCleanup: 'room/textCleanup.ts',
   umaPortraits: 'umas/umaPortraits.ts',
   umaReleaseOrder: 'umas/umaReleaseOrder.ts',
+
+  // ui (phase 2)
+  uiScoutData: 'ui/scoutData.ts',
+  uiCommonFormat: 'ui/common/format.ts',
+  uiCommonUmaImage: 'ui/common/UmaImage.tsx',
+  uiCommonBadges: 'ui/common/badges.ts',
+  uiCommonPartyVisuals: 'ui/common/partyVisuals.ts',
+  uiCommonRoster: 'ui/common/roster.ts',
+  uiPlayerDetailScene: 'ui/player/PlayerDetailScene.tsx',
+  uiPlayerScoutingReport: 'ui/player/ScoutingReport.tsx',
+  uiPlayerTopUmasList: 'ui/player/TopUmasList.tsx',
+  uiPlayerBestUmasList: 'ui/player/BestUmasList.tsx',
+  uiPlayerRecentMatchesList: 'ui/player/RecentMatchesList.tsx',
+  uiLobbyTeamSection: 'ui/lobby/TeamSection.tsx',
+  uiDraftScene: 'ui/draft/DraftScene.tsx',
+  uiDraftFormat: 'ui/draft/draftFormat.ts',
+  uiUmasCatalog: 'ui/umas/umaCatalog.ts',
+  uiUmasPlannerScene: 'ui/umas/UmaPlannerScene.tsx',
+  uiHistoryScene: 'ui/history/HistoricalScene.tsx',
+  uiHistoryExplorerViews: 'ui/history/ExplorerViews.tsx',
 };
 
 const pathByName = new Map(Object.entries(MODULES));
@@ -134,6 +154,7 @@ const JSX_COMPILER_OPTIONS = { target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.R
 export function loadFunction(context, syntax, name) {
   const node = syntax.statements.find(n => ts.isFunctionDeclaration(n) && n.name?.text === name);
   if (!node) throw new Error(`Function declaration not found: ${name}`);
-  const output = ts.transpileModule(node.getText(syntax), { compilerOptions: JSX_COMPILER_OPTIONS }).outputText;
+  const text = node.getText(syntax).replace(/^export\s+/, '');
+  const output = ts.transpileModule(text, { compilerOptions: JSX_COMPILER_OPTIONS }).outputText;
   vm.runInContext(output, context);
 }

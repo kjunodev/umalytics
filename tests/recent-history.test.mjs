@@ -3,7 +3,9 @@ import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import { loadModuleTS, loadFunction, parseTsxModule } from './support/harness.mjs';
 
-const syntax = parseTsxModule('scoutApp');
+const playerDetailSyntax = parseTsxModule('uiPlayerDetailScene');
+const recentMatchesSyntax = parseTsxModule('uiPlayerRecentMatchesList');
+const scoutDataSyntax = parseTsxModule('uiScoutData');
 function harness(privateBuild = false) {
   const c = vm.createContext({ console, __UMALYTICS_PRIVATE_PROFILE_DATA__: privateBuild,
     element: (type, props, ...children) => ({ type, props, children }),
@@ -18,9 +20,11 @@ function harness(privateBuild = false) {
   for (const name of ['profileConstants', 'profileMerge', 'profileCache', 'explorerState']) {
     loadModuleTS(c, name);
   }
-  for (const name of ['getDisplayedProfileStats','RecentMatchesList','PlayerDetailScene','isDisplayableStoredProfile','normalizeProfileSnapshotForDisplay']) {
-    loadFunction(c, syntax, name);
-  }
+  loadFunction(c, playerDetailSyntax, 'getDisplayedProfileStats');
+  loadFunction(c, playerDetailSyntax, 'PlayerDetailScene');
+  loadFunction(c, recentMatchesSyntax, 'RecentMatchesList');
+  loadFunction(c, scoutDataSyntax, 'isDisplayableStoredProfile');
+  loadFunction(c, scoutDataSyntax, 'normalizeProfileSnapshotForDisplay');
   return c;
 }
 const entry = {matchId:'FIX001',reportedAt:'2026-09-18T12:00:00Z',mode:'ranked',verificationState:'confirmed',umaId:null,umaName:'Unknown Uma',isWinner:true,pointsScored:3,podiums:1,isMvp:false};
