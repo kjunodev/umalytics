@@ -1,8 +1,7 @@
 import { readPayloadRoomCode } from './syncPayload';
 import type { MatchCode, PrematchPlayer, PrematchRoster, PrematchTeam, TeamId } from '@umalytics/shared';
+import { isRecord, readOptionalNumber, readOptionalString, readOptionalTeamId } from './recordReaders';
 import { cleanTeamName } from './textCleanup';
-
-const TEAM_IDS = ['team1', 'team2'] as const satisfies readonly TeamId[];
 
 export function normalizePrematchRosterFromPlayers(
   value: unknown,
@@ -127,7 +126,7 @@ export function normalizePrematchPlayer(
     displayName,
     partyId,
     partyRatingBonus,
-    ...readOptionalPlayerFields(value)
+    ...extractOptionalPlayerFields(value)
   };
 }
 
@@ -190,7 +189,7 @@ function dedupePrematchPlayers(players: PrematchPlayer[]): PrematchPlayer[] {
   return dedupedPlayers;
 }
 
-function readOptionalPlayerFields(value: Record<string, unknown>): Partial<PrematchPlayer> {
+function extractOptionalPlayerFields(value: Record<string, unknown>): Partial<PrematchPlayer> {
   const fields: Partial<PrematchPlayer> = {};
   // An explicit null current team means the player has left the slots.
   const team = value.team === null ? undefined :
@@ -198,7 +197,7 @@ function readOptionalPlayerFields(value: Record<string, unknown>): Partial<Prema
   const initialTeam = readOptionalTeamId(value.initialTeam);
   const finalTeam = readOptionalTeamId(value.finalTeam);
   const role = readOptionalString(value.role) ?? readOptionalString(value.roomRole) ?? readOptionalString(value.type);
-  const isCaptain = readOptionalBoolean(value.isCaptain);
+  const isCaptain = readBoolean(value.isCaptain);
   const ratingSnapshot = readOptionalNumber(value.ratingSnapshot);
   const rdSnapshot = readOptionalNumber(value.rdSnapshot);
   const displayRatingSnapshot = readOptionalNumber(value.displayRatingSnapshot);
@@ -264,44 +263,6 @@ function readTeamMetadata(
   };
 }
 
-function readOptionalString(value: unknown): string | undefined {
-  return typeof value === 'string' && value.length > 0 ? value : undefined;
-}
-
-function readOptionalNumber(value: unknown): number | undefined {
-  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
-}
-
-function readOptionalBoolean(value: unknown): boolean | undefined {
+function readBoolean(value: unknown): boolean | undefined {
   return typeof value === 'boolean' ? value : undefined;
-}
-
-function readOptionalTeamId(value: unknown): TeamId | undefined {
-  if (typeof value === 'number') {
-    return value === 1 ? 'team1' : value === 2 ? 'team2' : undefined;
-  }
-
-  if (typeof value !== 'string') {
-    return undefined;
-  }
-
-  const normalizedValue = value.toLowerCase().replace(/[^a-z0-9]+/g, '');
-
-  if (normalizedValue === 'team1' || normalizedValue === '1' || normalizedValue === 'blue') {
-    return 'team1';
-  }
-
-  if (normalizedValue === 'team2' || normalizedValue === '2' || normalizedValue === 'red') {
-    return 'team2';
-  }
-
-  return isTeamId(value) ? value : undefined;
-}
-
-function isTeamId(value: string): value is TeamId {
-  return TEAM_IDS.includes(value as TeamId);
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
 }

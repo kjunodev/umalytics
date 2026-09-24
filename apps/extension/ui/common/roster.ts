@@ -1,6 +1,7 @@
 import type { PrematchPlayer, PrematchRoster, TeamId } from '@umalytics/shared';
+import { TEAM_IDS } from '../../room/teams';
 
-export const TEAM_IDS = ['team1', 'team2'] as const satisfies readonly TeamId[];
+export { TEAM_IDS };
 
 export const TEAM_SLOT_COUNT = 5;
 
