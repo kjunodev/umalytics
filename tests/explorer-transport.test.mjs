@@ -1,10 +1,8 @@
-import fs from 'node:fs';
 import vm from 'node:vm';
 import assert from 'node:assert/strict';
-import { stripTypeScriptTypes } from 'node:module';
-const base = new URL('../apps/extension/utils/', import.meta.url);
+import { loadModule } from './support/harness.mjs';
 function event() { const handlers = new Set(); return { addListener:f=>handlers.add(f), removeListener:f=>handlers.delete(f), fire:(...args)=>{for(const f of [...handlers])f(...args)}, size:()=>handlers.size }; }
-function evaluate(name, globals) { const code=fs.readFileSync(new URL(name,base),'utf8').replace(/^import[\s\S]*?;\r?\n/gm,'').replace(/^export /gm,''); const c=vm.createContext({AbortController,Error,Date,URL,URLSearchParams,console,setTimeout,clearTimeout,EXPLORER_PORT:'explorer',...globals}); vm.runInContext(stripTypeScriptTypes(code,{mode:'transform'}),c); return c; }
+function evaluate(name, globals) { const c=vm.createContext({AbortController,Error,Date,URL,URLSearchParams,console,setTimeout,clearTimeout,EXPLORER_PORT:'explorer',...globals}); loadModule(c,'utils/'+name); return c; }
 function client() { const port={onMessage:event(),onDisconnect:event(),sent:[],disconnects:0,postMessage(x){this.sent.push(x)},disconnect(){this.disconnects++}}; const c=evaluate('explorerClient.ts',{browser:{runtime:{connect:()=>port}}});return {port,c}; }
 let checks=0;
 {const {port,c}=client(); const ac=new AbortController(); ac.abort();assert.throws(()=>c.loadHistoricalMatch('AAA111',ac.signal)); assert.equal(port.sent.length,0);checks++;}
