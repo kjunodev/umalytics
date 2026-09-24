@@ -389,6 +389,7 @@ async function performRosterEnrichment(
       {
         scope,
         signal,
+        rosterComplete: roster.teams?.team1.players.length === 5 && roster.teams?.team2.players.length === 5,
         onWait: async seconds => {
           if (signal.aborted || runId !== enrichmentRunId) return;
           const retryAt = Date.now() + seconds * 1000;

@@ -206,9 +206,11 @@ test('cancelling a roster aborts active requests and does not start queued profi
   const h=apiHarness({responder:url=>url.pathname.includes('/players/')?{hang:true}:undefined});
   const controller=new AbortController(); let summaries=0;
   const pending=h.c.fetchPlayerProfileSummaries(players(10),{signal:controller.signal,onSummary:()=>{summaries++;}});
-  await sleep(15);controller.abort(new Error('Switched rooms'));
+  await waitUntil(()=>h.calls.some(path=>path.includes('/players/')));
+  controller.abort(new Error('Switched rooms'));
   await assert.rejects(pending,/Switched rooms/);
-  assert.equal(summaries,0);assert(h.aborts>0);
+  await waitUntil(()=>h.aborts>0);
+  assert.equal(summaries,0);
 });
 
 test('public source stops at private stats even if a runtime flag is supplied',async()=>{
@@ -260,6 +262,15 @@ test('same membership and team/phase changes share one enrichment run',async()=>
   const q=h.c.enrichRosterProfiles(r);assert.equal(p,q);await tick();assert.equal(h.fetches.length,1);
   for(let i=0;i<20;i++) assert.equal(h.c.enrichRosterProfiles({...r,phase:`phase-${i}`}),p);
   h.fetches[0].gate.resolve();await p;
+});
+
+test('background skips batch settling only when both team rosters have five slots',async()=>{
+  for(const [count,expected] of [[9,false],[10,true]]) {
+    const h=backgroundHarness();const pending=h.c.enrichRosterProfiles(roster('ROOM01',count));
+    await waitUntil(()=>h.fetches.length===1);
+    assert.equal(h.fetches[0].options.rosterComplete,expected);
+    h.fetches[0].gate.resolve();await pending;
+  }
 });
 
 test('failed refresh preserves usable cached data, but confirmed private responses replace it',()=>{

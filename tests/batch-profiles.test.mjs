@@ -19,8 +19,10 @@ const batchPlayer = (id, overrides = {}) => ({ discordId: id, displayName: `Batc
     entry(2, 'reported', false), entry(3, 'pending'), entry(4), entry(5), entry(6)] }, ...overrides });
 
 function harness({ batchStatus = 200, batchPlayers, latency = 1, fast = true, historyPages } = {}) {
-  const calls = [];
-  const c = vm.createContext({ console, URL, AbortController, setTimeout, clearTimeout, Date, recordDiagnostic: () => {},
+  const calls = [], diagnostics = [], timerDelays = [];
+  const c = vm.createContext({ console, URL, AbortController,
+    setTimeout: (callback, ms) => { timerDelays.push(ms); return setTimeout(callback, ms); }, clearTimeout, Date,
+    recordDiagnostic: value => diagnostics.push(value),
     fetch: async (url, options) => {
       calls.push(url.pathname + url.search);
       const status = url.pathname.endsWith('/batch') ? batchStatus : 200;
@@ -43,8 +45,28 @@ function harness({ batchStatus = 200, batchPlayers, latency = 1, fast = true, hi
   });
   for (const module of ['profileConstants', 'umaReleaseOrder', 'umaPortraits', 'requestQueue']) loadModule(c, module);
   loadModule(c, 'playerProfileApi', { fast });
-  return { c, calls };
+  return { c, calls, diagnostics, timerDelays };
 }
+
+test('a complete roster starts batch loading without the settling timer', async () => {
+  const h = harness({ fast: false });
+  await h.c.fetchPlayerProfileSummaries(players(10), { scope: 'currentSeason', rosterComplete: true });
+  assert.equal(h.calls.filter(path => path.includes('/batch?')).length, 1);
+  assert(!h.timerDelays.includes(1200));
+});
+
+test('every request diagnostic, including batch and history, retains its endpoint', async () => {
+  const h = harness();
+  await h.c.fetchPlayerProfileSummaries(players(2), { scope: 'allTime', rosterComplete: true });
+  await h.c.fetchPlayerHistoryPage(ids[0], 'allTime', 1);
+  const sanitizer = vm.createContext({});
+  loadModule(sanitizer, 'diagnosticRecorder');
+  const requests = h.diagnostics.filter(value => value.kind === 'request');
+  assert(requests.some(value => value.endpoint === 'batch'));
+  assert(requests.some(value => value.endpoint === 'history'));
+  assert(requests.every(value => typeof value.endpoint === 'string' &&
+    sanitizer.sanitizeDiagnostic(value)?.endpoint === value.endpoint));
+});
 
 test('cold ten-player lobby uses one batch call and keeps all public stats from stats', async () => {
   const h = harness({ fast: false, latency: 10 });

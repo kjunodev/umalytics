@@ -19,11 +19,11 @@ for (const mode of ['public']) {
     if (result.error || result.status !== 0) throw result.error ?? new Error(`${mode}/${browser} build failed`);
     const output = path.join(extension, '.output', `${browser}-mv3`);
     const manifest = JSON.parse(fs.readFileSync(path.join(output, 'manifest.json'), 'utf8'));
-    const background = fs.readFileSync(path.join(output, 'background.js'), 'utf8');
     // WXT omits Chromium's version_name from Firefox manifests.
     if (manifest.version !== version || (browser === 'chrome' && manifest.version_name !== `${version}-${mode}.open-beta.1`)) throw new Error('Version mismatch');
     if (manifest.name !== (mode === 'private' ? 'UmaLytics Private' : 'UmaLytics')) throw new Error('Build mode mismatch');
-    if (background.includes('buildStatsSummaryFromHistory') || background.includes('buildUmaEntriesFromHistory')) throw new Error('Public stats reconstruction boundary check failed');
+    // Public stats boundaries are checked in tests/public-boundary.test.mjs and
+    // the stats-versus-history fixture in tests/batch-profiles.test.mjs.
     if (browser === 'firefox' && manifest.browser_specific_settings.gecko.id !==
       (mode === 'private' ? 'umalytics-private@kjunodev' : 'umalytics@kjunodev')) throw new Error('Firefox ID mismatch');
     const family = browser === 'chrome' ? 'chromium' : 'firefox';

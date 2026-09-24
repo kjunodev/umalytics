@@ -171,6 +171,7 @@ export async function fetchPlayerProfileSummaries(
     onSummary?: (summary: PlayerProfileSummary) => void | Promise<void>;
     onProgress?: (summary: PlayerProfileSummary) => void | Promise<void>;
     onWait?: (seconds: number) => void | Promise<void>;
+    rosterComplete?: boolean;
   } = {}
 ): Promise<Record<string, PlayerProfileSummary>> {
   const uniquePlayers = uniqueByDiscordId(players);
@@ -179,12 +180,14 @@ export async function fetchPlayerProfileSummaries(
   if (Date.now() < batchUnavailableUntil) return fetchPlayerProfileSummariesLegacy(players, options);
   const seasonPromise = getActiveSeasonId();
   const leaderboardPromise = getActiveLeaderboard(seasonPromise);
-  await new Promise<void>((resolve, reject) => {
-    const timer = setTimeout(() => { options.signal?.removeEventListener('abort', abort); resolve(); }, BATCH_SETTLE_MS);
-    const abort = () => { clearTimeout(timer); reject(options.signal?.reason ?? new Error('Request cancelled.')); };
-    if (options.signal?.aborted) abort();
-    else options.signal?.addEventListener('abort', abort, { once: true });
-  });
+  if (options.rosterComplete !== true) {
+    await new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => { options.signal?.removeEventListener('abort', abort); resolve(); }, BATCH_SETTLE_MS);
+      const abort = () => { clearTimeout(timer); reject(options.signal?.reason ?? new Error('Request cancelled.')); };
+      if (options.signal?.aborted) abort();
+      else options.signal?.addEventListener('abort', abort, { once: true });
+    });
+  }
   const season = await seasonPromise;
   if (options.scope !== 'allTime' && season.activeSeasonId === undefined) {
     return Object.fromEntries(uniquePlayers.map(player => [player.discordId,
