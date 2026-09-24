@@ -45,4 +45,4 @@
 - Add a bounded local diagnostic trace and regression coverage.
 - Remove site-storage scanning. Public source cannot enable private-history retrieval/reconstruction.
 
-This release continues the public open beta. See TESTING.md for validation and remaining limitations. The 0.3.0 downloads remain available unchanged for rollback.
+This release continues the public open beta. See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for validation and remaining limitations. The 0.3.0 downloads remain available unchanged for rollback at https://github.com/kjunodev/umalytics/releases/tag/v0.3.0-open-beta.1.
