@@ -15,8 +15,8 @@ function harness(privateBuild = false) {
     ScoutingReport: 'Report', BestUmasList: 'Best', filterSnapshotForBuild: x => x,
     filterProfileStatesForDisplay: x => x, getLoadingDiscordIdsForDisplay: () => [],
   });
-  for (const file of ['utils/profileConstants.ts', 'utils/profileMerge.ts', 'utils/profileCache.ts', 'utils/explorerState.ts']) {
-    loadModuleTS(c, file);
+  for (const name of ['profileConstants', 'profileMerge', 'profileCache', 'explorerState']) {
+    loadModuleTS(c, name);
   }
   for (const name of ['getDisplayedProfileStats','RecentMatchesList','PlayerDetailScene','isDisplayableStoredProfile','normalizeProfileSnapshotForDisplay']) {
     loadFunction(c, syntax, name);
