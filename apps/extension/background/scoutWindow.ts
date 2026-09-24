@@ -13,20 +13,19 @@ interface ScoutWindowDependencies {
   reportEnrichmentError: (error: unknown) => void;
 }
 
-const dependencies: ScoutWindowDependencies = {
-  handleLobbyReconnectRequested: async () => ({ activeLobby: false }),
-  reportEnrichmentError: () => {}
-};
+let dependencies: ScoutWindowDependencies | undefined;
 
 function configureScoutWindow(next: ScoutWindowDependencies): void {
-  Object.assign(dependencies, next);
+  dependencies = next;
 }
 
-function handleLobbyReconnectRequested(): Promise<LobbyReconnectResult> {
+function requestLobbyReconnect(): Promise<LobbyReconnectResult> {
+  if (dependencies === undefined) throw new Error('scoutWindow not configured');
   return dependencies.handleLobbyReconnectRequested();
 }
 
-function reportEnrichmentError(error: unknown): void {
+function reportScoutWindowError(error: unknown): void {
+  if (dependencies === undefined) throw new Error('scoutWindow not configured');
   dependencies.reportEnrichmentError(error);
 }
 
@@ -38,7 +37,7 @@ function openScoutWindow(): Promise<void> {
 
 async function createOrFocusScoutWindow(): Promise<void> {
   // The UI can render cached data before any page scan or network request finishes.
-  void handleLobbyReconnectRequested().catch(reportEnrichmentError);
+  void requestLobbyReconnect().catch(reportScoutWindowError);
 
   if (scoutWindowId !== undefined) {
     try {
