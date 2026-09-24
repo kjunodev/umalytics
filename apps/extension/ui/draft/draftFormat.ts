@@ -1,6 +1,6 @@
 import type { DraftSnapshot, DraftTeamSnapshot, DraftUmaAction } from '@umalytics/shared';
 
-export const DRAFT_DETAIL_SEPARATOR = ' • ';
+export const DRAFT_DETAIL_SEPARATOR = ' \u2022 ';
 
 export function formatDraftPhase(phase: string): string {
   return phase
@@ -22,9 +22,9 @@ export function formatDraftMapDetails(map: DraftTeamSnapshot['maps'][number]): s
   }
 
   const details = map.details
-    .replace(/\s*[-–—]\s*[xX×✕✖]\s*$/u, '')
-    .replace(/\s*[xX×✕✖]\s*$/u, '')
-    .split(/\s*(?:[-–—]|•)\s*/u)
+    .replace(/\s*[-\u2013\u2014]\s*[xX\u00d7\u2715\u2716]\s*$/u, '')
+    .replace(/\s*[xX\u00d7\u2715\u2716]\s*$/u, '')
+    .split(/\s*(?:[-\u2013\u2014]|\u2022)\s*/u)
     .map((part) => part.trim())
     .filter((part) => part.length > 0)
     .join(DRAFT_DETAIL_SEPARATOR);
@@ -55,7 +55,7 @@ export function parseTiebreakerMapParts(
   map: NonNullable<DraftSnapshot['tiebreakerMap']>
 ): { name: string; details: string[] } | undefined {
   const combinedText = (map.details === undefined ? map.name : `${map.name} - ${map.details}`)
-    .replace(/ /g, ' ')
+    .replace(/\u00a0/g, ' ')
     .trim();
   const compactTextMatch = /^(.+?)\s*\((\d{3,4})m?\s+([^)]+)\)\s*([A-Za-z\s]+)$/.exec(combinedText);
 
@@ -75,7 +75,7 @@ export function parseTiebreakerMapParts(
   }
 
   const [rawName, ...rawDetails] = combinedText
-    .split(/\s*(?:[-–—]|•)\s*/u)
+    .split(/\s*(?:[-\u2013\u2014]|\u2022)\s*/u)
     .map((part) => part.trim())
     .filter((part) => part.length > 0);
 
