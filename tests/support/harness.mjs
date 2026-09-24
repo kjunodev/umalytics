@@ -28,6 +28,7 @@ export const MODULES = {
   matchDetection: 'room/matchDetection.ts',
   pageHookRuntime: 'room/pageHookRuntime.ts',
   playerExtraction: 'room/playerExtraction.ts',
+  recordReaders: 'room/recordReaders.ts',
   playerProfileApi: 'profiles/playerProfileApi.ts',
   profileAvailability: 'profiles/profileAvailability.ts',
   profileCache: 'profiles/profileCache.ts',
@@ -40,6 +41,7 @@ export const MODULES = {
   rosterDisplay: 'room/rosterDisplay.ts',
   rosterIdentity: 'room/rosterIdentity.ts',
   syncPayload: 'room/syncPayload.ts',
+  teams: 'room/teams.ts',
   textCleanup: 'room/textCleanup.ts',
   umaPortraits: 'umas/umaPortraits.ts',
   umaReleaseOrder: 'umas/umaReleaseOrder.ts',
@@ -80,7 +82,13 @@ const PRELOADS = {
   explorerState: ['profileMerge'],
   explorerService: ['profileMerge'],
   pageHook: ['pageHookRuntime'],
-  content: ['roomEvents', 'rosterIdentity'],
+  content: ['roomEvents', 'rosterIdentity', 'recordReaders'],
+  domLobbyExtraction: ['recordReaders', 'teams'],
+  draftExtraction: ['recordReaders', 'teams'],
+  playerExtraction: ['recordReaders'],
+  recordReaders: ['teams'],
+  rosterDisplay: ['teams'],
+  uiCommonRoster: ['teams'],
 };
 
 function resolvePath(name) {
