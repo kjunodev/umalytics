@@ -1,8 +1,8 @@
 import { normalizeMatchCode } from './matchDetection';
 import type { MatchCode, PrematchPlayer, PrematchRoster, PrematchTeam, TeamId } from '@umalytics/shared';
+import { normalizeText } from './recordReaders';
 import { cleanTeamName } from './textCleanup';
-
-const TEAM_IDS = ['team1', 'team2'] as const satisfies readonly TeamId[];
+import { TEAM_IDS } from './teams';
 
 const PLAYER_ROLES = new Set(['Player', 'Captain']);
 
@@ -303,12 +303,6 @@ function extractDiscordIdFromRow(row: HTMLElement, images: HTMLImageElement[]): 
 
 function makeStableDomId(team: TeamId, index: number, displayName: string): string {
   return `room-dom:${team}:${index}:${displayName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
-}
-
-function normalizeText(value: string | null | undefined): string | undefined {
-  const normalized = value?.replace(/\s+/g, ' ').trim();
-
-  return normalized === undefined || normalized.length === 0 ? undefined : normalized;
 }
 
 function normalizeRoomCode(value: string | null | undefined): string | undefined {

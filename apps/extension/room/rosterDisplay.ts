@@ -1,5 +1,5 @@
 import type { PrematchRoster, PrematchPlayer, PrematchTeam, TeamId } from '@umalytics/shared';
-const DISPLAY_TEAM_IDS = ['team1', 'team2'] as const;
+import { TEAM_IDS } from './teams';
 
 export function getTeamGroups(roster: PrematchRoster | undefined): PrematchTeam[] {
   if (roster === undefined) {
@@ -7,7 +7,7 @@ export function getTeamGroups(roster: PrematchRoster | undefined): PrematchTeam[
   }
 
   if (roster.teams !== undefined) {
-    const groups = DISPLAY_TEAM_IDS.map((teamId) => roster.teams?.[teamId]).filter(
+    const groups = TEAM_IDS.map((teamId) => roster.teams?.[teamId]).filter(
       (team): team is PrematchTeam => team !== undefined
     );
     return groups;
@@ -30,7 +30,7 @@ export function normalizeRosterForDisplay(roster: PrematchRoster | undefined): P
   // Apply the same slot selection to fetching, counts, locks and all scouting scenes.
   return {
     ...roster, players,
-    teams: Object.fromEntries(DISPLAY_TEAM_IDS.map(id => [id, {
+    teams: Object.fromEntries(TEAM_IDS.map(id => [id, {
       ...roster.teams?.[id], id, players: players.filter(player => player.team === id)
     }])) as Record<TeamId, PrematchTeam>
   };

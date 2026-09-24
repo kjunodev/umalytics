@@ -21,6 +21,7 @@ import {
   extractDraftSnapshotFromSyncedDraftState
 } from '../room/draftExtraction';
 import { extractPrematchRosterFromSyncedDraftState } from '../room/playerExtraction';
+import { isRecord } from '../room/recordReaders';
 
 const SYNCED_DRAFT_STATE_MESSAGE_TYPE = 'umalytics:synced-draft-state';
 const PAGE_HOOK_SCRIPT_PATH = '/pageHook.js' as ScriptPublicPath;
@@ -527,8 +528,4 @@ function isTransientRuntimeMessageError(caught: unknown): boolean {
     caught.message.includes('The message port closed before a response was received') ||
     caught.message.includes('Could not establish connection. Receiving end does not exist')
   );
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
 }
