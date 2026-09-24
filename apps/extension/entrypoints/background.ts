@@ -18,9 +18,9 @@ import {
   getPlayerProfileSummaries,
   getCachedPlayerProfiles,
   rememberCachedPlayerProfiles,
-  setPlayerProfileSummaries,
-  type PlayerProfileLoadState
+  setPlayerProfileSummaries
 } from '../storage/profileStorage';
+import type { PlayerProfileLoadState } from '../profiles/profileTypes';
 import {
   BEST_UMA_SCORE_VERSION,
   MANUAL_PROFILE_REFRESH_COOLDOWN_MS,
