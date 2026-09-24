@@ -6,10 +6,11 @@ import vm from 'node:vm';
 import {createHash} from 'node:crypto';
 const root=path.resolve('release-fixture');
 const source=fs.readFileSync(new URL('../scripts/publish-release.mjs',import.meta.url),'utf8').replace(/^import .*;\r?\n/gm,'').replace(/const root=.*;/,'');
-function run({privateBuild=false, existing, uploadFails=false, listFails=false, wrongTag=false, noTag=false, wrongSource=false, wrongVersion=false, repository='skimuic/UmaLytics', packageOnly=false, platform='linux'}={}) {
+function run({privateBuild=false, existing, uploadFails=false, listFails=false, wrongTag=false, noTag=false, wrongSource=false, wrongVersion=false, repository='skimuic/UmaLytics', packageOnly=false, platform='linux', legacyNotes=false}={}) {
   const sha='a'.repeat(40), calls=[], files=new Map(); let uploaded=false;
   const set=(file,value)=>files.set(path.join(root,file),typeof value==='string'?value:JSON.stringify(value));
-  set('package.json',{version:'0.4.1'});set('RELEASE-0.4.1.md','Notes');
+  set('package.json',{version:'0.4.1'});
+  set(legacyNotes?'RELEASE-0.4.1.md':'.github/release-notes/0.4.1.md','Notes');
   const builds=['chromium','firefox'].map(family=>({family,mode:'public',path:path.join(root,'.releases/build/public-'+family)}));
   set('.releases/latest.json',{version:'0.4.1',builds});
   for(const b of builds){files.set(path.join(b.path,'manifest.json'),JSON.stringify({version:'0.4.1',name:privateBuild?'UmaLytics Private':'UmaLytics'}));files.set(path.join(b.path,'background.js'),privateBuild?'/history?':'public');}
@@ -38,6 +39,30 @@ test('release publishes only two public browser ZIPs and checksums after draft c
   assert(r.calls.findIndex(c=>c[2]==='upload')<r.calls.findIndex(c=>c[2]==='edit'));
 });
 
+test('release notes resolve from the new .github/release-notes path',()=>{
+  const r=run();assert.equal(r.error,undefined);
+  const create=r.calls.find(c=>c[2]==='create');
+  assert.equal(create[create.indexOf('--notes-file')+1],path.join(root,'.github/release-notes/0.4.1.md'));
+});
+test('release notes fall back to the legacy RELEASE-<version>.md path',()=>{
+  const r=run({legacyNotes:true});assert.equal(r.error,undefined);
+  const create=r.calls.find(c=>c[2]==='create');
+  assert.equal(create[create.indexOf('--notes-file')+1],path.join(root,'RELEASE-0.4.1.md'));
+});
+test('release requires notes when neither the new nor legacy path exists',()=>{
+  const sha='a'.repeat(40);
+  const files=new Map();
+  const set=(file,value)=>files.set(path.join(root,file),typeof value==='string'?value:JSON.stringify(value));
+  set('package.json',{version:'0.4.1'});
+  const builds=['chromium','firefox'].map(family=>({family,mode:'public',path:path.join(root,'.releases/build/public-'+family)}));
+  set('.releases/latest.json',{version:'0.4.1',builds});
+  for(const b of builds){files.set(path.join(b.path,'manifest.json'),JSON.stringify({version:'0.4.1',name:'UmaLytics'}));files.set(path.join(b.path,'background.js'),'public');}
+  const context={root,path,createHash,console:{log(){}},process:{argv:[],platform:'linux',env:{GITHUB_REPOSITORY:'skimuic/UmaLytics',GITHUB_SHA:sha,RELEASE_VERSION:'0.4.1'}},
+    fs:{readFileSync:file=>{if(!files.has(file))throw Error('Missing '+file);return files.get(file);},existsSync:file=>files.has(file),mkdirSync(){},writeFileSync:(file,value)=>files.set(file,value)},
+    execFileSync:(cmd)=>{if(cmd==='git')return sha;throw Error('Unexpected call: '+cmd);}};
+  let error;try{vm.runInNewContext(source,context);}catch(e){error=e;}
+  assert.match(error.message,/Release notes are required/);
+});
 test('mirror cannot publish releases and workflow is restricted to the community repository',()=>{
   const r=run({repository:'kjunodev/umalytics'});assert.match(r.error.message,/Unexpected release repository/);assert.equal(r.calls.length,0);
   const workflow=fs.readFileSync(new URL('../.github/workflows/release.yml',import.meta.url),'utf8');
