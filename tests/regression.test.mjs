@@ -16,11 +16,13 @@ function players(count=5) {
 }
 const roster = (match='ROOM01', count=5) => ({matchCode:match,players:players(count)});
 const stats = {summary:{matchesIncluded:4,totalPointsScored:12},umaEntries:[{umaId:'100101',matches:4,wins:2,losses:2,pointsScored:12}]};
-function apiHarness({privateBuild=false, responder, latency=2}={}) {
-  const calls=[]; let active=0, peak=0, aborts=0;
+function apiHarness({privateBuild=false, responder, latency=2, fast=true, sessionStorage}={}) {
+  const calls=[],callTimes=[],diagnostics=[]; let active=0, peak=0, aborts=0;
   const c=context({__UMALYTICS_PRIVATE_PROFILE_DATA__:privateBuild,
+    ...(sessionStorage ? {browser:{storage:{session:sessionStorage}}} : {}),
+    recordDiagnostic:value=>diagnostics.push(value),
     fetch:async (url,init)=>{
-      calls.push(url.pathname+url.search); active++; peak=Math.max(peak,active);
+      calls.push(url.pathname+url.search); callTimes.push(performance.now()); active++; peak=Math.max(peak,active);
       const response=responder?.(url,init) ?? {};
       let finished=false;
       const finish=()=>{if(!finished){finished=true;active--;init.signal.removeEventListener('abort',abort);}};
@@ -37,17 +39,17 @@ function apiHarness({privateBuild=false, responder, latency=2}={}) {
     }
   });
   evaluate(c,'profileConstants'); evaluate(c,'umaReleaseOrder'); evaluate(c,'umaPortraits');
-  evaluate(c,'requestQueue');evaluate(c,'playerProfileApi',{fast:true});
-  return {c,calls,get peak(){return peak;},get aborts(){return aborts;}};
+  evaluate(c,'requestQueue');evaluate(c,'playerProfileApi',{fast});
+  return {c,calls,callTimes,diagnostics,get peak(){return peak;},get aborts(){return aborts;}};
 }
 
-test('profile requests start while shared setup is pending; no HTML/assets requested',async()=>{
+test('stats requests start while shared setup is pending; no HTML/assets requested',async()=>{
   const h=apiHarness({responder:url=>url.pathname==='/api/seasons'?{hang:true}:undefined});
   let starts=0;
   const pending=h.c.fetchPlayerProfileSummaries(players(),{onStart:()=>{starts++;}});
-  await sleep(15);
-  assert.equal(starts,4);
-  assert(h.calls.some(p=>p.endsWith('/profile')));
+  await sleep(50);
+  assert.equal(starts,5);
+  assert(h.calls.some(p=>p.includes('/stats?')),JSON.stringify(h.calls));
   assert(!h.calls.some(p=>p.includes('/assets/') || p==='/'));
   const result=await pending;
   assert.equal(Object.keys(result).length,5);
@@ -62,6 +64,74 @@ test('10-player cold load respects global request cap and returns usable stats',
   assert.equal(h.calls.filter(p=>p==='/api/seasons').length,1);
   assert.equal(h.calls.filter(p=>p.startsWith('/api/leaderboard')).length,1);
   assert.equal(h.calls.length,32);
+});
+
+test('10-player 100 ms fixture publishes all seasonal stats within the paced budget',async()=>{
+  const h=apiHarness({latency:100,fast:false});const resolved=new Map();const start=performance.now();
+  await h.c.fetchPlayerProfileSummaries(players(10),{scope:'currentSeason',onProgress:summary=>{
+    if(summary.currentSeasonStats.matches===4 && !resolved.has(summary.discordId)) resolved.set(summary.discordId,performance.now()-start);
+  }});
+  const times=[...resolved.values()];
+  assert.equal(times.length,10);assert(Math.min(...times)<1500);assert(Math.max(...times)<6500);
+  assert(h.callTimes.slice(1).every((time,i)=>time-h.callTimes[i]>=450));
+});
+
+test('seasonal stats arrive before a stalled leaderboard',async()=>{
+  const h=apiHarness({responder:url=>url.pathname==='/api/leaderboard'?{hang:true}:undefined});
+  const ready=deferred();let finished=false;
+  const pending=h.c.fetchPlayerProfileSummaries(players(1),{scope:'currentSeason',onProgress:summary=>{
+    if(summary.currentSeasonStats.matches===4) ready.resolve(summary);
+  }}).then(value=>{finished=true;return value;});
+  const partial=await Promise.race([ready.promise,sleep(150).then(()=>{throw new Error('Season stats waited for leaderboard');})]);
+  assert.equal(partial.isPartial,true);assert.equal(finished,false);
+  await pending;
+});
+
+test('identical in-flight profile requests share one fetch and one caller can cancel',async()=>{
+  const h=apiHarness({latency:30});const first=new AbortController();const second=new AbortController();
+  const path=`/api/stats/players/${players(1)[0].discordId}/profile`;
+  const a=h.c.fetchJson(path,first.signal,'profile');
+  const b=h.c.fetchJson(path,second.signal,'profile');
+  await sleep(5);first.abort(new Error('Switched rooms'));
+  await assert.rejects(a,/Switched rooms/);
+  assert.equal((await b).displayName,'Fixture');
+  assert.equal(h.calls.filter(call=>call===path).length,1);
+  assert.equal(h.aborts,0);
+});
+
+test('session response cache survives restart and obeys 10-minute and 24-hour TTLs',async()=>{
+  const saved={};const sessionStorage={
+    get:async key=>({[key]:structuredClone(saved[key])}),
+    set:async values=>Object.assign(saved,structuredClone(values))
+  };
+  let now=Date.now();class Clock extends Date {static now(){return now;}}
+  const paths=['/api/seasons','/api/leaderboard?season=S1',`/api/stats/players/${players(1)[0].discordId}/profile`];
+  const fetchAll=async h=>{h.c.Date=Clock;await Promise.all(paths.map(path=>h.c.fetchJson(path)));};
+  const first=apiHarness({sessionStorage});await fetchAll(first);assert.equal(first.calls.length,3);
+  const restarted=apiHarness({sessionStorage});await fetchAll(restarted);assert.equal(restarted.calls.length,0);
+  now+=10*60*1000+1;
+  const staleShared=apiHarness({sessionStorage});await fetchAll(staleShared);
+  assert.equal(staleShared.calls.length,2);assert(!staleShared.calls.some(path=>path.endsWith('/profile')));
+  now+=24*60*60*1000;
+  const staleProfile=apiHarness({sessionStorage});staleProfile.c.Date=Clock;
+  await staleProfile.c.fetchJson(paths[2]);assert.equal(staleProfile.calls.length,1);
+});
+
+test('session response cache bounds profile entries',async()=>{
+  const saved={};const sessionStorage={get:async key=>({[key]:saved[key]}),set:async values=>Object.assign(saved,values)};
+  const h=apiHarness({sessionStorage,latency:0});
+  await Promise.all(Array.from({length:205},(_,i)=>h.c.fetchJson(`/api/stats/players/${String(100000000000000000n+BigInt(i))}/profile`,undefined,'profile')));
+  const cache=saved.profileApiResponsesV1;
+  assert(Object.keys(cache).filter(path=>path.endsWith('/profile')).length<=200);
+});
+
+test('session storage failure falls back to memory and cache diagnostics name the endpoint',async()=>{
+  const sessionStorage={get:async()=>{throw new Error('Unavailable');},set:async()=>{throw new Error('Unavailable');}};
+  const h=apiHarness({sessionStorage});const path=`/api/stats/players/${players(1)[0].discordId}/profile`;
+  await h.c.fetchJson(path);await h.c.fetchJson(path);
+  assert.equal(h.calls.length,1);
+  assert(h.diagnostics.some(entry=>entry.kind==='cache' && entry.endpoint==='profile'));
+  assert(h.diagnostics.every(entry=>entry.endpoint!==undefined));
 });
 
 test('shared season/leaderboard requests are deduplicated and cached',async()=>{
@@ -267,7 +337,7 @@ test('cooldown preserves HTTP cause and successful endpoints are reused on recov
   failing=false;clock=cooldown.until;
   const result=Object.values(await h.c.fetchPlayerProfileSummaries(players(1)))[0];
   assert.equal(result.error,undefined);assert.equal(result.allTimeStats.matches,4);
-  assert.equal(h.calls.filter(p=>p.endsWith('/profile')).length,profileCallsBefore,'successful profile endpoint reused');
+  assert.equal(h.calls.filter(p=>p.endsWith('/profile')).length,Math.max(1,profileCallsBefore),'successful profile endpoint reused');
 });
 
 test('HTTP date Retry-After and server failures preserve their recovery deadline',async()=>{
@@ -388,6 +458,15 @@ test('request pacing spaces start times and cancellation does not dispatch aband
   const aborter=new AbortController();let called=false;
   const abandoned=queue.run(aborter.signal,async()=>{called=true;});aborter.abort(new Error('Room changed'));
   await assert.rejects(abandoned,/Room changed/);assert.equal(called,false);
+});
+
+test('paced starts choose priority first and retain FIFO within each priority',async()=>{
+  const c=context();evaluate(c,'requestQueue');const queue=vm.runInContext('new RequestQueue(3, 30)',c);
+  const signal=new AbortController().signal;const starts=[];
+  const jobs=[['background','old'],['profile','profile'],['stats','stats-a'],['history','history'],['shared','shared'],['stats','stats-b']];
+  await Promise.all(jobs.map(([priority,name])=>queue.run(signal,async()=>{starts.push([name,performance.now()]);},priority)));
+  assert.deepEqual(starts.map(([name])=>name),['shared','stats-a','stats-b','profile','history','old']);
+  assert(starts.slice(1).every(([,time],i)=>time-starts[i][1]>=27));
 });
 
 test('a 429 increases request spacing and the cooldown persists that spacing',async()=>{

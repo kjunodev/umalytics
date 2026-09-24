@@ -14,17 +14,21 @@ import {
   RECENT_HISTORY_VERSION
 } from './profileConstants';
 import { abortable, deadline, RequestQueue } from './requestQueue';
+import type { RequestPriority } from './requestQueue';
+import { browser } from 'wxt/browser';
 import { releaseOrder } from '../umas/umaReleaseOrder';
 import { getUmaDisplayName, getUmaPortraitUrl, normalizeUmaOutfitId } from '../umas/umaPortraits';
 
 const API_ORIGIN = 'https://drafter-api.uma.guide';
 const PROFILE_ORIGIN = 'https://drafter.uma.guide';
-const SHARED_CACHE_TTL_MS = 60 * 1000;
+const SHARED_CACHE_TTL_MS = 10 * 60 * 1000;
+const PROFILE_RESPONSE_TTL_MS = 24 * 60 * 60 * 1000;
+const STATS_RESPONSE_TTL_MS = 60 * 1000;
+const RESPONSE_CACHE_STORAGE_KEY = 'profileApiResponsesV1';
 const API_RATE_LIMIT_BACKOFF_MS = 30 * 1000;
 const API_SERVER_ERROR_BACKOFF_MS = 10 * 1000;
 const API_REQUEST_TIMEOUT_MS = 10 * 1000;
 const PROFILE_SUMMARY_TIMEOUT_MS = 60 * 1000;
-const PROFILE_FETCH_CONCURRENCY = 4;
 const DEFAULT_REQUEST_INTERVAL_MS = 500;
 let requestStartIntervalMs = DEFAULT_REQUEST_INTERVAL_MS;
 const requestQueue = new RequestQueue(3, requestStartIntervalMs);
@@ -33,6 +37,9 @@ const requestQueue = new RequestQueue(3, requestStartIntervalMs);
 export interface ApiCooldown { until: number; status: number; path: string; startIntervalMs?: number }
 let apiCooldown: ApiCooldown | undefined;
 const responseCache = new Map<string, { value: unknown; expiresAt: number }>();
+const inFlightRequests = new Map<string, { promise: Promise<unknown>; controller: AbortController; consumers: number }>();
+let persistentCacheLoad: Promise<void> | undefined;
+let persistentCacheWrites = Promise.resolve();
 
 export function getApiCooldown(): ApiCooldown | undefined { return apiCooldown; }
 export function restoreApiCooldown(value: ApiCooldown): void {
@@ -97,6 +104,8 @@ interface LeaderboardLookup {
   activeSeasonId?: string;
 }
 
+interface SeasonLookup { activeSeasonId?: string; error?: string }
+
 
 
 interface UmaMetadata {
@@ -106,7 +115,6 @@ interface UmaMetadata {
 
 type UmaMetadataLookup = Map<string, UmaMetadata>;
 
-let cachedLeaderboard: { value: LeaderboardLookup; expiresAt: number } | undefined;
 let leaderboardRequest: Promise<LeaderboardLookup> | undefined;
 let bundledUmaMetadata: UmaMetadataLookup | undefined;
 
@@ -126,20 +134,31 @@ export async function fetchPlayerProfileSummaries(
   // The roster deadline starts before shared setup or the profile queue.
   const budget = deadline(options.signal, PROFILE_SUMMARY_TIMEOUT_MS, 'Profile loading timed out (including queue).');
   const umaMetadata = bundledUmaMetadata ??= buildReleaseOrderUmaMetadata();
-  const leaderboard = getActiveLeaderboard();
+  const scope = options.scope ?? 'both';
+  const season = getActiveSeasonId();
+  const leaderboard = getActiveLeaderboard(season);
+  // Enqueue every stats request before any profile request can take a paced turn.
+  const allTimeRequests = uniquePlayers.map(player => scope === 'currentSeason' ? Promise.resolve(undefined) :
+    captureFetch(fetchJson<ApiPlayerStats>(`/api/stats/players/${encodeURIComponent(player.discordId)}/stats?mode=ranked`, budget.signal, 'stats')));
+  const seasonRequests = uniquePlayers.map(player => season.then(value =>
+    scope === 'allTime' || value.activeSeasonId === undefined ? undefined :
+      captureFetch(fetchJson<ApiPlayerStats>(`/api/stats/players/${encodeURIComponent(player.discordId)}/stats?mode=ranked&season=${encodeURIComponent(value.activeSeasonId)}`, budget.signal, 'stats'))));
+  const profileRequests = uniquePlayers.map(player => captureFetch(fetchJson<ApiPlayerProfile>(
+    `/api/stats/players/${encodeURIComponent(player.discordId)}/profile`, budget.signal, 'profile')));
   try {
-    const summaries = await mapWithConcurrency(uniquePlayers, PROFILE_FETCH_CONCURRENCY, async (player) => {
+    const summaries = await Promise.all(uniquePlayers.map(async (player, index) => {
       if (options.signal?.aborted) throw options.signal.reason;
       await options.onStart?.(player);
       const stage = async (value: string) => { await options.onStage?.(player, value); };
       const summary = await abortable(
-        fetchPlayerProfileSummary(player, leaderboard, umaMetadata, budget.signal, stage, async summary => {
+        fetchPlayerProfileSummary(player, season, leaderboard, profileRequests[index]!, allTimeRequests[index]!, seasonRequests[index]!, umaMetadata, budget.signal, stage, async summary => {
           if (!options.signal?.aborted) await options.onProgress?.(summary);
-        }, options.scope ?? 'both'), budget.signal
+        }, scope), budget.signal
       ).catch((caught) => buildUnavailablePlayerSummary(player, getErrorMessage(caught)));
       if (!options.signal?.aborted) await options.onSummary?.(summary);
       return summary;
-    });
+    }));
+    options.signal?.throwIfAborted();
     return Object.fromEntries(summaries.map((summary) => [summary.discordId, summary]));
   } finally {
     budget.dispose();
@@ -198,7 +217,11 @@ async function captureFetch<T>(promise: Promise<T>): Promise<CapturedFetch<T>> {
 
 async function fetchPlayerProfileSummary(
   player: PrematchPlayer,
+  seasonPromise: Promise<SeasonLookup>,
   leaderboardPromise: Promise<LeaderboardLookup>,
+  profileRequest: Promise<CapturedFetch<ApiPlayerProfile>>,
+  allTimeRequest: Promise<CapturedFetch<ApiPlayerStats> | undefined>,
+  seasonRequest: Promise<CapturedFetch<ApiPlayerStats> | undefined>,
   umaMetadata: UmaMetadataLookup,
   signal: AbortSignal,
   onStage: (stage: string) => Promise<void>,
@@ -208,8 +231,6 @@ async function fetchPlayerProfileSummary(
   const profileUrl = `${PROFILE_ORIGIN}/players/${encodeURIComponent(player.discordId)}`;
   signal.throwIfAborted();
   await onStage(scope === 'currentSeason' ? 'Profile and seasonal stats' : 'Profile and all-time stats');
-  const profilePath = `/api/stats/players/${encodeURIComponent(player.discordId)}/profile`;
-  const allTimeStatsPath = `/api/stats/players/${encodeURIComponent(player.discordId)}/stats?mode=ranked`;
   let profile: ApiPlayerProfile | undefined;
   let allTimeStats: ApiPlayerStats | undefined;
   let currentSeasonStats: ApiPlayerStats | undefined;
@@ -218,11 +239,22 @@ async function fetchPlayerProfileSummary(
   let statsPrivate = false;
   let error: string | undefined;
   let leaderboard: LeaderboardLookup = { ranksByDiscordId: new Map() };
+  let activeSeasonId: string | undefined;
+  const seasonReady = seasonPromise.then(value => { activeSeasonId = value.activeSeasonId; return value; });
+  const seasonWithProgress = seasonRequest.then(async result => {
+    if (result?.ok) currentSeasonStats = result.value;
+    else if (result !== undefined && result.error instanceof ApiRequestError && result.error.status === 403) {
+      currentSeasonStatsPrivate = true;
+      statsPrivate = true;
+    }
+    if (!signal.aborted && (result?.ok || currentSeasonStatsPrivate)) await onProgress({ ...buildSummary(), isPartial: true });
+    return result;
+  });
 
   // Begin usable player data immediately; season/leaderboard setup runs alongside it.
   const baseRequests = Promise.all([
-    captureFetch(fetchJson<ApiPlayerProfile>(profilePath, signal)),
-    (scope === 'currentSeason' ? Promise.resolve(undefined) : captureFetch(fetchJson<ApiPlayerStats>(allTimeStatsPath, signal))).then(async result => {
+    profileRequest,
+    allTimeRequest.then(async result => {
       if (result === undefined) return undefined;
       if (result.ok) allTimeStats = result.value;
       else if (result.error instanceof ApiRequestError && result.error.status === 403) {
@@ -234,11 +266,6 @@ async function fetchPlayerProfileSummary(
       return result;
     })
   ]);
-  const seasonRequest = leaderboardPromise.then(async (leaderboard) => {
-    if (scope === 'allTime' || leaderboard.activeSeasonId === undefined) return undefined;
-    return captureFetch(fetchJson<ApiPlayerStats>(
-      `/api/stats/players/${encodeURIComponent(player.discordId)}/stats?mode=ranked&season=${encodeURIComponent(leaderboard.activeSeasonId)}`, signal));
-  });
   const [profileResult, allTimeStatsResult] = await baseRequests;
   signal.throwIfAborted();
   if (profileResult.ok) {
@@ -259,9 +286,10 @@ async function fetchPlayerProfileSummary(
   // Publish the first usable scope before waiting for the other scope/history.
   await onProgress({ ...buildSummary(), isPartial: true });
   await onStage('Season and leaderboard');
-  const sharedResults = await Promise.all([leaderboardPromise, seasonRequest]);
-  leaderboard = sharedResults[0];
-  const currentSeasonStatsResult = sharedResults[1];
+  const sharedResults = await Promise.all([seasonReady, leaderboardPromise, seasonWithProgress]);
+  activeSeasonId = sharedResults[0].activeSeasonId;
+  leaderboard = sharedResults[1];
+  const currentSeasonStatsResult = sharedResults[2];
   if (leaderboard.error !== undefined) error = error ?? leaderboard.error;
   signal.throwIfAborted();
 
@@ -286,7 +314,7 @@ async function fetchPlayerProfileSummary(
   function buildSummary(): PlayerProfileSummary {
   const leaderboardEntry = leaderboard.ranksByDiscordId.get(player.discordId);
   const allTimeStatsSummary = buildProfileStatsSummary(allTimeStats, umaMetadata);
-  const currentSeasonStatsSummary = leaderboard.activeSeasonId === undefined
+  const currentSeasonStatsSummary = activeSeasonId === undefined
     ? buildEmptyStatsSummary()
     : buildProfileStatsSummary(currentSeasonStats, umaMetadata);
   const displayedStats = scope === 'allTime' ? allTimeStatsSummary : currentSeasonStatsSummary;
@@ -325,7 +353,7 @@ async function fetchPlayerProfileSummary(
       winRate: wins !== null && losses !== null && wins + losses > 0 ? wins / (wins + losses) : currentSeasonStatsSummary.winRate
     },
     allTimeStats: allTimeStatsSummary,
-    activeSeasonId: leaderboard.activeSeasonId,
+    activeSeasonId,
     statsPrivate,
     fetchedAt: Date.now(),
     profileUrl,
@@ -383,36 +411,36 @@ function buildReleaseOrderUmaMetadata(): UmaMetadataLookup {
   );
 }
 
-function getActiveLeaderboard(): Promise<LeaderboardLookup> {
-  if (cachedLeaderboard !== undefined && cachedLeaderboard.expiresAt > Date.now()) {
-    return Promise.resolve(cachedLeaderboard.value);
-  }
+function getActiveSeasonId(): Promise<SeasonLookup> {
+  const budget = deadline(undefined, 15_000, 'Season request timed out.');
+  return abortable(fetchJson<ApiSeason[]>('/api/seasons', budget.signal, 'shared'), budget.signal)
+    .then(seasons => ({ activeSeasonId: seasons.find(season => season.active === true && typeof season.id === 'string')?.id ?? undefined }))
+    .catch((caught): SeasonLookup => ({ error: getErrorMessage(caught) }))
+    .finally(() => budget.dispose());
+}
+
+function getActiveLeaderboard(seasonPromise: Promise<SeasonLookup>): Promise<LeaderboardLookup> {
   if (leaderboardRequest !== undefined) return leaderboardRequest;
   const budget = deadline(undefined, 15_000, 'Season/leaderboard request timed out.');
-  leaderboardRequest = abortable(fetchActiveLeaderboard(budget.signal), budget.signal)
-    .then((value) => {
-      if (value.error === undefined) cachedLeaderboard = { value, expiresAt: Date.now() + SHARED_CACHE_TTL_MS };
-      return value;
-    }).catch((caught): LeaderboardLookup => ({ ranksByDiscordId: new Map(), error: getErrorMessage(caught) }))
+  leaderboardRequest = abortable(fetchActiveLeaderboard(seasonPromise, budget.signal), budget.signal)
+    .catch((caught): LeaderboardLookup => ({ ranksByDiscordId: new Map(), error: getErrorMessage(caught) }))
     .finally(() => { budget.dispose(); leaderboardRequest = undefined; });
   return leaderboardRequest;
 }
 
-async function fetchActiveLeaderboard(signal: AbortSignal): Promise<LeaderboardLookup> {
-  const seasons = await fetchJson<ApiSeason[]>('/api/seasons', signal);
-  const activeSeason = seasons.find((season) => season.active === true && typeof season.id === 'string');
-
-  if (typeof activeSeason?.id !== 'string') {
-    return { ranksByDiscordId: new Map() };
+async function fetchActiveLeaderboard(seasonPromise: Promise<SeasonLookup>, signal: AbortSignal): Promise<LeaderboardLookup> {
+  const season = await abortable(seasonPromise, signal);
+  if (season.activeSeasonId === undefined) {
+    return { ranksByDiscordId: new Map(), error: season.error };
   }
 
   const leaderboardResult = await captureFetch(fetchJson<ApiLeaderboard>(
-    `/api/leaderboard?season=${encodeURIComponent(activeSeason.id)}`, signal
+    `/api/leaderboard?season=${encodeURIComponent(season.activeSeasonId)}`, signal, 'shared'
   ));
   const entries = leaderboardResult.ok ? leaderboardResult.value.entries ?? [] : [];
 
   return {
-    activeSeasonId: activeSeason.id,
+    activeSeasonId: season.activeSeasonId,
     ...(!leaderboardResult.ok ? { error: getErrorMessage(leaderboardResult.error) } : {}),
     ranksByDiscordId: new Map(
       entries
@@ -494,13 +522,69 @@ function buildEmptyStatsSummary(
   };
 }
 
-export async function fetchJson<T>(path: string, signal?: AbortSignal): Promise<T> {
+function cacheTtl(path: string): number {
+  if (path === '/api/seasons' || path.startsWith('/api/leaderboard?')) return SHARED_CACHE_TTL_MS;
+  if (path.endsWith('/profile')) return PROFILE_RESPONSE_TTL_MS;
+  return STATS_RESPONSE_TTL_MS;
+}
+
+function isPersistentResponse(path: string): boolean {
+  return path === '/api/seasons' || path.startsWith('/api/leaderboard?') || path.endsWith('/profile');
+}
+
+function loadPersistentResponses(): Promise<void> {
+  return persistentCacheLoad ??= (async () => {
+    if (typeof browser === 'undefined' || browser.storage?.session === undefined) return;
+    try {
+      const stored = await browser.storage.session.get(RESPONSE_CACHE_STORAGE_KEY);
+      const entries = stored[RESPONSE_CACHE_STORAGE_KEY] as Record<string, { value: unknown; expiresAt: number }> | undefined;
+      for (const [path, entry] of Object.entries(entries ?? {})) {
+        if (!isPersistentResponse(path) || !Number.isFinite(entry?.expiresAt) || entry.expiresAt <= Date.now()) continue;
+        if ((responseCache.get(path)?.expiresAt ?? 0) < entry.expiresAt) responseCache.set(path, entry);
+      }
+    } catch { /* Session storage can be unavailable; the memory cache still works. */ }
+  })();
+}
+
+function persistResponses(): Promise<void> {
+  if (typeof browser === 'undefined' || browser.storage?.session === undefined) return Promise.resolve();
+  const entries = [...responseCache].filter(([path, entry]) => isPersistentResponse(path) && entry.expiresAt > Date.now())
+    .sort((a, b) => b[1].expiresAt - a[1].expiresAt);
+  const shared = entries.filter(([path]) => !path.endsWith('/profile'));
+  const profiles = entries.filter(([path]) => path.endsWith('/profile')).slice(0, 200);
+  const snapshot = Object.fromEntries([...shared, ...profiles]);
+  persistentCacheWrites = persistentCacheWrites.then(() => browser.storage.session.set({ [RESPONSE_CACHE_STORAGE_KEY]: snapshot })).catch(() => {});
+  return persistentCacheWrites;
+}
+
+export async function fetchJson<T>(path: string, signal?: AbortSignal, priority: RequestPriority = 'background'): Promise<T> {
   signal?.throwIfAborted();
+  let shared = inFlightRequests.get(path);
+  if (shared === undefined) {
+    const controller = new AbortController();
+    const promise = fetchJsonOnce<T>(path, controller.signal, priority).finally(() => inFlightRequests.delete(path));
+    shared = { promise, controller, consumers: 0 };
+    inFlightRequests.set(path, shared);
+  }
+  shared.consumers += 1;
+  const budget = deadline(signal, PROFILE_SUMMARY_TIMEOUT_MS, `Request queue timed out: ${path}`);
+  try {
+    return await abortable(shared.promise as Promise<T>, budget.signal);
+  } finally {
+    budget.dispose();
+    shared.consumers -= 1;
+    if (shared.consumers === 0) shared.controller.abort(new Error('Request cancelled.'));
+  }
+}
+
+async function fetchJsonOnce<T>(path: string, signal: AbortSignal, priority: RequestPriority): Promise<T> {
+  await loadPersistentResponses();
+  signal.throwIfAborted();
+  const endpoint = path.split('?')[0]!.split('/').at(-1);
   const cached = responseCache.get(path);
-  if (cached !== undefined && cached.expiresAt > Date.now()) { recordDiagnostic({ kind: 'cache', reason: 'hit' }); return cached.value as T; }
+  if (cached !== undefined && cached.expiresAt > Date.now()) { recordDiagnostic({ kind: 'cache', endpoint, reason: 'hit' }); return cached.value as T; }
   assertApiAvailable(path);
   const queuedAt = Date.now();
-  const endpoint = path.split('?')[0]!.split('/').at(-1);
   const queueBudget = deadline(signal, PROFILE_SUMMARY_TIMEOUT_MS, `Request queue timed out: ${path}`);
   try {
     return await requestQueue.run(queueBudget.signal, async () => {
@@ -533,15 +617,16 @@ export async function fetchJson<T>(path: string, signal?: AbortSignal): Promise<
       recordDiagnostic({ kind: 'request', endpoint, reason: 'success', status: response.status, queueMs: startedAt - queuedAt, networkMs: Date.now() - startedAt });
       // Cache successes only, so a partial retry does not re-download healthy endpoints.
       for (const [key, entry] of responseCache) if (entry.expiresAt <= Date.now()) responseCache.delete(key);
-      if (responseCache.size >= 128) responseCache.delete(responseCache.keys().next().value!);
-      responseCache.set(path, { value, expiresAt: Date.now() + SHARED_CACHE_TTL_MS });
+      if (responseCache.size >= 256) responseCache.delete(responseCache.keys().next().value!);
+      responseCache.set(path, { value, expiresAt: Date.now() + cacheTtl(path) });
+      if (isPersistentResponse(path)) await persistResponses();
       return value;
       } catch (error) {
         if (!(error instanceof ApiRequestError)) recordDiagnostic({ kind: 'request', endpoint,
           reason: signal?.aborted ? 'cancelled' : /timed out/i.test(getErrorMessage(error)) ? 'timeout' : 'network-error', queueMs: startedAt - queuedAt, networkMs: Date.now() - startedAt });
         throw error;
       } finally { budget.dispose(); }
-    });
+    }, priority);
   } finally {
     queueBudget.dispose();
   }
@@ -575,33 +660,6 @@ function uniqueByDiscordId(players: PrematchPlayer[]): PrematchPlayer[] {
 
 function isDiscordSnowflake(value: string): boolean {
   return /^\d{16,20}$/.test(value);
-}
-
-async function mapWithConcurrency<TInput, TOutput>(
-  items: readonly TInput[],
-  concurrency: number,
-  mapper: (item: TInput) => Promise<TOutput>
-): Promise<TOutput[]> {
-  const results = new Array<TOutput>(items.length);
-  let nextIndex = 0;
-
-  async function worker() {
-    while (nextIndex < items.length) {
-      const currentIndex = nextIndex;
-      nextIndex += 1;
-      const item = items[currentIndex];
-
-      if (item !== undefined) {
-        results[currentIndex] = await mapper(item);
-      }
-    }
-  }
-
-  await Promise.all(
-    Array.from({ length: Math.min(concurrency, items.length) }, () => worker())
-  );
-
-  return results;
 }
 
 function getRecordFromUmaEntries(

@@ -23,60 +23,63 @@ export function abortable<T>(promise: Promise<T>, signal: AbortSignal): Promise<
   });
 }
 
+export type RequestPriority = 'shared' | 'stats' | 'profile' | 'history' | 'background';
+
+const priorityOrder: Record<RequestPriority, number> = {
+  shared: 0, stats: 1, profile: 2, history: 3, background: 4
+};
+
 export class RequestQueue {
   private active = 0;
-  private readonly waiting: Array<() => void> = [];
+  private readonly waiting: Array<{ priority: RequestPriority; start: () => void }> = [];
   private nextStartAt = 0;
-  private pacing = Promise.resolve();
+  private timer: ReturnType<typeof setTimeout> | undefined;
 
   constructor(private readonly limit: number, private startIntervalMs = 0) {}
 
   setStartInterval(ms: number): void { this.startIntervalMs = Math.max(0, ms); }
 
-  private async waitForPacedStart(signal: AbortSignal): Promise<void> {
-    const turn = this.pacing.then(async () => {
-      signal.throwIfAborted();
-      const delay = Math.max(0, this.nextStartAt - Date.now());
-      if (delay > 0) await new Promise<void>((resolve, reject) => {
-        const finish = () => { signal.removeEventListener('abort', abort); resolve(); };
-        const timer = setTimeout(finish, delay);
-        const abort = () => { clearTimeout(timer); reject(signal.reason); };
-        signal.addEventListener('abort', abort, { once: true });
-      });
-      signal.throwIfAborted();
+  private pump(): void {
+    if (this.timer !== undefined || this.active >= this.limit || this.waiting.length === 0) return;
+    const delay = Math.max(0, this.nextStartAt - Date.now());
+    this.timer = setTimeout(() => {
+      this.timer = undefined;
+      if (this.active >= this.limit || this.waiting.length === 0) return;
+      let best = 0;
+      for (let index = 1; index < this.waiting.length; index += 1) {
+        if (priorityOrder[this.waiting[index]!.priority] < priorityOrder[this.waiting[best]!.priority]) best = index;
+      }
+      const next = this.waiting.splice(best, 1)[0]!;
+      this.active += 1;
       this.nextStartAt = Date.now() + this.startIntervalMs;
-    });
-    this.pacing = turn.catch(() => {});
-    await abortable(turn, signal);
+      next.start();
+      this.pump();
+    }, delay);
   }
 
-  async run<T>(signal: AbortSignal, work: () => Promise<T>): Promise<T> {
+  async run<T>(signal: AbortSignal, work: () => Promise<T>, priority: RequestPriority = 'background'): Promise<T> {
     await new Promise<void>((resolve, reject) => {
       const abort = () => {
-        const index = this.waiting.indexOf(start);
+        const index = this.waiting.indexOf(entry);
         if (index !== -1) this.waiting.splice(index, 1);
         reject(signal.reason ?? new Error('Request cancelled.'));
       };
       const start = () => {
         signal.removeEventListener('abort', abort);
-        if (signal.aborted) { abort(); return; }
-        this.active += 1;
         resolve();
       };
+      const entry = { priority, start };
       if (signal.aborted) { abort(); return; }
-      if (this.active < this.limit) start();
-      else {
-        this.waiting.push(start);
-        signal.addEventListener('abort', abort, { once: true });
-      }
+      this.waiting.push(entry);
+      signal.addEventListener('abort', abort, { once: true });
+      this.pump();
     });
     try {
       signal.throwIfAborted();
-      await this.waitForPacedStart(signal);
       return await abortable(work(), signal);
     } finally {
       this.active -= 1;
-      this.waiting.shift()?.();
+      this.pump();
     }
   }
 }
