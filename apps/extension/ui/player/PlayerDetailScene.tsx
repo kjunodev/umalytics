@@ -1,6 +1,11 @@
 import type { PlayerProfileSummary, PlayerRecentMatchSummary, PlayerStatsScope, PrematchPlayer, PrematchTeam } from '@umalytics/shared';
 import { useEffect, useRef, useState } from 'react';
-import { cancelPlayerHistoryPageRequest, sendPlayerHistoryPageRequest } from '../../runtime/messaging';
+import {
+  cancelPlayerHistoryPageRequest,
+  cancelPlayerProfileRequest,
+  sendPlayerHistoryPageRequest,
+  sendPlayerProfileRequest
+} from '../../runtime/messaging';
 import { recentHistoryEmptyMessage } from '../../profiles/profileMerge';
 import { getNotableBadges, hasDisplayableProfileLists } from '../common/badges';
 import { formatDecimal, formatNumber, formatPercent, formatRank, formatRecord, formatRelativeAge } from '../common/format';
@@ -48,6 +53,9 @@ export function PlayerDetailScene({
   const detailProfile = historyLoaded ? withDetailHistory(displayedProfile, historyPage.firstPageMatches ?? [], historyPage.total, historyPage.summary) : displayedProfile;
   const notableBadges = getNotableBadges(detailProfile === undefined ? undefined :
     historyLoaded ? detailProfile : { ...detailProfile, recentForm: undefined });
+  const knownTitle = typeof profile?.title === 'string' && profile.title.length > 0 ? profile.title : undefined;
+  const [fetchedTitle, setFetchedTitle] = useState<{ discordId: string; title: string | null } | undefined>(undefined);
+  const displayedTitle = knownTitle ?? (fetchedTitle !== undefined && fetchedTitle.discordId === discordId ? fetchedTitle.title : undefined);
 
   useEffect(() => {
     setHistoryPage({ key: historyKey, page: 0, total: 0, matches: [], loading: true });
@@ -57,6 +65,19 @@ export function PlayerDetailScene({
       pendingHistoryRequests.current.clear();
     };
   }, [historyKey]);
+
+  useEffect(() => {
+    if (discordId === undefined || knownTitle !== undefined) return;
+    let cancelled = false;
+    const requestId = crypto.randomUUID();
+    void sendPlayerProfileRequest(discordId, requestId).then(result => {
+      if (!cancelled) setFetchedTitle({ discordId, title: result.title });
+    }).catch(() => {});
+    return () => {
+      cancelled = true;
+      void cancelPlayerProfileRequest(requestId).catch(() => {});
+    };
+  }, [discordId, knownTitle]);
 
   async function loadHistoryPage(page: number): Promise<void> {
     if (discordId === undefined) return;
@@ -100,7 +121,7 @@ export function PlayerDetailScene({
 
       <div className="detail-card detail-summary">
         <div className="detail-identity">
-          <span className="player-title">{profile?.title ?? ' '}</span>
+          <span className="player-title">{displayedTitle ?? ' '}</span>
           <div className="player-meta">
             <span className="player-rank-line detail-rank-line">
               <span>{formatRank(profile, isProfileLoading && discordId !== undefined)}</span>

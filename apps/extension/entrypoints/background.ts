@@ -12,6 +12,7 @@ import {
   buildUnavailablePlayerSummary,
   fetchPlayerHistoryPage,
   fetchPlayerProfileSummaries,
+  fetchPlayerProfileTitle,
   getApiCooldown,
   restoreApiCooldown
 } from '../profiles/playerProfileApi';
@@ -78,6 +79,7 @@ let pendingRecovery: ProfileRecovery | undefined;
 let recoveryWrites = Promise.resolve();
 let initialization = Promise.resolve();
 const historyRequests = new Map<string, AbortController>();
+const profileTitleRequests = new Map<string, AbortController>();
 
 configureScoutWindow({ handleLobbyReconnectRequested, reportEnrichmentError });
 
@@ -162,6 +164,18 @@ export default defineBackground(() => {
     if (message.type === 'player-history-page-cancelled') {
       historyRequests.get(message.requestId)?.abort(new Error('History view closed.'));
       historyRequests.delete(message.requestId);
+      return;
+    }
+
+    if (message.type === 'player-profile-requested') {
+      const controller = new AbortController();
+      profileTitleRequests.set(message.requestId, controller);
+      try { return await fetchPlayerProfileTitle(message.discordId, controller.signal); }
+      finally { if (profileTitleRequests.get(message.requestId) === controller) profileTitleRequests.delete(message.requestId); }
+    }
+    if (message.type === 'player-profile-cancelled') {
+      profileTitleRequests.get(message.requestId)?.abort(new Error('Details closed.'));
+      profileTitleRequests.delete(message.requestId);
       return;
     }
 

@@ -119,7 +119,6 @@ export function PlayerRow({
           </span>
         )}
         <span className="player-id">{discordId ?? 'Profile unavailable from room page'}</span>
-        <span className="player-title">{profile?.title ?? ' '}</span>
       </div>
       <div className="player-meta">
         <span className="player-rank-line">
@@ -191,7 +190,6 @@ export function EmptyPlayerSlot({ slotNumber }: { slotNumber: number }) {
       <div className="player-main">
         <span className="player-name">Waiting for player</span>
         <span className="player-id">Slot {slotNumber}</span>
-        <span className="player-title"> </span>
       </div>
       <div className="player-meta">
         <span>Open slot</span>

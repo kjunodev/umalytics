@@ -30,6 +30,10 @@ export type UmaLyticsMessage = { type: 'diagnostic-event'; event: Record<string,
   type: 'player-history-page-requested'; discordId: string; scope: PlayerStatsScope; page: number; requestId: string;
 } | {
   type: 'player-history-page-cancelled'; requestId: string;
+} | {
+  type: 'player-profile-requested'; discordId: string; requestId: string;
+} | {
+  type: 'player-profile-cancelled'; requestId: string;
 };
 
 export type UmaLyticsContentMessage = {
@@ -48,6 +52,8 @@ export function isUmaLyticsMessage(value: unknown): value is UmaLyticsMessage {
   if (value.type === 'player-history-page-requested') return typeof value.discordId === 'string' &&
     (value.scope === 'allTime' || value.scope === 'currentSeason') &&
     Number.isInteger(value.page) && typeof value.requestId === 'string';
+  if (value.type === 'player-profile-cancelled') return typeof value.requestId === 'string';
+  if (value.type === 'player-profile-requested') return typeof value.discordId === 'string' && typeof value.requestId === 'string';
   if (value.type === 'lobby-reconnect-requested') {
     return true;
   }
@@ -100,6 +106,14 @@ export function sendPlayerHistoryPageRequest(discordId: string, scope: PlayerSta
 
 export async function cancelPlayerHistoryPageRequest(requestId: string): Promise<void> {
   await browser.runtime.sendMessage({ type: 'player-history-page-cancelled', requestId } satisfies UmaLyticsMessage);
+}
+
+export function sendPlayerProfileRequest(discordId: string, requestId: string): Promise<{ title: string | null }> {
+  return browser.runtime.sendMessage({ type: 'player-profile-requested', discordId, requestId } satisfies UmaLyticsMessage);
+}
+
+export async function cancelPlayerProfileRequest(requestId: string): Promise<void> {
+  await browser.runtime.sendMessage({ type: 'player-profile-cancelled', requestId } satisfies UmaLyticsMessage);
 }
 
 export async function sendRoomDomScanRequest(

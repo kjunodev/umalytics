@@ -36,7 +36,11 @@ const API_SERVER_ERROR_BACKOFF_MS = 10 * 1000;
 const API_REQUEST_TIMEOUT_MS = 10 * 1000;
 const PROFILE_SUMMARY_TIMEOUT_MS = 60 * 1000;
 const DEFAULT_REQUEST_INTERVAL_MS = 500;
-let requestStartIntervalMs = DEFAULT_REQUEST_INTERVAL_MS;
+const PACING_RECOVERY_SUCCESS_STREAK = 20;
+const PACING_RECOVERY_FACTOR = 0.75;
+let baseRequestIntervalMs = DEFAULT_REQUEST_INTERVAL_MS;
+let requestStartIntervalMs = baseRequestIntervalMs;
+let consecutiveSuccessCount = 0;
 let batchUnavailableUntil = 0;
 let batchAvailabilityLoad: Promise<void> | undefined;
 const batchStartedAt: number[] = [];
@@ -55,7 +59,16 @@ let persistentCacheDirty = false;
 export function getApiCooldown(): ApiCooldown | undefined { return apiCooldown; }
 export function restoreApiCooldown(value: ApiCooldown): void {
   if (value.until > (apiCooldown?.until ?? 0)) apiCooldown = value;
-  requestStartIntervalMs = Math.max(requestStartIntervalMs, Math.min(2000, value.startIntervalMs ?? DEFAULT_REQUEST_INTERVAL_MS));
+  requestStartIntervalMs = Math.max(requestStartIntervalMs, Math.min(2000, value.startIntervalMs ?? baseRequestIntervalMs));
+  consecutiveSuccessCount = 0;
+  requestQueue.setStartInterval(requestStartIntervalMs);
+}
+
+/** Lets a build choose a different pace than the public default without editing the constant. */
+export function setBaseRequestInterval(ms: number): void {
+  baseRequestIntervalMs = Math.max(250, ms);
+  requestStartIntervalMs = baseRequestIntervalMs;
+  consecutiveSuccessCount = 0;
   requestQueue.setStartInterval(requestStartIntervalMs);
 }
 
@@ -250,21 +263,19 @@ export async function fetchPlayerProfileSummaries(
   const scope = options.scope ?? 'both';
   const season = getActiveSeasonId();
   const leaderboard = getActiveLeaderboard(season);
-  // Enqueue every stats request before any profile request can take a paced turn.
+  // Names come from the roster or search results; no /profile request during lobby loading.
   const allTimeRequests = uniquePlayers.map(player => scope === 'currentSeason' ? Promise.resolve(undefined) :
     captureFetch(fetchJson<ApiPlayerStats>(`/api/stats/players/${encodeURIComponent(player.discordId)}/stats?mode=ranked`, budget.signal, 'stats')));
   const seasonRequests = uniquePlayers.map(player => season.then(value =>
     scope === 'allTime' || value.activeSeasonId === undefined ? undefined :
       captureFetch(fetchJson<ApiPlayerStats>(`/api/stats/players/${encodeURIComponent(player.discordId)}/stats?mode=ranked&season=${encodeURIComponent(value.activeSeasonId)}`, budget.signal, 'stats'))));
-  const profileRequests = uniquePlayers.map(player => captureFetch(fetchJson<ApiPlayerProfile>(
-    `/api/stats/players/${encodeURIComponent(player.discordId)}/profile`, budget.signal, 'profile')));
   try {
     const summaries = await Promise.all(uniquePlayers.map(async (player, index) => {
       if (options.signal?.aborted) throw options.signal.reason;
       await options.onStart?.(player);
       const stage = async (value: string) => { await options.onStage?.(player, value); };
       const summary = await abortable(
-        fetchPlayerProfileSummary(player, season, leaderboard, profileRequests[index]!, allTimeRequests[index]!, seasonRequests[index]!, umaMetadata, budget.signal, stage, async summary => {
+        fetchPlayerProfileSummary(player, season, leaderboard, allTimeRequests[index]!, seasonRequests[index]!, umaMetadata, budget.signal, stage, async summary => {
           if (!options.signal?.aborted) await options.onProgress?.(summary);
         }, scope), budget.signal
       ).catch((caught) => buildUnavailablePlayerSummary(player, getErrorMessage(caught)));
@@ -455,11 +466,17 @@ export async function fetchPlayerHistoryPage(
   }) };
 }
 
+/** Fetched once when a player's details open; the response is cached for 24 hours. */
+export async function fetchPlayerProfileTitle(discordId: string, signal?: AbortSignal): Promise<{ title: string | null }> {
+  if (!isDiscordSnowflake(discordId)) throw new Error('Invalid profile request.');
+  const profile = await fetchJson<ApiPlayerProfile>(`/api/stats/players/${encodeURIComponent(discordId)}/profile`, signal, 'profile');
+  return { title: profile.title ?? null };
+}
+
 async function fetchPlayerProfileSummary(
   player: PrematchPlayer,
   seasonPromise: Promise<SeasonLookup>,
   leaderboardPromise: Promise<LeaderboardLookup>,
-  profileRequest: Promise<CapturedFetch<ApiPlayerProfile>>,
   allTimeRequest: Promise<CapturedFetch<ApiPlayerStats> | undefined>,
   seasonRequest: Promise<CapturedFetch<ApiPlayerStats> | undefined>,
   umaMetadata: UmaMetadataLookup,
@@ -470,8 +487,7 @@ async function fetchPlayerProfileSummary(
 ): Promise<PlayerProfileSummary> {
   const profileUrl = `${PROFILE_ORIGIN}/players/${encodeURIComponent(player.discordId)}`;
   signal.throwIfAborted();
-  await onStage(scope === 'currentSeason' ? 'Profile and seasonal stats' : 'Profile and all-time stats');
-  let profile: ApiPlayerProfile | undefined;
+  await onStage(scope === 'currentSeason' ? 'Seasonal stats' : 'All-time stats');
   let allTimeStats: ApiPlayerStats | undefined;
   let currentSeasonStats: ApiPlayerStats | undefined;
   let allTimeStatsPrivate = false;
@@ -492,27 +508,18 @@ async function fetchPlayerProfileSummary(
   });
 
   // Begin usable player data immediately; season/leaderboard setup runs alongside it.
-  const baseRequests = Promise.all([
-    profileRequest,
-    allTimeRequest.then(async result => {
-      if (result === undefined) return undefined;
-      if (result.ok) allTimeStats = result.value;
-      else if (result.error instanceof ApiRequestError && result.error.status === 403) {
-        allTimeStatsPrivate = true;
-        statsPrivate = true;
-      }
-      signal.throwIfAborted();
-      if (result.ok || allTimeStatsPrivate) await onProgress({ ...buildSummary(), isPartial: true });
-      return result;
-    })
-  ]);
-  const [profileResult, allTimeStatsResult] = await baseRequests;
+  const allTimeStatsResult = await allTimeRequest.then(async result => {
+    if (result === undefined) return undefined;
+    if (result.ok) allTimeStats = result.value;
+    else if (result.error instanceof ApiRequestError && result.error.status === 403) {
+      allTimeStatsPrivate = true;
+      statsPrivate = true;
+    }
+    signal.throwIfAborted();
+    if (result.ok || allTimeStatsPrivate) await onProgress({ ...buildSummary(), isPartial: true });
+    return result;
+  });
   signal.throwIfAborted();
-  if (profileResult.ok) {
-    profile = profileResult.value;
-  } else {
-    error = getErrorMessage(profileResult.error);
-  }
 
   if (allTimeStatsResult?.ok) {
     allTimeStats = allTimeStatsResult.value;
@@ -568,9 +575,7 @@ async function fetchPlayerProfileSummary(
 
   return {
     discordId: player.discordId,
-    displayName: getPreferredDisplayName(profile, leaderboardEntry, player),
-    discordUsername: profile?.discordUsername,
-    title: profile?.title ?? null,
+    displayName: getPreferredDisplayName(leaderboardEntry, player),
     rank: leaderboardEntry?.rank ?? null,
     rating: leaderboardEntry?.rating ?? player.displayRatingSnapshot ?? player.ratingSnapshot ?? null,
     ratingDeviation: leaderboardEntry?.rd ?? player.displayRdSnapshot ?? player.rdSnapshot ?? null,
@@ -603,14 +608,10 @@ async function fetchPlayerProfileSummary(
 }
 
 function getPreferredDisplayName(
-  profile: ApiPlayerProfile | undefined,
   leaderboardEntry: ApiLeaderboardEntry | undefined,
   player: PrematchPlayer
 ): string {
   return [
-    profile?.displayName,
-    profile?.nickname,
-    profile?.discordUsername,
     leaderboardEntry?.displayName,
     player.displayName
   ].map(getUsableDisplayName).find((name) => name !== undefined) ?? player.displayName;
@@ -675,7 +676,7 @@ async function fetchActiveLeaderboard(seasonPromise: Promise<SeasonLookup>, sign
   }
 
   const leaderboardResult = await captureFetch(fetchJson<ApiLeaderboard>(
-    `/api/leaderboard?season=${encodeURIComponent(season.activeSeasonId)}`, signal, 'shared'
+    `/api/leaderboard?season=${encodeURIComponent(season.activeSeasonId)}`, signal, 'leaderboard'
   ));
   const entries = leaderboardResult.ok ? leaderboardResult.value.entries ?? [] : [];
 
@@ -888,6 +889,11 @@ async function fetchJsonOnce<T>(path: string, signal: AbortSignal, priority: Req
       const value = await response.json() as T;
       budget.signal.throwIfAborted();
       recordDiagnostic({ kind: 'request', endpoint, reason: 'success', status: response.status, queueMs: startedAt - queuedAt, networkMs: Date.now() - startedAt });
+      consecutiveSuccessCount += 1;
+      if (requestStartIntervalMs > baseRequestIntervalMs && consecutiveSuccessCount % PACING_RECOVERY_SUCCESS_STREAK === 0) {
+        requestStartIntervalMs = Math.max(baseRequestIntervalMs, requestStartIntervalMs * PACING_RECOVERY_FACTOR);
+        requestQueue.setStartInterval(requestStartIntervalMs);
+      }
       // Cache successes only, so a partial retry does not re-download healthy endpoints.
       for (const [key, entry] of responseCache) if (entry.expiresAt <= Date.now()) responseCache.delete(key);
       if (responseCache.size >= 256) responseCache.delete(responseCache.keys().next().value!);

@@ -79,12 +79,12 @@ test('every request diagnostic, including batch and history, retains its endpoin
     sanitizer.sanitizeDiagnostic(value)?.endpoint === value.endpoint));
 });
 
-test('public cold ten-player lobby uses paced stats and profile requests without batch or history', async () => {
+test('public cold ten-player lobby uses paced stats requests without profile, batch or history', async () => {
   const h = harness();
   const result = await h.c.fetchPlayerProfileSummaries(players(10), { scope: 'currentSeason' });
-  assert.equal(h.calls.length, 22);
+  assert.equal(h.calls.length, 12);
   assert.equal(h.calls.filter(path => path.includes('/stats?')).length, 10);
-  assert.equal(h.calls.filter(path => path.endsWith('/profile')).length, 10);
+  assert.equal(h.calls.filter(path => path.endsWith('/profile')).length, 0);
   assert.equal(h.calls.filter(path => path.includes('/batch?') || path.includes('/history?')).length, 0);
   assert.equal(result[ids[0]].recentMatches.length, 0);
   assert.equal(result[ids[0]].historyTotal, undefined);
@@ -136,9 +136,9 @@ test('batch 404 falls back to the original selected-scope path and is remembered
   const h = harness({ batchStatus: 404 });
   await h.c.fetchBatchPlayerProfileSummaries(players(10), { scope: 'currentSeason' });
   assert.equal(h.calls.filter(path => path.includes('/batch?')).length, 1);
-  assert.equal(h.calls.filter(path => path.endsWith('/profile')).length, 10);
+  assert.equal(h.calls.filter(path => path.endsWith('/profile')).length, 0);
   assert.equal(h.calls.filter(path => path.includes('/stats?')).length, 10);
-  assert.equal(h.calls.length, 23);
+  assert.equal(h.calls.length, 13);
   await h.c.fetchBatchPlayerProfileSummaries(players(1), { scope: 'currentSeason' });
   assert.equal(h.calls.filter(path => path.includes('/batch?')).length, 1);
   const future = Date.now() + 10 * 60 * 1000 + 1;
@@ -157,7 +157,8 @@ test('batch 429 uses the API cooldown and does not run the fallback', async () =
 test('batch 5xx also falls back without disabling future batch attempts', async () => {
   const h = harness({ batchStatus: 503 });
   await h.c.fetchBatchPlayerProfileSummaries(players(1), { scope: 'allTime' });
-  assert(h.calls.some(path => path.endsWith('/profile')));
+  assert(h.calls.some(path => path.includes('/stats?')));
+  assert(!h.calls.some(path => path.endsWith('/profile')));
   await h.c.fetchBatchPlayerProfileSummaries(players(1), { scope: 'allTime' });
   assert.equal(h.calls.filter(path => path.includes('/batch?')).length, 2);
 });
@@ -203,6 +204,25 @@ test('history pages are requested on demand, cached, and cancellable', async () 
   const slow = harness({ latency: 100 });
   const controller = new AbortController();
   const pending = slow.c.fetchPlayerHistoryPage(ids[0], 'allTime', 1, controller.signal);
+  setTimeout(() => controller.abort(new Error('Details closed')), 10);
+  await assert.rejects(pending, /Details closed/);
+});
+
+test('opening details makes one profile request plus the first history page, cached and cancellable', async () => {
+  const h = harness({ latency: 5 });
+  const [profile, history] = await Promise.all([
+    h.c.fetchPlayerProfileTitle(ids[0]),
+    h.c.fetchPlayerHistoryPage(ids[0], 'allTime', 1)
+  ]);
+  assert.equal(profile.title, null);
+  assert.equal(history.page, 1);
+  assert.equal(h.calls.filter(path => path.endsWith('/profile')).length, 1);
+  assert.equal(h.calls.filter(path => path.includes('/history?')).length, 1);
+  await h.c.fetchPlayerProfileTitle(ids[0]);
+  assert.equal(h.calls.filter(path => path.endsWith('/profile')).length, 1, 'the 24-hour profile cache avoids a second request');
+  const slow = harness({ latency: 100 });
+  const controller = new AbortController();
+  const pending = slow.c.fetchPlayerProfileTitle(ids[0], controller.signal);
   setTimeout(() => controller.abort(new Error('Details closed')), 10);
   await assert.rejects(pending, /Details closed/);
 });

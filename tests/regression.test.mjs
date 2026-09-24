@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import { parseHTML } from 'linkedom';
-import { loadModule } from './support/harness.mjs';
+import { loadModule, readModule } from './support/harness.mjs';
 const evaluate = loadModule;
 const deferred = () => { let resolve; const promise = new Promise(r => { resolve = r; }); return {promise,resolve}; };
 const tick = () => new Promise(r => setImmediate(r));
@@ -70,16 +70,19 @@ test('10-player cold load respects global request cap and returns usable stats',
   assert(Object.values(result).every(p=>p.error===undefined && p.matches===4), JSON.stringify(Object.values(result).map(p=>p.error)));
   assert.equal(h.calls.filter(p=>p==='/api/seasons').length,1);
   assert.equal(h.calls.filter(p=>p.startsWith('/api/leaderboard')).length,1);
-  assert.equal(h.calls.length,32);
+  assert.equal(h.calls.length,22);
 });
 
-test('10-player 100 ms fixture publishes all seasonal stats within the paced budget',async()=>{
+test('at the unchanged 500 ms pace, 10-player stats resolve within ~5.5 s and the whole lobby within ~6.5 s',async()=>{
   const h=apiHarness({latency:100,fast:false});const resolved=new Map();const start=performance.now();
   await h.c.fetchPlayerProfileSummaries(players(10),{scope:'currentSeason',onProgress:summary=>{
     if(summary.currentSeasonStats.matches===4 && !resolved.has(summary.discordId)) resolved.set(summary.discordId,performance.now()-start);
   }});
+  const lobbyMs=performance.now()-start;
   const times=[...resolved.values()];
-  assert.equal(times.length,10);assert(Math.min(...times)<1500);assert(Math.max(...times)<6500);
+  assert.equal(times.length,10);assert(Math.min(...times)<1500);
+  assert(Math.max(...times)<5500,`stats should resolve within ~5.5s, took ${Math.max(...times)}ms`);
+  assert(lobbyMs<6500,`the whole lobby should resolve within ~6.5s, took ${lobbyMs}ms`);
   assert(h.callTimes.slice(1).every((time,i)=>time-h.callTimes[i]>=450));
 });
 
@@ -405,11 +408,11 @@ test('cooldown preserves HTTP cause and successful endpoints are reused on recov
   const callsBefore=h.calls.length;
   await h.c.fetchPlayerProfileSummaries(players(1));
   assert.equal(h.calls.length,callsBefore,'no HTTP requests while cooling down');
-  const profileCallsBefore=h.calls.filter(p=>p.endsWith('/profile')).length;
+  const seasonCallsBefore=h.calls.filter(p=>p==='/api/seasons').length;
   failing=false;clock=cooldown.until;
   const result=Object.values(await h.c.fetchPlayerProfileSummaries(players(1)))[0];
   assert.equal(result.error,undefined);assert.equal(result.allTimeStats.matches,4);
-  assert.equal(h.calls.filter(p=>p.endsWith('/profile')).length,Math.max(1,profileCallsBefore),'successful profile endpoint reused');
+  assert.equal(h.calls.filter(p=>p==='/api/seasons').length,seasonCallsBefore,'successful shared endpoint reused, unaffected by the stats cooldown');
 });
 
 test('HTTP date Retry-After and server failures preserve their recovery deadline',async()=>{
@@ -535,9 +538,9 @@ test('request pacing spaces start times and cancellation does not dispatch aband
 test('paced starts choose priority first and retain FIFO within each priority',async()=>{
   const c=context();evaluate(c,'requestQueue');const queue=vm.runInContext('new RequestQueue(3, 30)',c);
   const signal=new AbortController().signal;const starts=[];
-  const jobs=[['background','old'],['profile','profile'],['stats','stats-a'],['history','history'],['shared','shared'],['stats','stats-b']];
+  const jobs=[['background','old'],['profile','profile'],['stats','stats-a'],['history','history'],['shared','shared'],['stats','stats-b'],['leaderboard','leaderboard']];
   await Promise.all(jobs.map(([priority,name])=>queue.run(signal,async()=>{starts.push([name,performance.now()]);},priority)));
-  assert.deepEqual(starts.map(([name])=>name),['shared','stats-a','stats-b','profile','history','old']);
+  assert.deepEqual(starts.map(([name])=>name),['shared','stats-a','stats-b','leaderboard','profile','history','old']);
   assert(starts.slice(1).every(([,time],i)=>time-starts[i][1]>=27));
 });
 
@@ -547,6 +550,52 @@ test('a 429 increases request spacing and the cooldown persists that spacing',as
   assert(h.c.getApiCooldown().startIntervalMs>initial);
   const next=apiHarness();next.c.restoreApiCooldown(h.c.getApiCooldown());
   assert.equal(vm.runInContext('requestStartIntervalMs',next.c),h.c.getApiCooldown().startIntervalMs);
+});
+
+test('a cold 10-player public lobby makes 12 requests, no profile/history/batch, and stats lead the leaderboard',async()=>{
+  const h=apiHarness();
+  const result=await h.c.fetchPlayerProfileSummaries(players(10),{scope:'currentSeason'});
+  assert.equal(Object.keys(result).length,10);
+  assert.equal(h.calls.length,12);
+  assert.equal(h.calls.filter(p=>p.includes('/stats?')).length,10);
+  assert.equal(h.calls.filter(p=>p==='/api/seasons').length,1);
+  assert.equal(h.calls.filter(p=>p.startsWith('/api/leaderboard')).length,1);
+  assert.equal(h.calls.filter(p=>p.endsWith('/profile')).length,0);
+  assert.equal(h.calls.filter(p=>p.includes('/history?')).length,0);
+  assert.equal(h.calls.filter(p=>p.includes('/batch?')).length,0);
+  const leaderboardStart=h.callTimes[h.calls.findIndex(p=>p.startsWith('/api/leaderboard'))];
+  const statStartTimes=h.calls.map((p,i)=>p.includes('/stats?')?h.callTimes[i]:undefined).filter(time=>time!==undefined);
+  assert.equal(statStartTimes.length,10);
+  assert(statStartTimes.every(time=>time<=leaderboardStart),'every stats request must start before the leaderboard request');
+});
+
+test('pacing recovers toward the base interval after sustained success following a 429',async()=>{
+  let clock=Date.now();class Clock extends Date {static now(){return clock;}}
+  const h=apiHarness({responder:url=>url.pathname==='/api/seasons'?{status:429,headers:{'retry-after':'1'}}:undefined});
+  h.c.Date=Clock;
+  await h.c.fetchJson('/api/seasons',undefined,'shared').catch(()=>{});
+  const afterBackoff=vm.runInContext('requestStartIntervalMs',h.c);
+  const base=vm.runInContext('baseRequestIntervalMs',h.c);
+  assert(afterBackoff>base,'a 429 must double the interval above the base');
+  clock=h.c.getApiCooldown().until;
+  for(let i=0;i<19;i++) await h.c.fetchJson(`/api/stats/players/${String(100000000000000000n+BigInt(i))}/profile`,undefined,'profile');
+  assert.equal(vm.runInContext('requestStartIntervalMs',h.c),afterBackoff,'no recovery step before the 20th consecutive success');
+  await h.c.fetchJson(`/api/stats/players/${String(100000000000000000n+BigInt(19))}/profile`,undefined,'profile');
+  const afterRecovery=vm.runInContext('requestStartIntervalMs',h.c);
+  assert.equal(afterRecovery,Math.max(base,afterBackoff*0.75),'the 20th consecutive success steps the interval back by 0.75x');
+  assert(afterRecovery>=base,'recovery can never go below the base interval');
+});
+
+test('setBaseRequestInterval is bounded to at least 250 ms and the public build never calls it',async()=>{
+  const h=apiHarness();
+  h.c.setBaseRequestInterval(50);
+  assert.equal(vm.runInContext('baseRequestIntervalMs',h.c),250);
+  assert.equal(vm.runInContext('requestStartIntervalMs',h.c),250);
+  h.c.setBaseRequestInterval(900);
+  assert.equal(vm.runInContext('baseRequestIntervalMs',h.c),900);
+  assert.equal(vm.runInContext('requestStartIntervalMs',h.c),900);
+  const background=readModule('background');
+  assert(!background.includes('setBaseRequestInterval'),'the public build never overrides the default pace');
 });
 
 test('private and public caches are separate and public mode rejects private/legacy private data',async()=>{
@@ -729,12 +778,13 @@ test('event decoding ignores chat and removes unrelated sensitive fields',()=>{
   assert.equal(c.decodeRoomEvent('x'.repeat(2_000_001)),null);
 });
 
-test('selected stats scope reduces ten-player cold request count from 32 to 22',async()=>{
+test('selected stats scope reduces ten-player cold request count from 22 to 12',async()=>{
   for(const scope of ['currentSeason','allTime']){
     const h=apiHarness();const summaries=await h.c.fetchPlayerProfileSummaries(players(10),{scope});
-    assert.equal(h.calls.length,22);assert.equal(Object.keys(summaries).length,10);
+    assert.equal(h.calls.length,12);assert.equal(Object.keys(summaries).length,10);
     const statCalls=h.calls.filter(p=>p.includes('/stats?'));
     assert.equal(statCalls.length,10);assert(statCalls.every(p=>p.includes('&season=')===(scope==='currentSeason')));
+    assert.equal(h.calls.filter(p=>p.endsWith('/profile')).length,0);
     assert(Object.values(summaries).every(p=>p.scopeFetchedAt[scope]>0 && p.error===undefined));
   }
 });

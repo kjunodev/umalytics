@@ -23,10 +23,10 @@ export function abortable<T>(promise: Promise<T>, signal: AbortSignal): Promise<
   });
 }
 
-export type RequestPriority = 'shared' | 'stats' | 'profile' | 'history' | 'background';
+export type RequestPriority = 'shared' | 'stats' | 'leaderboard' | 'profile' | 'history' | 'background';
 
 const priorityOrder: Record<RequestPriority, number> = {
-  shared: 0, stats: 1, profile: 2, history: 3, background: 4
+  shared: 0, stats: 1, leaderboard: 2, profile: 3, history: 4, background: 5
 };
 
 export class RequestQueue {
