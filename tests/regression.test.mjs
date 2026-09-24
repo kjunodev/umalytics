@@ -1,30 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
 import vm from 'node:vm';
-import { stripTypeScriptTypes } from 'node:module';
 import { parseHTML } from 'linkedom';
-const root = new URL('../apps/extension/', import.meta.url);
-const read = file => fs.readFileSync(new URL(file, root), 'utf8');
+import { loadModule } from './support/harness.mjs';
+const evaluate = loadModule;
 const deferred = () => { let resolve; const promise = new Promise(r => { resolve = r; }); return {promise,resolve}; };
 const tick = () => new Promise(r => setImmediate(r));
 const sleep = ms => new Promise(r => setTimeout(r,ms));
 function context(globals = {}) {
   return vm.createContext({window:{location:{origin:'https://drafter.uma.guide'},postMessage(){}},console, URL, URLSearchParams, AbortController, DOMException, setTimeout, clearTimeout,
     defineBackground: () => {}, defineContentScript: () => {}, recordDiagnostic: () => {}, sendDiagnosticEvent: async () => {}, getLatestDraftSnapshot: async () => undefined, clearLatestDraftSnapshot: async () => {}, ...globals});
-}
-function evaluate(c, file, options = {}) {
-  if (file === 'utils/profileCache.ts') evaluate(c, 'utils/profileMerge.ts');
-  if (file === 'entrypoints/pageHook.ts') evaluate(c,'utils/pageHookRuntime.ts');
-  if (file === 'entrypoints/content.ts') { evaluate(c,'utils/roomEvents.ts'); evaluate(c,'utils/rosterIdentity.ts'); }
-  let source = options.source ?? read(file);
-  source = source.replace(/^import[\s\S]*?;\r?\n/gm,'').replace(/^export default /gm,'').replace(/^export /gm,'');
-  if (options.fast) source = source
-    .replace(/const API_REQUEST_TIMEOUT_MS = [^;]+;/, 'const API_REQUEST_TIMEOUT_MS = 120;')
-    .replace(/const PROFILE_SUMMARY_TIMEOUT_MS = [^;]+;/, 'const PROFILE_SUMMARY_TIMEOUT_MS = 1500;')
-    .replace('15_000','300')
-    .replace('const DEFAULT_REQUEST_INTERVAL_MS = 500;', 'const DEFAULT_REQUEST_INTERVAL_MS = 1;');
-  vm.runInContext(stripTypeScriptTypes(source, {mode:'transform'}),c);
 }
 function players(count=5) {
   return Array.from({length:count},(_,i)=>({userId:String(100000000000000000n+BigInt(i)),discordId:String(100000000000000000n+BigInt(i)),displayName:`Player ${i}`,team:i<(count===10?5:2)?'team1':'team2',partyId:null,partyRatingBonus:0}));

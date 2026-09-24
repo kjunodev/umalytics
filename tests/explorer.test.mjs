@@ -2,20 +2,15 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
-import { stripTypeScriptTypes } from 'node:module';
+import { loadModule } from './support/harness.mjs';
+const load = loadModule;
 
 const fixture = JSON.parse(fs.readFileSync(new URL('./fixtures/completed-match.json', import.meta.url)));
-const root = new URL('../apps/extension/utils/', import.meta.url);
-function load(context, file) {
-  if (file === 'explorerState.ts' || file === 'explorerService.ts') load(context, 'profileMerge.ts');
-  const source = fs.readFileSync(new URL(file, root), 'utf8').replace(/^import[\s\S]*?;\r?\n/gm, '').replace(/^export /gm, '');
-  vm.runInContext(stripTypeScriptTypes(source, { mode: 'transform' }), context);
-}
 function harness(globals = {}) {
   const context = vm.createContext({ URL, URLSearchParams, Error, console, AbortController, setTimeout, clearTimeout,
     getUmaDisplayName: (id, name) => name, getUmaPortraitUrl: id => `portrait:${id}`, normalizeUmaOutfitId: id => id,
     ...globals });
-  load(context, 'matchDetection.ts'); load(context, 'explorerData.ts');
+  load(context, 'utils/matchDetection.ts'); load(context, 'utils/explorerData.ts');
   return context;
 }
 
@@ -94,7 +89,7 @@ function service(globals = {}) {
     getCachedPlayerProfiles: async () => ({}), rememberCachedPlayerProfiles: async () => {},
     getApiCooldown: () => undefined, fetchJson: async path => { calls.push(path); return fixture; },
     ...globals });
-  load(h, 'explorerTypes.ts'); load(h, 'explorerService.ts');
+  load(h, 'utils/explorerTypes.ts'); load(h, 'utils/explorerService.ts');
   return { h, calls };
 }
 
@@ -139,7 +134,7 @@ test('rate-limit errors preserve a retry timestamp and missing records have an a
 });
 
 test('retry failures retain useful displayed stats, but a confirmed private response removes them', () => {
-  const h = harness(); load(h, 'explorerState.ts');
+  const h = harness(); load(h, 'utils/explorerState.ts');
   const old = { discordId: '1', matches: 20, fetchedAt: 100, statsPrivate: false };
   const failed = h.mergeExplorerProfiles({ '1': old }, { '1': { discordId: '1', matches: null, error: '429', statsPrivate: false } });
   assert.equal(failed['1'].matches, 20); assert.equal(failed['1'].fetchedAt, 100);
