@@ -1,4 +1,4 @@
-import { installPageHook } from '../utils/pageHookRuntime';
+import { installPageHook } from '../room/pageHookRuntime';
 
 // Install before the site's own scripts can construct their realtime socket.
 export default defineContentScript({

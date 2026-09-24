@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState, type ComponentType } from 'react';
 import type { DraftSnapshot, PlayerProfileSummary, PlayerStatsScope, PrematchPlayer, PrematchRoster, PrematchTeam } from '@umalytics/shared';
-import { loadHistoricalMatch, loadExplorerProfiles, searchPlayers } from '../../utils/explorerClient';
-import type { HistoricalMatch, PlayerSearchResult } from '../../utils/explorerTypes';
-import { mergeExplorerProfiles } from '../../utils/explorerState';
+import { loadHistoricalMatch, loadExplorerProfiles, searchPlayers } from '../../explorer/explorerClient';
+import type { HistoricalMatch, PlayerSearchResult } from '../../explorer/explorerTypes';
+import { mergeExplorerProfiles } from '../../explorer/explorerState';
 
 type Profiles = Record<string, PlayerProfileSummary>;
 type HistoryScene = ComponentType<{ snapshot: DraftSnapshot; roster: PrematchRoster; profiles: Profiles; statsScope: PlayerStatsScope; scene: 'lobby' | 'draft' | 'umas'; loading: boolean; navigation: number }>;

@@ -1,4 +1,4 @@
-import { mergeProfileCache } from './profileCache';
+import { mergeProfileCache } from '../profiles/profileCache';
 import { browser } from 'wxt/browser';
 import type { PlayerProfileSummary } from '@umalytics/shared';
 

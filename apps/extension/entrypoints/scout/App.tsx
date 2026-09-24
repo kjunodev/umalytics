@@ -1,8 +1,8 @@
 import { HistoryView, ProfilesView } from './ExplorerViews';
-import { recentHistoryEmptyMessage } from '../../utils/profileMerge';
-import { latestStatsCheckAt, getRefreshCooldownMs } from '../../utils/profileTiming';
-import { missingUmaHistoryLabel } from '../../utils/profileAvailability';
-import { getTeamGroups, normalizeRosterForDisplay } from '../../utils/rosterDisplay';
+import { recentHistoryEmptyMessage } from '../../profiles/profileMerge';
+import { latestStatsCheckAt, getRefreshCooldownMs } from '../../profiles/profileTiming';
+import { missingUmaHistoryLabel } from '../../profiles/profileAvailability';
+import { getTeamGroups, normalizeRosterForDisplay } from '../../room/rosterDisplay';
 import { useEffect, useMemo, useState } from 'react';
 import { browser } from 'wxt/browser';
 import type {
@@ -24,38 +24,38 @@ import {
   PLAYER_PROFILE_SUMMARIES_STORAGE_KEY,
   type PlayerProfileLoadState,
   type PlayerProfileSummariesSnapshot
-} from '../../utils/profileStorage';
+} from '../../storage/profileStorage';
 import {
   getLatestDraftSnapshot,
   LATEST_DRAFT_SNAPSHOT_STORAGE_KEY
-} from '../../utils/draftStorage';
+} from '../../storage/draftStorage';
 import {
   getLatestPrematchRoster,
   LATEST_PREMATCH_ROSTER_STORAGE_KEY
-} from '../../utils/rosterStorage';
+} from '../../storage/rosterStorage';
 import {
   clearLobbyLockState,
   getLobbyLockState,
   LOBBY_LOCK_STORAGE_KEY,
   setLobbyLockState,
   type LobbyLockState
-} from '../../utils/lobbyLockStorage';
-import { sendLobbyReconnectRequest, sendProfileRefreshRequest } from '../../utils/messaging';
+} from '../../storage/lobbyLockStorage';
+import { sendLobbyReconnectRequest, sendProfileRefreshRequest } from '../../runtime/messaging';
 import {
   BEST_UMA_MIN_MATCHES,
   BEST_UMA_SCORE_VERSION,
   MANUAL_PROFILE_REFRESH_COOLDOWN_MS,
   RECENT_HISTORY_VERSION,
   RECENT_HISTORY_DISPLAY_MATCHES
-} from '../../utils/profileConstants';
-import { releaseOrder } from '../../utils/umaReleaseOrder';
+} from '../../profiles/profileConstants';
+import { releaseOrder } from '../../umas/umaReleaseOrder';
 import {
   getUmaDisplayName,
   getUmaPortraitUrl,
   isKnownUmaOutfitId,
   isHashedUmaAssetUrl,
   normalizeUmaOutfitId
-} from '../../utils/umaPortraits';
+} from '../../umas/umaPortraits';
 
 const TEAM_IDS = ['team1', 'team2'] as const satisfies readonly TeamId[];
 const TEAM_SLOT_COUNT = 5;

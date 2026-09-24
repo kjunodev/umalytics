@@ -1,9 +1,9 @@
 import { browser } from 'wxt/browser';
 import type { PlayerProfileSummary, PrematchPlayer } from '@umalytics/shared';
-import { fetchJson, fetchPlayerProfileSummaries, getApiCooldown } from './playerProfileApi';
-import { getCachedPlayerProfiles, rememberCachedPlayerProfiles } from './profileStorage';
-import { BEST_UMA_SCORE_VERSION, PROFILE_CACHE_TTL_MS, RECENT_HISTORY_VERSION } from './profileConstants';
-import { hasCurrentHistoryState } from './profileMerge';
+import { fetchJson, fetchPlayerProfileSummaries, getApiCooldown } from '../profiles/playerProfileApi';
+import { getCachedPlayerProfiles, rememberCachedPlayerProfiles } from '../storage/profileStorage';
+import { BEST_UMA_SCORE_VERSION, PROFILE_CACHE_TTL_MS, RECENT_HISTORY_VERSION } from '../profiles/profileConstants';
+import { hasCurrentHistoryState } from '../profiles/profileMerge';
 import { lookupPlayer, parseHistoricalMatch, parseHistoryInput, parsePlayerInput, parsePlayerSearch } from './explorerData';
 import { EXPLORER_PORT, type ExplorerRequest, type ExplorerReply, type ExplorerResult } from './explorerTypes';
 

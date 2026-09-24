@@ -1,4 +1,4 @@
-import { recordDiagnostic } from './diagnosticRecorder';
+import { recordDiagnostic } from '../runtime/diagnosticRecorder';
 import type {
   PlayerRecentFormSummary,
   PlayerRecentMatchSummary,
@@ -14,8 +14,8 @@ import {
   RECENT_HISTORY_VERSION
 } from './profileConstants';
 import { abortable, deadline, RequestQueue } from './requestQueue';
-import { releaseOrder } from './umaReleaseOrder';
-import { getUmaDisplayName, getUmaPortraitUrl, normalizeUmaOutfitId } from './umaPortraits';
+import { releaseOrder } from '../umas/umaReleaseOrder';
+import { getUmaDisplayName, getUmaPortraitUrl, normalizeUmaOutfitId } from '../umas/umaPortraits';
 
 const API_ORIGIN = 'https://drafter-api.uma.guide';
 const PROFILE_ORIGIN = 'https://drafter.uma.guide';
