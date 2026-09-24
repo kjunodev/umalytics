@@ -14,7 +14,7 @@ export function getNotableBadges(profile: PlayerProfileSummary | undefined): Not
     return [];
   }
 
-  if (profile.statsPrivate === true && !hasUsableProfileStats(profile)) {
+  if (profile.statsPrivate === true && !hasDisplayableProfileLists(profile)) {
     return [
       {
         label: 'Private',
@@ -101,7 +101,7 @@ export function getNotableBadges(profile: PlayerProfileSummary | undefined): Not
   return badges;
 }
 
-export function hasUsableProfileStats(profile: PlayerProfileSummary | undefined): boolean {
+export function hasDisplayableProfileLists(profile: PlayerProfileSummary | undefined): boolean {
   return (
     (profile?.topUmas?.length ?? 0) > 0 ||
     (profile?.bestUmas?.length ?? 0) > 0 ||

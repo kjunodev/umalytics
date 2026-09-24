@@ -1,6 +1,6 @@
 import type { PlayerProfileSummary, PlayerStatsScope, PrematchPlayer, PrematchTeam } from '@umalytics/shared';
 import { recentHistoryEmptyMessage } from '../../profiles/profileMerge';
-import { getNotableBadges, hasUsableProfileStats } from '../common/badges';
+import { getNotableBadges, hasDisplayableProfileLists } from '../common/badges';
 import { formatDecimal, formatNumber, formatPercent, formatRank, formatRecord, formatRelativeAge } from '../common/format';
 import { getPlayerPartyVisual, getTeamPartyVisuals } from '../common/partyVisuals';
 import { BestUmasList } from './BestUmasList';
@@ -232,7 +232,7 @@ export function getProfileDataStatus(
     };
   }
 
-  if (profile.statsPrivate === true && !hasUsableProfileStats(profile)) {
+  if (profile.statsPrivate === true && !hasDisplayableProfileLists(profile)) {
     return {
       label: `Stats private - checked ${formatRelativeAge(profile.fetchedAt, now)}`,
       tone: 'warning'
@@ -264,7 +264,7 @@ export function getPlayerNote(
     return 'Profile data has not loaded yet.';
   }
 
-  if (profile.statsPrivate === true && !hasUsableProfileStats(profile)) {
+  if (profile.statsPrivate === true && !hasDisplayableProfileLists(profile)) {
     return 'Stats are private.';
   }
 
@@ -288,7 +288,7 @@ export function getStatsMessage(
     return 'Profile lookup is unavailable from this room page.';
   }
 
-  if (profile?.statsPrivate === true && !hasUsableProfileStats(displayedProfile)) {
+  if (profile?.statsPrivate === true && !hasDisplayableProfileLists(displayedProfile)) {
     return 'Ranked Uma stats are private.';
   }
 
