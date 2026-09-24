@@ -10,6 +10,7 @@ import {
 } from '../runtime/messaging';
 import {
   buildUnavailablePlayerSummary,
+  fetchPlayerHistoryPage,
   fetchPlayerProfileSummaries,
   getApiCooldown,
   restoreApiCooldown
@@ -76,6 +77,7 @@ interface EnrichmentOptions { forceRefresh?: boolean; recoveryAttempt?: number }
 let pendingRecovery: ProfileRecovery | undefined;
 let recoveryWrites = Promise.resolve();
 let initialization = Promise.resolve();
+const historyRequests = new Map<string, AbortController>();
 
 configureScoutWindow({ handleLobbyReconnectRequested, reportEnrichmentError });
 
@@ -149,6 +151,18 @@ export default defineBackground(() => {
 
     if (message.type === 'profile-refresh-requested') {
       return handleProfileRefreshRequested(message.roster);
+    }
+
+    if (message.type === 'player-history-page-requested') {
+      const controller = new AbortController();
+      historyRequests.set(message.requestId, controller);
+      try { return await fetchPlayerHistoryPage(message.discordId, message.scope, message.page, controller.signal); }
+      finally { if (historyRequests.get(message.requestId) === controller) historyRequests.delete(message.requestId); }
+    }
+    if (message.type === 'player-history-page-cancelled') {
+      historyRequests.get(message.requestId)?.abort(new Error('History view closed.'));
+      historyRequests.delete(message.requestId);
+      return;
     }
 
     if (message.type === 'lobby-reconnect-requested') {
@@ -375,6 +389,15 @@ async function performRosterEnrichment(
       {
         scope,
         signal,
+        onWait: async seconds => {
+          if (signal.aborted || runId !== enrichmentRunId) return;
+          const retryAt = Date.now() + seconds * 1000;
+          for (const player of missingPlayers) profileStates[player.discordId] = {
+            discordId: player.discordId, status: 'queued', updatedAt: Date.now(),
+            stage: `Waiting for rate limit (${seconds}s)`, retryAt
+          };
+          await publish();
+        },
         onProgress: async (summary) => {
           if (signal.aborted || runId !== enrichmentRunId) return;
           const previous = profilesByDiscordId[summary.discordId];

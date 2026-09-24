@@ -16,25 +16,25 @@ function harness(globals = {}) {
 
 test('history input accepts code, hyphen, and exact match URL; rejects foreign URLs and paths', () => {
   const h = harness();
-  for (const value of ['tg7yt2', ' TG7-YT2 ', 'https://drafter.uma.guide/matches/TG7YT2?view=1']) assert.equal(h.parseHistoryInput(value), 'TG7YT2');
-  for (const value of ['', '../TG7YT2', 'https://evil.example/matches/TG7YT2', 'https://drafter.uma.guide/host', 'https://x@drafter.uma.guide/matches/TG7YT2']) assert.throws(() => h.parseHistoryInput(value));
+  for (const value of ['fx1a2b', ' FX1-A2B ', 'https://drafter.uma.guide/matches/FX1A2B?view=1']) assert.equal(h.parseHistoryInput(value), 'FX1A2B');
+  for (const value of ['', '../FX1A2B', 'https://evil.example/matches/FX1A2B', 'https://drafter.uma.guide/host', 'https://x@drafter.uma.guide/matches/FX1A2B']) assert.throws(() => h.parseHistoryInput(value));
 });
 
 test('profile input preserves stable IDs and treats nicknames as search terms', () => {
   const h = harness();
-  assert.equal(h.parsePlayerInput('https://drafter.uma.guide/players/436071695955263509').id, '436071695955263509');
-  assert.equal(h.parsePlayerInput('Rumi').query, 'Rumi');
-  for (const value of ['1', 'https://drafter.uma.guide/players/me', 'https://evil.example/players/436071695955263509']) assert.throws(() => h.parsePlayerInput(value));
+  assert.equal(h.parsePlayerInput('https://drafter.uma.guide/players/100000000000000099').id, '100000000000000099');
+  assert.equal(h.parsePlayerInput('Fixture Query').query, 'Fixture Query');
+  for (const value of ['1', 'https://drafter.uma.guide/players/me', 'https://evil.example/players/100000000000000099']) assert.throws(() => h.parsePlayerInput(value));
 });
 
 test('recorded completed match maps final picks, vetoes, maps, stable IDs and teams without pool leakage', () => {
-  const result = harness().parseHistoricalMatch(fixture, 'TG7YT2');
+  const result = harness().parseHistoricalMatch(fixture, 'FX1A2B');
   assert.equal(result.roster.players.length, 10);
   assert.equal(result.roster.teams.team1.players.length, 5);
   assert.equal(result.roster.teams.team2.players.length, 5);
   assert.equal(result.draft.source, 'match-history');
-  assert.equal(result.draft.teams.team1.name, 'Prolly');
-  assert.equal(result.draft.teams.team2.name, 'Not again');
+  assert.equal(result.draft.teams.team1.name, 'Fixture Team A');
+  assert.equal(result.draft.teams.team2.name, 'Fixture Team B');
   for (const team of Object.values(result.draft.teams)) {
     assert.equal(team.umas.filter(item => item.kind === 'pick').length, 6);
     assert.equal(team.umas.filter(item => item.kind === 'ban').length, 2);
@@ -53,12 +53,12 @@ test('recorded completed match maps final picks, vetoes, maps, stable IDs and te
 
 test('missing, wrong, or incomplete matches fail clearly; missing player IDs never infer identity', () => {
   const h = harness();
-  assert.throws(() => h.parseHistoricalMatch({}, 'TG7YT2'), /different match/);
-  assert.throws(() => h.parseHistoricalMatch({ id: 'TG7YT2', report: {} }, 'TG7YT2'), /saved draft/);
+  assert.throws(() => h.parseHistoricalMatch({}, 'FX1A2B'), /different match/);
+  assert.throws(() => h.parseHistoricalMatch({ id: 'FX1A2B', report: {} }, 'FX1A2B'), /saved draft/);
   const copy = structuredClone(fixture); copy.status = 'active'; copy.report.draftSnapshot.phase = 'uma-pick';
-  assert.throws(() => h.parseHistoricalMatch(copy, 'TG7YT2'), /not complete/);
+  assert.throws(() => h.parseHistoricalMatch(copy, 'FX1A2B'), /not complete/);
   copy.status = 'completed'; copy.report.participants = [{ displayName: 'Companion', team: 'team1' }];
-  const result = h.parseHistoricalMatch(copy, 'TG7YT2');
+  const result = h.parseHistoricalMatch(copy, 'FX1A2B');
   assert.equal(result.roster.players.length, 0); assert(result.warnings.length);
 });
 
@@ -75,12 +75,12 @@ test('unsupported saved selection arrays fail explicitly instead of displaying a
   for (const field of ['pickedMaps', 'bannedMaps', 'pickedUmas', 'preBannedUmas', 'bannedUmas']) {
     for (const invalid of [undefined, {}, [null], [{ id: '100101' }]]) {
       const copy = structuredClone(fixture); copy.report.draftSnapshot.team1[field] = invalid;
-      assert.throws(() => h.parseHistoricalMatch(copy, 'TG7YT2'), /unsupported format/);
+      assert.throws(() => h.parseHistoricalMatch(copy, 'FX1A2B'), /unsupported format/);
     }
   }
   const copy = structuredClone(fixture);
   copy.report.draftSnapshot.team1.preBannedUmas = [];
-  assert.equal(h.parseHistoricalMatch(copy, 'TG7YT2').draft.teams.team1.umas.filter(item => item.kind === 'ban').length, 0);
+  assert.equal(h.parseHistoricalMatch(copy, 'FX1A2B').draft.teams.team1.umas.filter(item => item.kind === 'ban').length, 0);
 });
 
 function service(globals = {}) {
@@ -95,20 +95,20 @@ function service(globals = {}) {
 
 test('lookup validates request size, IDs, page, and scope before fetching', () => {
   const { h } = service();
-  for (const bad of [{ kind:'profiles', scope:'allTime', players:[{discordId:'../admin'}] }, { kind:'profiles',scope:'both',players:[] }, {kind:'search',input:'Rumi',page:0}, {kind:'match',input:'x'.repeat(301)}]) assert.throws(() => h.validateExplorerRequest(bad));
-  assert.equal(h.validateExplorerRequest({kind:'profiles',scope:'allTime',players:[{discordId:'436071695955263509',profileUrl:'https://evil.example'}]}).players[0].profileUrl, 'https://drafter.uma.guide/players/436071695955263509');
+  for (const bad of [{ kind:'profiles', scope:'allTime', players:[{discordId:'../admin'}] }, { kind:'profiles',scope:'both',players:[] }, {kind:'search',input:'Fixture Query',page:0}, {kind:'match',input:'x'.repeat(301)}]) assert.throws(() => h.validateExplorerRequest(bad));
+  assert.equal(h.validateExplorerRequest({kind:'profiles',scope:'allTime',players:[{discordId:'100000000000000099',profileUrl:'https://evil.example'}]}).players[0].profileUrl, 'https://drafter.uma.guide/players/100000000000000099');
 });
 
 test('history and exact ID lookup do not invoke live enrichment or write live storage', async () => {
   const { h, calls } = service(); const signal = new AbortController().signal;
-  const match = await h.executeExplorerRequest({kind:'match',input:'TG7YT2'}, signal, () => {});
-  assert.equal(match.matchCode, 'TG7YT2');
-  const player = await h.executeExplorerRequest({kind:'search',input:'436071695955263509',page:1}, signal, () => {});
-  assert.equal(player.players.length, 1); assert.deepEqual(calls, ['/api/matches/TG7YT2']);
+  const match = await h.executeExplorerRequest({kind:'match',input:'FX1A2B'}, signal, () => {});
+  assert.equal(match.matchCode, 'FX1A2B');
+  const player = await h.executeExplorerRequest({kind:'search',input:'100000000000000099',page:1}, signal, () => {});
+  assert.equal(player.players.length, 1); assert.deepEqual(calls, ['/api/matches/FX1A2B']);
 });
 
 test('fresh scope-specific archive hits avoid profile requests; partial/wrong scope refetch', async () => {
-  const id = '436071695955263509'; let fetched = 0;
+  const id = '100000000000000099'; let fetched = 0;
   const cached = {discordId:id,statsScope:'allTime',fetchedAt:Date.now(),bestUmaScoreVersion:17,recentHistoryVersion:6};
   const { h } = service({getCachedPlayerProfiles:async()=>({[id]:cached}), fetchPlayerProfileSummaries:async players=>{fetched++;return {[id]:cached};}});
   await h.executeExplorerRequest({kind:'profiles',scope:'allTime',players:[{discordId:id}]},new AbortController().signal,()=>{});
@@ -122,8 +122,8 @@ test('fresh scope-specific archive hits avoid profile requests; partial/wrong sc
 
 test('cancelled lookup does not publish late profiles or save the result', async () => {
   const controller = new AbortController(); let published = 0, saved = 0;
-  const { h } = service({fetchPlayerProfileSummaries:async(_, options)=>{controller.abort(); options.onProgress({discordId:'436071695955263509'});return {};},rememberCachedPlayerProfiles:async()=>{saved++;}});
-  await assert.rejects(h.executeExplorerRequest({kind:'profiles',scope:'allTime',players:[{discordId:'436071695955263509'}]},controller.signal,()=>{published++;}));
+  const { h } = service({fetchPlayerProfileSummaries:async(_, options)=>{controller.abort(); options.onProgress({discordId:'100000000000000099'});return {};},rememberCachedPlayerProfiles:async()=>{saved++;}});
+  await assert.rejects(h.executeExplorerRequest({kind:'profiles',scope:'allTime',players:[{discordId:'100000000000000099'}]},controller.signal,()=>{published++;}));
   assert.equal(published,0); assert.equal(saved,0);
 });
 

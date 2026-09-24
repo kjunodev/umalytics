@@ -23,7 +23,7 @@ function players(count=5) {
 }
 const roster = (match='ROOM01', count=5) => ({matchCode:match,players:players(count)});
 const stats = {summary:{matchesIncluded:4,totalPointsScored:12},umaEntries:[{umaId:'100101',matches:4,wins:2,losses:2,pointsScored:12}]};
-function apiHarness({privateBuild=false, responder, latency=2, fast=true, sessionStorage}={}) {
+function apiHarness({privateBuild=false, responder, latency=2, fast=true, sessionStorage, batch=false}={}) {
   const calls=[],callTimes=[],diagnostics=[]; let active=0, peak=0, aborts=0;
   const c=context({__UMALYTICS_PRIVATE_PROFILE_DATA__:privateBuild,
     ...(sessionStorage ? {browser:{storage:{session:sessionStorage}}} : {}),
@@ -47,6 +47,7 @@ function apiHarness({privateBuild=false, responder, latency=2, fast=true, sessio
   });
   evaluate(c,'profileConstants'); evaluate(c,'umaReleaseOrder'); evaluate(c,'umaPortraits');
   evaluate(c,'requestQueue');evaluate(c,'playerProfileApi',{fast});
+  if (!batch) c.fetchPlayerProfileSummaries = c.fetchPlayerProfileSummariesLegacy;
   return {c,calls,callTimes,diagnostics,get peak(){return peak;},get aborts(){return aborts;}};
 }
 
@@ -630,14 +631,14 @@ function domHarness(body) {
   const c=context({document});evaluate(c,'matchDetection');evaluate(c,'textCleanup');evaluate(c,'domLobbyExtraction');
   return {c,document};
 }
-const realTrainerRow=(name='CLUE | 기',avatar='https://cdn.discordapp.com/avatars/634868914484019202/avatar.png')=>`<div data-trainer-player="true"><span class="trainer-companion"><img alt="Fine Motion companion" src="/uma/1001.png"></span><button data-trainer-trigger="true" aria-label="View ${name}'s trainer card"><img alt="${name}" src="${avatar}"></button><div><button data-trainer-trigger="true">${name}</button></div><span>Captain</span><span>Host</span></div>`;
+const realTrainerRow=(name='Fixture Trainer | 기',avatar='https://cdn.discordapp.com/avatars/100000000000000098/avatar.png')=>`<div data-trainer-player="true"><span class="trainer-companion"><img alt="Fine Motion companion" src="/uma/1001.png"></span><button data-trainer-trigger="true" aria-label="View ${name}'s trainer card"><img alt="${name}" src="${avatar}"></button><div><button data-trainer-trigger="true">${name}</button></div><span>Captain</span><span>Host</span></div>`;
 const lobbyFixture=(left,right)=>`<button title="Copy room code" aria-label="Copy room code">6XN-84X</button><section data-left="0"><h2>Team 1[edit]</h2>${left}</section><section data-left="400"><h2>Team 2</h2>${right}</section>`;
 
 test('real trainer buttons beat companion images, and room codes exist before draft',()=>{
   const {c,document}=domHarness(lobbyFixture(realTrainerRow(),'<p>Waiting for player...</p>'));
   const roster=c.extractPrematchRosterFromRoomDom(document);
   assert.equal(roster.matchCode,'6XN84X');assert.equal(roster.players.length,1);
-  assert.equal(roster.players[0].displayName,'CLUE | 기');assert.equal(roster.players[0].discordId,'634868914484019202');
+  assert.equal(roster.players[0].displayName,'Fixture Trainer | 기');assert.equal(roster.players[0].discordId,'100000000000000098');
   assert.equal(roster.teams.team1.name,'Team 1');assert.equal(roster.teams.team2.players.length,0);
 });
 
@@ -652,8 +653,8 @@ test('default avatar cannot invent an ID; a verified profile link supplies it',(
   const first=domHarness(lobbyFixture(row,'<p>Waiting for player...</p>'));
   const player=first.c.extractPrematchRosterFromRoomDom(first.document).players[0];
   assert.equal(player.displayName,'Guest');assert.equal(player.profileLookupUnavailable,true);
-  const linked=domHarness(lobbyFixture(row.replace('</div><span>Captain','<a href="/players/634868914484019202">Profile</a></div><span>Captain'),'<p>Waiting for player...</p>'));
-  assert.equal(linked.c.extractPrematchRosterFromRoomDom(linked.document).players[0].discordId,'634868914484019202');
+  const linked=domHarness(lobbyFixture(row.replace('</div><span>Captain','<a href="/players/100000000000000098">Profile</a></div><span>Captain'),'<p>Waiting for player...</p>'));
+  assert.equal(linked.c.extractPrematchRosterFromRoomDom(linked.document).players[0].discordId,'100000000000000098');
 });
 
 test('two-player presence for fifteen simulated minutes cannot erase a ten-player draft roster',()=>{
@@ -867,14 +868,14 @@ test('DOM fallback preserves visible combined map numbers and leaves vetoes unnu
 
 
 test('custom-room nickname and companion identities survive empty initialization snapshots',()=>{
-  for (const nickname of [null,'Mimi','Rumi']) {
+  for (const nickname of [null,'Mimi','Fixture Query']) {
     const {state,c}=roomHarness();evaluate(c,'rosterIdentity');
     state.apply(matchEvent({room:'CUSTOM',phase:'lobby',members:null}),'CUSTOM');
-    const participant={actorUserId:'actor-rumi',discordId:'436071695955263509',displayName:'Rumi',nickname,role:'captain',team:'team1'};
+    const participant={actorUserId:'actor-rumi',discordId:'100000000000000099',displayName:'Fixture Query',nickname,role:'captain',team:'team1'};
     state.apply({type:'room.presence.updated',matchId:'CUSTOM',participants:[participant],rankedQueueRoster:[]},'CUSTOM');
     state.apply({type:'participant.uma-assignments.snapshot',matchId:'CUSTOM',team:'team1',revision:0,roster:[]},'CUSTOM');
     state.apply(matchEvent({room:'CUSTOM',phase:'lobby',version:2,members:[]}),'CUSTOM');
-    const name=nickname??'Rumi';
+    const name=nickname??'Fixture Query';
     assert.equal(state.roster.players.length,1);
     assert.equal(state.roster.players[0].discordId,participant.discordId);
     assert.equal(state.roster.players[0].displayName,name);
@@ -904,11 +905,11 @@ test('avatar initials do not replace trainer names',()=>{
 });
 
 test('legacy row boundaries exclude surrounding team-label paragraphs',()=>{
-  const row='<div><p>Team 1</p><div><p>Rumi</p><span>Captain</span><img src="https://cdn.discordapp.com/avatars/436071695955263509/a.png"></div></div>';
+  const row='<div><p>Team 1</p><div><p>Fixture Query</p><span>Captain</span><img src="https://cdn.discordapp.com/avatars/100000000000000099/a.png"></div></div>';
   const {c,document}=domHarness(lobbyFixture(row,'<p>Waiting for player...</p>'));
   const roster=c.extractPrematchRosterFromRoomDom(document);
-  assert.equal(roster.players.length,1);assert.equal(roster.players[0].displayName,'Rumi');
-  assert.equal(roster.players[0].discordId,'436071695955263509');
+  assert.equal(roster.players.length,1);assert.equal(roster.players[0].displayName,'Fixture Query');
+  assert.equal(roster.players[0].discordId,'100000000000000099');
 });
 
 

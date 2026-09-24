@@ -23,7 +23,7 @@ for (const mode of ['public']) {
     // WXT omits Chromium's version_name from Firefox manifests.
     if (manifest.version !== version || (browser === 'chrome' && manifest.version_name !== `${version}-${mode}.open-beta.1`)) throw new Error('Version mismatch');
     if (manifest.name !== (mode === 'private' ? 'UmaLytics Private' : 'UmaLytics')) throw new Error('Build mode mismatch');
-    if (background.includes('/history?') !== (mode === 'private')) throw new Error('Private-history boundary check failed');
+    if (background.includes('buildStatsSummaryFromHistory') || background.includes('buildUmaEntriesFromHistory')) throw new Error('Public stats reconstruction boundary check failed');
     if (browser === 'firefox' && manifest.browser_specific_settings.gecko.id !==
       (mode === 'private' ? 'umalytics-private@kjunodev' : 'umalytics@kjunodev')) throw new Error('Firefox ID mismatch');
     const family = browser === 'chrome' ? 'chromium' : 'firefox';

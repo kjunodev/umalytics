@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const HISTORY_PATTERN = /fetchPlayerHistory|buildStatsSummaryFromHistory|buildUmaEntriesFromHistory|\/history\?/;
+const HISTORY_RECONSTRUCTION_PATTERN = /buildStatsSummaryFromHistory|buildUmaEntriesFromHistory/;
 const EXCLUDED_DIRS = new Set(['node_modules', '.output', '.wxt']);
 
 function collectSourceFiles(dir) {
@@ -20,11 +20,11 @@ function collectSourceFiles(dir) {
   return files;
 }
 
-test('community source cannot retrieve or reconstruct hidden profile history',()=>{
+test('community source can display history but cannot reconstruct statistics from it',()=>{
  const extensionRoot = fileURLToPath(new URL('../apps/extension/', import.meta.url));
  for (const file of collectSourceFiles(extensionRoot)) {
    const source = fs.readFileSync(file, 'utf8');
-   assert(!HISTORY_PATTERN.test(source), `${path.relative(extensionRoot, file)} must not reference private history retrieval`);
+   assert(!HISTORY_RECONSTRUCTION_PATTERN.test(source), `${path.relative(extensionRoot, file)} must not reconstruct stats from history`);
  }
  const config=fs.readFileSync(new URL('../apps/extension/wxt.config.ts',import.meta.url),'utf8');
  assert(config.includes('const privateProfileDataBuild = false;'));

@@ -24,6 +24,12 @@ const PROFILE_ORIGIN = 'https://drafter.uma.guide';
 const SHARED_CACHE_TTL_MS = 10 * 60 * 1000;
 const PROFILE_RESPONSE_TTL_MS = 24 * 60 * 60 * 1000;
 const STATS_RESPONSE_TTL_MS = 60 * 1000;
+const HISTORY_RESPONSE_TTL_MS = 5 * 60 * 1000;
+const BATCH_UNAVAILABLE_MS = 10 * 60 * 1000;
+const BATCH_WINDOW_MS = 60 * 1000;
+const BATCH_MAX_CALLS = 8;
+const BATCH_SETTLE_MS = 1200;
+const BATCH_AVAILABILITY_STORAGE_KEY = 'batchUnavailableUntil';
 const RESPONSE_CACHE_STORAGE_KEY = 'profileApiResponsesV1';
 const API_RATE_LIMIT_BACKOFF_MS = 30 * 1000;
 const API_SERVER_ERROR_BACKOFF_MS = 10 * 1000;
@@ -31,6 +37,9 @@ const API_REQUEST_TIMEOUT_MS = 10 * 1000;
 const PROFILE_SUMMARY_TIMEOUT_MS = 60 * 1000;
 const DEFAULT_REQUEST_INTERVAL_MS = 500;
 let requestStartIntervalMs = DEFAULT_REQUEST_INTERVAL_MS;
+let batchUnavailableUntil = 0;
+let batchAvailabilityLoad: Promise<void> | undefined;
+const batchStartedAt: number[] = [];
 const requestQueue = new RequestQueue(3, requestStartIntervalMs);
 
 
@@ -67,6 +76,39 @@ interface ApiPlayerStats {
     totalMvpMatches?: number;
   };
 }
+
+interface ApiHistoryEntry {
+  matchId: string;
+  reportedAt: string;
+  mode: string;
+  verificationState: string;
+  selectedUmaId: string | null;
+  isWinner: boolean | null;
+  pointsScored: number;
+  podiumPlacements: number;
+  isMvp: boolean;
+  eloDelta: number | null;
+  eloPlacement: boolean;
+  umaAssignments?: Array<{ ordinal: number; umaId?: string | null }>;
+}
+
+interface PlayerHistorySummary {
+  wins: number; losses: number; pointsScored: number; podiumPlacements: number;
+  firstPlaceFinishes: number; secondPlaceFinishes: number; thirdPlaceFinishes: number; mvpAwards: number;
+}
+
+interface ApiBatchPlayer {
+  discordId: string;
+  displayName: string;
+  nickname: string | null;
+  title: string | null;
+  statsHidden: boolean;
+  stats: ApiPlayerStats | null;
+  history: { total: number; summary: PlayerHistorySummary; recent: ApiHistoryEntry[] } | null;
+}
+
+interface ApiBatchResponse { mode: string; season: string | null; players: ApiBatchPlayer[] }
+export interface PlayerHistoryPage { page: number; total: number; matches: PlayerRecentMatchSummary[] }
 
 type CapturedFetch<T> =
   | { ok: true; value: T }
@@ -123,12 +165,84 @@ let bundledUmaMetadata: UmaMetadataLookup | undefined;
 export async function fetchPlayerProfileSummaries(
   players: PrematchPlayer[],
   options: {
+    scope?: 'currentSeason' | 'allTime' | 'both'; signal?: AbortSignal;
+    onStart?: (player: PrematchPlayer) => void | Promise<void>;
+    onStage?: (player: PrematchPlayer, stage: string) => void | Promise<void>;
+    onSummary?: (summary: PlayerProfileSummary) => void | Promise<void>;
+    onProgress?: (summary: PlayerProfileSummary) => void | Promise<void>;
+    onWait?: (seconds: number) => void | Promise<void>;
+  } = {}
+): Promise<Record<string, PlayerProfileSummary>> {
+  const uniquePlayers = uniqueByDiscordId(players);
+  if (uniquePlayers.length === 0) return {};
+  await (batchAvailabilityLoad ??= restoreBatchAvailability());
+  if (Date.now() < batchUnavailableUntil) return fetchPlayerProfileSummariesLegacy(players, options);
+  const seasonPromise = getActiveSeasonId();
+  const leaderboardPromise = getActiveLeaderboard(seasonPromise);
+  await new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(() => { options.signal?.removeEventListener('abort', abort); resolve(); }, BATCH_SETTLE_MS);
+    const abort = () => { clearTimeout(timer); reject(options.signal?.reason ?? new Error('Request cancelled.')); };
+    if (options.signal?.aborted) abort();
+    else options.signal?.addEventListener('abort', abort, { once: true });
+  });
+  const season = await seasonPromise;
+  if (options.scope !== 'allTime' && season.activeSeasonId === undefined) {
+    return Object.fromEntries(uniquePlayers.map(player => [player.discordId,
+      buildUnavailablePlayerSummary(player, season.error ?? 'Active season unavailable.')]));
+  }
+  const query = `/api/stats/players/batch?ids=${uniquePlayers.map(player => encodeURIComponent(player.discordId)).join(',')}&mode=ranked${options.scope === 'allTime' ? '' : `&season=${encodeURIComponent(season.activeSeasonId!)}`}`;
+  await waitForBatchBudget(options.signal, options.onWait);
+  for (const player of uniquePlayers) await options.onStart?.(player);
+  let response: ApiBatchResponse;
+  try {
+    const value = await fetchJson<unknown>(query, options.signal, 'shared');
+    if (!isBatchResponse(value, uniquePlayers)) throw new Error('Invalid batch response.');
+    response = value;
+  } catch (error) {
+    if (options.signal?.aborted) throw error;
+    if (error instanceof ApiRequestError && error.status === 404) await rememberBatchUnavailable();
+    if (error instanceof ApiRequestError && error.status === 429) throw error;
+    return fetchPlayerProfileSummariesLegacy(players, options);
+  }
+  const leaderboard = await leaderboardPromise;
+  const metadata = bundledUmaMetadata ??= buildReleaseOrderUmaMetadata();
+  const summaries = uniquePlayers.map((player, index) => {
+    const entry = response.players[index];
+    return isBatchPlayer(entry, player.discordId)
+      ? mapBatchPlayer(player, entry, options.scope === 'allTime' ? 'allTime' : 'currentSeason', season.activeSeasonId, leaderboard, metadata)
+      : buildUnavailablePlayerSummary(player, 'Invalid player in batch response.');
+  });
+  for (const summary of summaries) await options.onSummary?.(summary);
+  options.signal?.throwIfAborted();
+  return Object.fromEntries(summaries.map(summary => [summary.discordId, summary]));
+}
+
+async function restoreBatchAvailability(): Promise<void> {
+  if (typeof browser === 'undefined' || browser.storage?.local === undefined) return;
+  try {
+    const stored = await browser.storage.local.get(BATCH_AVAILABILITY_STORAGE_KEY);
+    const until = stored[BATCH_AVAILABILITY_STORAGE_KEY];
+    if (typeof until === 'number' && Number.isFinite(until) && until > Date.now()) batchUnavailableUntil = until;
+  } catch { /* Memory fallback remains available. */ }
+}
+
+async function rememberBatchUnavailable(): Promise<void> {
+  batchUnavailableUntil = Date.now() + BATCH_UNAVAILABLE_MS;
+  if (typeof browser === 'undefined' || browser.storage?.local === undefined) return;
+  try { await browser.storage.local.set({ [BATCH_AVAILABILITY_STORAGE_KEY]: batchUnavailableUntil }); }
+  catch { /* Memory fallback remains available. */ }
+}
+
+async function fetchPlayerProfileSummariesLegacy(
+  players: PrematchPlayer[],
+  options: {
     scope?: 'currentSeason' | 'allTime' | 'both';
     signal?: AbortSignal;
     onStart?: (player: PrematchPlayer) => void | Promise<void>;
     onStage?: (player: PrematchPlayer, stage: string) => void | Promise<void>;
     onSummary?: (summary: PlayerProfileSummary) => void | Promise<void>;
     onProgress?: (summary: PlayerProfileSummary) => void | Promise<void>;
+    onWait?: (seconds: number) => void | Promise<void>;
   } = {}
 ): Promise<Record<string, PlayerProfileSummary>> {
   const uniquePlayers = uniqueByDiscordId(players);
@@ -215,6 +329,121 @@ async function captureFetch<T>(promise: Promise<T>): Promise<CapturedFetch<T>> {
       error
     };
   }
+}
+
+async function waitForBatchBudget(signal?: AbortSignal, onWait?: (seconds: number) => void | Promise<void>): Promise<void> {
+  while (true) {
+    signal?.throwIfAborted();
+    const now = Date.now();
+    while (batchStartedAt.length > 0 && batchStartedAt[0]! <= now - BATCH_WINDOW_MS) batchStartedAt.shift();
+    if (batchStartedAt.length < BATCH_MAX_CALLS) { batchStartedAt.push(now); return; }
+    const waitMs = batchStartedAt[0]! + BATCH_WINDOW_MS - now;
+    await onWait?.(Math.ceil(waitMs / 1000));
+    await new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => { signal?.removeEventListener('abort', abort); resolve(); }, waitMs);
+      const abort = () => { clearTimeout(timer); reject(signal?.reason ?? new Error('Request cancelled.')); };
+      if (signal?.aborted) abort(); else signal?.addEventListener('abort', abort, { once: true });
+    });
+  }
+}
+
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isBatchResponse(value: unknown, players: PrematchPlayer[]): value is ApiBatchResponse {
+  return isObject(value) && value.mode === 'ranked' && Array.isArray(value.players) && value.players.length === players.length;
+}
+
+function isBatchPlayer(value: unknown, discordId: string): value is ApiBatchPlayer {
+  if (!isObject(value) || value.discordId !== discordId || typeof value.displayName !== 'string' ||
+      typeof value.statsHidden !== 'boolean' || !(value.title === null || typeof value.title === 'string') ||
+      !(value.nickname === null || typeof value.nickname === 'string')) return false;
+  if (value.statsHidden) return value.stats === null && value.history === null;
+  if (!isObject(value.stats) || !isObject(value.stats.summary) || !Array.isArray(value.stats.umaEntries) ||
+      !isObject(value.history) || !Number.isInteger(value.history.total) || (value.history.total as number) < 0 || !isObject(value.history.summary) ||
+      !Array.isArray(value.history.recent)) return false;
+  if (!Number.isFinite(value.stats.summary.matchesIncluded) || !Number.isFinite(value.stats.summary.totalPointsScored) ||
+      !Number.isFinite(value.stats.summary.totalPodiumPlacements) || !Number.isFinite(value.stats.summary.totalMvpMatches)) return false;
+  if (!value.stats.umaEntries.every((entry: unknown) => isObject(entry) && typeof entry.umaId === 'string' &&
+      ['matches', 'wins', 'losses', 'pointsScored', 'podiumPlacements', 'mvpMatches'].every(key =>
+        typeof entry[key] === 'number' && Number.isFinite(entry[key])))) return false;
+  const historySummary = value.history.summary as Record<string, unknown>;
+  if (!['wins', 'losses', 'pointsScored', 'podiumPlacements', 'firstPlaceFinishes',
+      'secondPlaceFinishes', 'thirdPlaceFinishes', 'mvpAwards'].every(key =>
+        Number.isFinite(historySummary[key]))) return false;
+  return value.history.recent.every((entry: unknown) => isObject(entry) && typeof entry.matchId === 'string' &&
+    typeof entry.reportedAt === 'string' && typeof entry.mode === 'string' && typeof entry.verificationState === 'string' &&
+    (entry.isWinner === null || typeof entry.isWinner === 'boolean') &&
+    (entry.selectedUmaId === null || typeof entry.selectedUmaId === 'string') &&
+    (entry.eloDelta === null || typeof entry.eloDelta === 'number') &&
+    typeof entry.eloPlacement === 'boolean' &&
+    Number.isFinite(entry.pointsScored) && Number.isFinite(entry.podiumPlacements) && typeof entry.isMvp === 'boolean' &&
+    (entry.umaAssignments === undefined || (Array.isArray(entry.umaAssignments) && entry.umaAssignments.length <= 2 &&
+      entry.umaAssignments.every((assignment: unknown) => isObject(assignment) &&
+        (assignment.ordinal === 0 || assignment.ordinal === 1)))));
+}
+
+function mapHistoryEntry(entry: ApiHistoryEntry): PlayerRecentMatchSummary {
+  const umaId = entry.selectedUmaId;
+  return {
+    matchId: entry.matchId, reportedAt: entry.reportedAt, mode: entry.mode,
+    verificationState: entry.verificationState, umaId,
+    umaName: umaId === null ? 'Disqualified' : getUmaDisplayName(umaId),
+    isWinner: entry.isWinner, result: entry.isWinner === null ? 'unknown' : entry.isWinner ? 'win' : 'loss',
+    pointsScored: entry.pointsScored,
+    podiums: entry.podiumPlacements, isMvp: entry.isMvp,
+    eloDelta: entry.eloDelta, eloPlacement: entry.eloPlacement,
+    umaAssignments: entry.umaAssignments
+  };
+}
+
+function mapBatchPlayer(
+  player: PrematchPlayer, entry: ApiBatchPlayer, scope: 'allTime' | 'currentSeason',
+  activeSeasonId: string | undefined, leaderboard: LeaderboardLookup, metadata: UmaMetadataLookup
+): PlayerProfileSummary {
+  const stats = entry.stats === null ? buildEmptyStatsSummary() : buildStatsSummary(entry.stats, metadata);
+  const counted = entry.history?.recent.filter(match =>
+    ['confirmed', 'corrected', 'reported'].includes(match.verificationState)).slice(0, 5).map(mapHistoryEntry) ?? [];
+  stats.recentMatches = counted;
+  stats.recentHistoryStatus = entry.history === null ? 'unavailable' : 'loaded';
+  stats.historyTotal = entry.history?.total;
+  stats.historySummary = entry.history?.summary;
+  const leaderboardEntry = leaderboard.ranksByDiscordId.get(player.discordId);
+  const now = Date.now();
+  const selectedName = entry.displayName === player.discordId ? player.displayName :
+    getUsableDisplayName(entry.displayName) ?? getUsableDisplayName(entry.nickname) ?? player.displayName;
+  return {
+    ...buildUnavailablePlayerSummary(player, ''),
+    ...stats,
+    discordId: player.discordId, displayName: selectedName, title: entry.title,
+    rank: leaderboardEntry?.rank ?? null,
+    rating: leaderboardEntry?.rating ?? player.displayRatingSnapshot ?? player.ratingSnapshot ?? null,
+    ratingDeviation: leaderboardEntry?.rd ?? player.displayRdSnapshot ?? player.rdSnapshot ?? null,
+    conservativeRating: leaderboardEntry?.rating !== undefined && leaderboardEntry.rd !== undefined
+      ? Math.round(leaderboardEntry.rating - leaderboardEntry.rd) : null,
+    currentSeasonStats: scope === 'currentSeason' ? stats : buildEmptyStatsSummary(),
+    allTimeStats: scope === 'allTime' ? stats : buildEmptyStatsSummary(),
+    statsScope: scope, scopeFetchedAt: { [scope]: now }, activeSeasonId,
+    statsPrivate: entry.statsHidden, historyDerived: false,
+    fetchedAt: now, error: undefined
+  };
+}
+
+export async function fetchPlayerHistoryPage(
+  discordId: string, scope: 'allTime' | 'currentSeason', page: number,
+  signal?: AbortSignal
+): Promise<PlayerHistoryPage> {
+  if (!isDiscordSnowflake(discordId) || !Number.isInteger(page) || page < 1) throw new Error('Invalid history request.');
+  const season = scope === 'currentSeason' ? await getActiveSeasonId() : undefined;
+  if (scope === 'currentSeason' && season?.activeSeasonId === undefined) throw new Error('Active season unavailable.');
+  const query = `/api/stats/players/${encodeURIComponent(discordId)}/history?page=${page}&pageSize=20&mode=ranked${season?.activeSeasonId ? `&season=${encodeURIComponent(season.activeSeasonId)}` : ''}`;
+  const result = await fetchJson<unknown>(query, signal, 'history');
+  if (!isObject(result) || !Number.isInteger(result.total) || !Array.isArray(result.playerHistory)) throw new Error('Invalid history response.');
+  return { page, total: result.total as number, matches: result.playerHistory.map((entry: unknown) => {
+    if (!isObject(entry) || typeof entry.matchId !== 'string') throw new Error('Invalid history entry.');
+    return mapHistoryEntry(entry as unknown as ApiHistoryEntry);
+  }) };
 }
 
 async function fetchPlayerProfileSummary(
@@ -526,6 +755,7 @@ function buildEmptyStatsSummary(
 
 function cacheTtl(path: string): number {
   if (path === '/api/seasons' || path.startsWith('/api/leaderboard?')) return SHARED_CACHE_TTL_MS;
+  if (path.includes('/history?')) return HISTORY_RESPONSE_TTL_MS;
   if (path.endsWith('/profile')) return PROFILE_RESPONSE_TTL_MS;
   return STATS_RESPONSE_TTL_MS;
 }
@@ -634,7 +864,7 @@ async function fetchJsonOnce<T>(path: string, signal: AbortSignal, priority: Req
         recordDiagnostic({ kind: 'request', endpoint, reason: 'http-error', status: response.status, queueMs: startedAt - queuedAt, networkMs: Date.now() - startedAt });
         // Release an error response body without keeping a connection occupied.
         void response.body?.cancel().catch(() => undefined);
-        if (response.status === 429 || response.status >= 500) {
+        if (response.status === 429 || (response.status >= 500 && !path.includes('/batch?'))) {
           const retryAfter = response.headers.get('retry-after');
           const seconds = retryAfter === null ? NaN : Number(retryAfter);
           const dateMs = retryAfter === null ? NaN : Date.parse(retryAfter);

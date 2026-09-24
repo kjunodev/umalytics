@@ -30,7 +30,7 @@ for(const family of ['chromium','firefox']) {
   if(!dir.startsWith(path.resolve(root,'.releases')+path.sep)) throw Error('Build outside release directory');
   const manifest=JSON.parse(fs.readFileSync(path.join(dir,'manifest.json')));
   const background=fs.readFileSync(path.join(dir,'background.js'),'utf8');
-  if(manifest.version!==version || manifest.name!=='UmaLytics' || background.includes('/history?')) throw Error('Public boundary/version check failed');
+  if(manifest.version!==version || manifest.name!=='UmaLytics' || background.includes('buildStatsSummaryFromHistory') || background.includes('buildUmaEntriesFromHistory')) throw Error('Public boundary/version check failed');
   const asset=path.join(output,`umalytics-${family}-${version}-open-beta.1.zip`);
   // The release runner is Linux; fresh output avoids adding stale files to an existing ZIP.
   if(fs.existsSync(asset)) throw Error('Asset already exists; use a fresh build directory');

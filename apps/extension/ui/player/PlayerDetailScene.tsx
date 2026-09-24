@@ -1,4 +1,6 @@
 import type { PlayerProfileSummary, PlayerStatsScope, PrematchPlayer, PrematchTeam } from '@umalytics/shared';
+import { useEffect, useRef, useState } from 'react';
+import { cancelPlayerHistoryPageRequest, sendPlayerHistoryPageRequest } from '../../runtime/messaging';
 import { recentHistoryEmptyMessage } from '../../profiles/profileMerge';
 import { getNotableBadges, hasDisplayableProfileLists } from '../common/badges';
 import { formatDecimal, formatNumber, formatPercent, formatRank, formatRecord, formatRelativeAge } from '../common/format';
@@ -36,6 +38,38 @@ export function PlayerDetailScene({
   const notableBadges = getNotableBadges(displayedProfile);
   const partyVisual = getPlayerPartyVisual(player, getTeamPartyVisuals(team?.players ?? []));
   const isCaptain = player.isCaptain === true || player.role === 'captain';
+  const historyKey = `${player.discordId}:${statsScope}`;
+  const pendingHistoryRequests = useRef(new Set<string>());
+  const [historyPage, setHistoryPage] = useState<{
+    key: string; page: number; total: number; matches: NonNullable<PlayerProfileSummary['recentMatches']>; loading: boolean; error?: string;
+  }>({ key: historyKey, page: 0, total: 0, matches: [], loading: false });
+
+  useEffect(() => {
+    setHistoryPage({ key: historyKey, page: 0, total: 0, matches: [], loading: true });
+    if (discordId !== undefined) void loadHistoryPage(1);
+    return () => {
+      for (const requestId of pendingHistoryRequests.current) void cancelPlayerHistoryPageRequest(requestId).catch(() => {});
+      pendingHistoryRequests.current.clear();
+    };
+  }, [historyKey]);
+
+  async function loadHistoryPage(page: number): Promise<void> {
+    if (discordId === undefined) return;
+    const requestId = crypto.randomUUID();
+    pendingHistoryRequests.current.add(requestId);
+    setHistoryPage(previous => previous.key === historyKey ? { ...previous, loading: true, error: undefined } : previous);
+    try {
+      const result = await sendPlayerHistoryPageRequest(discordId, statsScope, page, requestId);
+      setHistoryPage(previous => previous.key === historyKey ? {
+        key: historyKey, page, total: result.total,
+        matches: page === 1 ? result.matches : [...previous.matches, ...result.matches], loading: false
+      } : previous);
+    } catch (error) {
+      setHistoryPage(previous => previous.key === historyKey ? {
+        ...previous, loading: false, error: error instanceof Error ? error.message : 'History unavailable.'
+      } : previous);
+    } finally { pendingHistoryRequests.current.delete(requestId); }
+  }
 
   return (
     <section className="player-detail-scene" aria-label={`${player.displayName} scouting details`}>
@@ -121,9 +155,14 @@ export function PlayerDetailScene({
         </div>
         <div className="detail-card detail-wide">
           <RecentMatchesList
-            recentMatches={displayedProfile?.recentMatches}
+            recentMatches={historyPage.key === historyKey && historyPage.page > 0 ? historyPage.matches : displayedProfile?.recentMatches}
             playerName={player.displayName}
-            emptyMessage={recentHistoryEmptyMessage(displayedProfile)}
+            emptyMessage={historyPage.loading ? 'Loading match history.' : historyPage.error ??
+              (historyPage.key === historyKey && historyPage.page > 0 ? 'No recent match history found.' : recentHistoryEmptyMessage(displayedProfile))}
+            total={historyPage.key === historyKey && historyPage.page > 0 ? historyPage.total : displayedProfile?.historyTotal}
+            loading={historyPage.loading}
+            error={historyPage.error}
+            onLoadMore={historyPage.key === historyKey && historyPage.page > 0 ? () => void loadHistoryPage(historyPage.page + 1) : undefined}
           />
         </div>
         <div className="detail-card detail-full">

@@ -1,0 +1,165 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import vm from 'node:vm';
+import { loadModule } from './support/harness.mjs';
+
+const ids = Array.from({ length: 10 }, (_, index) => String(100000000000000000n + BigInt(index)));
+const players = count => ids.slice(0, count).map((discordId, index) => ({ discordId, displayName: `Roster ${index}` }));
+const stats = () => ({ summary: { matchesIncluded: 4, totalPointsScored: 12, totalPodiumPlacements: 5, totalMvpMatches: 1 },
+  umaEntries: [{ umaId: '100101', matches: 4, wins: 3, losses: 1, pointsScored: 12, podiumPlacements: 5, mvpMatches: 1 }] });
+const historySummary = () => ({ wins: 99, losses: 88, pointsScored: 999, podiumPlacements: 77,
+  firstPlaceFinishes: 7, secondPlaceFinishes: 7, thirdPlaceFinishes: 7, mvpAwards: 55 });
+const entry = (index, verificationState = 'confirmed', isWinner = true) => ({ matchId: `FAKE-${index}`, reportedAt: '2026-01-01T00:00:00Z',
+  mode: 'ranked', verificationState, selectedUmaId: index === 2 ? null : '100101', isWinner,
+  pointsScored: 999, podiumPlacements: 5, isMvp: true, eloDelta: index === 2 ? null : 4,
+  eloPlacement: index === 2, umaAssignments: [{ ordinal: 0, umaId: '100101' }, { ordinal: 1, umaId: '100102' }] });
+const batchPlayer = (id, overrides = {}) => ({ discordId: id, displayName: `Batch ${id.slice(-1)}`, nickname: null,
+  title: 'Fixture title', statsHidden: false, stats: stats(),
+  history: { total: 8, summary: historySummary(), recent: [entry(0), entry(1, 'corrected', null),
+    entry(2, 'reported', false), entry(3, 'pending'), entry(4), entry(5), entry(6)] }, ...overrides });
+
+function harness({ batchStatus = 200, batchPlayers, latency = 1, fast = true, historyPages } = {}) {
+  const calls = [];
+  const c = vm.createContext({ console, URL, AbortController, setTimeout, clearTimeout, Date, recordDiagnostic: () => {},
+    fetch: async (url, options) => {
+      calls.push(url.pathname + url.search);
+      const status = url.pathname.endsWith('/batch') ? batchStatus : 200;
+      return { ok: status < 400, status, headers: new Headers(), body: { cancel: async () => {} },
+        json: async () => {
+          await new Promise((resolve, reject) => {
+            const timer = setTimeout(resolve, latency);
+            options.signal.addEventListener('abort', () => { clearTimeout(timer); reject(options.signal.reason); }, { once: true });
+          });
+          if (url.pathname === '/api/seasons') return [{ id: 'S1', active: true }];
+          if (url.pathname === '/api/leaderboard') return { entries: [] };
+          if (url.pathname.endsWith('/batch')) return { mode: 'ranked', season: url.searchParams.get('season'),
+            players: batchPlayers ?? url.searchParams.get('ids').split(',').map(id => batchPlayer(id)) };
+          if (url.pathname.endsWith('/history')) return historyPages?.[Number(url.searchParams.get('page'))] ??
+            { page: Number(url.searchParams.get('page')), pageSize: 20, total: 25, playerHistory: [entry(1)] };
+          if (url.pathname.endsWith('/profile')) return { displayName: 'Legacy fixture' };
+          return stats();
+        } };
+    }
+  });
+  for (const module of ['profileConstants', 'umaReleaseOrder', 'umaPortraits', 'requestQueue']) loadModule(c, module);
+  loadModule(c, 'playerProfileApi', { fast });
+  return { c, calls };
+}
+
+test('cold ten-player lobby uses one batch call and keeps all public stats from stats', async () => {
+  const h = harness({ fast: false, latency: 10 });
+  const started = performance.now();
+  const result = await h.c.fetchPlayerProfileSummaries(players(10), { scope: 'currentSeason' });
+  assert(performance.now() - started < 1500);
+  assert.equal(h.calls.filter(path => path.includes('/batch?')).length, 1);
+  assert.equal(h.calls.length, 3);
+  assert(!h.calls.some(path => path.endsWith('/profile') || path.includes('/history?')));
+  const profile = result[ids[0]];
+  assert.equal(profile.matches, 4);
+  assert.equal(profile.wins, 3);
+  assert.equal(profile.losses, 1);
+  assert.equal(profile.winRate, 0.75);
+  assert.equal(profile.pointsPerGame, 3);
+  assert.equal(profile.mvpMatches, 1);
+  assert.equal(profile.allUmas[0].matches, 4);
+  assert.equal(profile.allUmas[0].wins, 3);
+  assert.equal(profile.historyTotal, 8);
+  assert.equal(profile.historySummary.wins, 99);
+  assert.equal(profile.recentMatches.length, 5);
+  assert.equal(profile.recentMatches[1].isWinner, null);
+  assert.equal(profile.recentMatches[1].result, 'unknown');
+  assert.equal(profile.recentMatches[2].umaName, 'Disqualified');
+  assert.equal(profile.recentMatches[2].umaAssignments.length, 2);
+});
+
+test('hidden, unknown, and malformed batch entries remain independent', async () => {
+  const fixture = [
+    batchPlayer(ids[0], { statsHidden: true, stats: null, history: null }),
+    batchPlayer(ids[1], { displayName: ids[1], stats: { summary: { matchesIncluded: 0, totalPointsScored: 0, totalPodiumPlacements: 0, totalMvpMatches: 0 }, umaEntries: [] }, history: { total: 0, summary: historySummary(), recent: [] } }),
+    batchPlayer(ids[2], { stats: { summary: null, umaEntries: [] } })
+  ];
+  const h = harness({ batchPlayers: fixture });
+  const result = await h.c.fetchPlayerProfileSummaries(players(3), { scope: 'allTime' });
+  assert.equal(result[ids[0]].statsPrivate, true);
+  assert.equal(result[ids[0]].title, 'Fixture title');
+  assert.equal(result[ids[1]].displayName, 'Roster 1');
+  assert.equal(result[ids[1]].matches, 0);
+  assert.match(result[ids[2]].error, /Invalid player/);
+  assert.equal(h.calls.filter(path => path.includes('/batch?')).length, 1);
+  assert(!h.calls.some(path => path.endsWith('/profile')));
+});
+
+test('batch 404 falls back to the original selected-scope path and is remembered', async () => {
+  const h = harness({ batchStatus: 404 });
+  await h.c.fetchPlayerProfileSummaries(players(10), { scope: 'currentSeason' });
+  assert.equal(h.calls.filter(path => path.includes('/batch?')).length, 1);
+  assert.equal(h.calls.filter(path => path.endsWith('/profile')).length, 10);
+  assert.equal(h.calls.filter(path => path.includes('/stats?')).length, 10);
+  assert.equal(h.calls.length, 23);
+  await h.c.fetchPlayerProfileSummaries(players(1), { scope: 'currentSeason' });
+  assert.equal(h.calls.filter(path => path.includes('/batch?')).length, 1);
+  const future = Date.now() + 10 * 60 * 1000 + 1;
+  h.c.Date = class extends Date { static now() { return future; } };
+  await h.c.fetchPlayerProfileSummaries(players(1), { scope: 'currentSeason' });
+  assert.equal(h.calls.filter(path => path.includes('/batch?')).length, 2);
+});
+
+test('batch 429 uses the API cooldown and does not run the fallback', async () => {
+  const h = harness({ batchStatus: 429 });
+  await assert.rejects(h.c.fetchPlayerProfileSummaries(players(1), { scope: 'allTime' }), /HTTP 429/);
+  assert.equal(h.c.getApiCooldown().status, 429);
+  assert(!h.calls.some(path => path.endsWith('/profile') || path.includes('/stats?')));
+});
+
+test('batch 5xx also falls back without disabling future batch attempts', async () => {
+  const h = harness({ batchStatus: 503 });
+  await h.c.fetchPlayerProfileSummaries(players(1), { scope: 'allTime' });
+  assert(h.calls.some(path => path.endsWith('/profile')));
+  await h.c.fetchPlayerProfileSummaries(players(1), { scope: 'allTime' });
+  assert.equal(h.calls.filter(path => path.includes('/batch?')).length, 2);
+});
+
+test('players arriving one at a time settle into one batch call', async () => {
+  const h = harness();
+  const requests = [];
+  for (let count = 1; count <= 10; count += 1) {
+    const controller = new AbortController();
+    requests.push(controller);
+    void h.c.fetchPlayerProfileSummaries(players(count), { scope: 'currentSeason', signal: controller.signal })
+      .catch(() => {});
+    if (count < 10) {
+      await new Promise(resolve => setTimeout(resolve, 2));
+      controller.abort(new Error('Roster expanded'));
+    }
+  }
+  await new Promise(resolve => setTimeout(resolve, 70));
+  assert.equal(h.calls.filter(path => path.includes('/batch?')).length, 1);
+});
+
+test('rolling batch budget publishes a wait and resumes without per-player fallback', async () => {
+  const h = harness();
+  vm.runInContext('batchStartedAt.push(...Array(8).fill(Date.now() - 59970))', h.c);
+  const waits = [];
+  const started = performance.now();
+  const result = await h.c.fetchPlayerProfileSummaries(players(1), { scope: 'allTime', onWait: seconds => waits.push(seconds) });
+  assert(waits.length >= 1 && waits[0] >= 1);
+  assert(performance.now() - started >= 25);
+  assert.equal(result[ids[0]].matches, 4);
+  assert.equal(h.calls.filter(path => path.includes('/batch?')).length, 1);
+  assert(!h.calls.some(path => path.endsWith('/profile')));
+});
+
+test('history pages are requested on demand, cached, and cancellable', async () => {
+  const h = harness({ latency: 5 });
+  const first = await h.c.fetchPlayerHistoryPage(ids[0], 'allTime', 1);
+  const second = await h.c.fetchPlayerHistoryPage(ids[0], 'allTime', 2);
+  await h.c.fetchPlayerHistoryPage(ids[0], 'allTime', 1);
+  assert.equal(first.total, 25);
+  assert.equal(second.page, 2);
+  assert.equal(h.calls.filter(path => path.includes('/history?')).length, 2);
+  const slow = harness({ latency: 100 });
+  const controller = new AbortController();
+  const pending = slow.c.fetchPlayerHistoryPage(ids[0], 'allTime', 1, controller.signal);
+  setTimeout(() => controller.abort(new Error('Details closed')), 10);
+  await assert.rejects(pending, /Details closed/);
+});

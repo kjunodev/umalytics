@@ -17,7 +17,7 @@ function sceneHarness(selected) {
   return c.HistoricalScene;
 }
 const player = {discordId:'123456789012345678',displayName:'Player'};
-const props = {snapshot:{matchCode:'TG7YT2'},roster:{players:[player],teams:{team1:{id:'team1',players:[player]},team2:{id:'team2',players:[]}}},profiles:{},statsScope:'allTime',loading:true};
+const props = {snapshot:{matchCode:'FX1A2B'},roster:{players:[player],teams:{team1:{id:'team1',players:[player]},team2:{id:'team2',players:[]}}},profiles:{},statsScope:'allTime',loading:true};
 test('History scenes reuse the live draft and Uma renderer with the historical roster and chosen scope', () => {
   const render = sceneHarness();
   for (const [scene, type] of [['draft','Draft'],['umas','Umas']]) {

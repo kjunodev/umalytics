@@ -21,7 +21,7 @@ The extension's postinstall/typecheck prepares WXT generated types. Keep separat
 | pnpm build | Public Chromium build |
 | pnpm build:all | Public Chromium and Firefox builds with manifest/privacy checks |
 
-Generated bundles live in apps/extension/.output. Checked build snapshots live in .releases; latest.json describes the latest pair. This repository supports public builds only. The build configuration rejects a private-mode environment flag, and the API source contains no private-history retrieval or reconstruction implementation.
+Generated bundles live in apps/extension/.output. Checked build snapshots live in .releases; latest.json describes the latest pair. This repository supports public builds only. The build configuration rejects a private-mode environment flag. Public history pages may be fetched and displayed, but public statistics must never be calculated from them.
 
 ## Architecture
 
@@ -35,6 +35,8 @@ Generated bundles live in apps/extension/.output. Checked build snapshots live i
 | Shared package | TypeScript contracts across extension contexts |
 
 Fresh complete profiles are reused for 15 minutes. The reusable archive is bounded to 100 profiles and approximately 4 MiB, and trims entries older than 24 hours when processed. The local diagnostic trace is capped at 200 sanitized entries. These limits apply to the archive/trace, not every byte of extension storage.
+
+Lobby enrichment waits about 1.2 seconds for roster changes, then normally makes one batch call for the missing players in the selected Season or All-time scope. Seasons and the leaderboard are shared requests. Switching scope loads the other scope. A failed batch call uses the paced per-player stats/profile path; a 404 disables batch attempts for ten minutes. Opening a player's details requests a 20-entry public history page, including for hidden-stats players; Load more fetches another page. No other view starts history paging. History responses are cached for five minutes and never feed the public statistics mapper.
 
 ## Release checks
 

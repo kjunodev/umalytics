@@ -37,7 +37,9 @@ export function mergeProfileScopes(previous: PlayerProfileSummary | undefined, n
   return { ...next, currentSeasonStats, allTimeStats,
     ...(seasonPending ? { activeSeasonId: previous.activeSeasonId } : {}),
     ...(next.scopeFetchedAt ? { scopeFetchedAt: timestamps } : {}),
-    ...(selected ? { recentMatches: selected.recentMatches, recentForm: selected.recentForm, recentHistoryStatus: selected.recentHistoryStatus } : {}) };
+    ...(selected ? { recentMatches: selected.recentMatches, recentForm: selected.recentForm,
+      recentHistoryStatus: selected.recentHistoryStatus, historyTotal: selected.historyTotal,
+      historySummary: selected.historySummary } : {}) };
 }
 
 export function recentHistoryEmptyMessage(profile: PlayerProfileSummary | undefined): string | undefined {

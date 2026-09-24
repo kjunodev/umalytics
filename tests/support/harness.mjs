@@ -112,7 +112,8 @@ function applyFastPatches(source) {
     .replace(/const API_REQUEST_TIMEOUT_MS = [^;]+;/, 'const API_REQUEST_TIMEOUT_MS = 120;')
     .replace(/const PROFILE_SUMMARY_TIMEOUT_MS = [^;]+;/, 'const PROFILE_SUMMARY_TIMEOUT_MS = 1500;')
     .replace('15_000', '300')
-    .replace('const DEFAULT_REQUEST_INTERVAL_MS = 500;', 'const DEFAULT_REQUEST_INTERVAL_MS = 1;');
+    .replace('const DEFAULT_REQUEST_INTERVAL_MS = 500;', 'const DEFAULT_REQUEST_INTERVAL_MS = 1;')
+    .replace('const BATCH_SETTLE_MS = 1200;', 'const BATCH_SETTLE_MS = 10;');
 }
 
 const loadedByContext = new WeakMap();
