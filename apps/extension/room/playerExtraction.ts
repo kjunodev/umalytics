@@ -126,7 +126,7 @@ export function normalizePrematchPlayer(
     displayName,
     partyId,
     partyRatingBonus,
-    ...extractOptionalPlayerFields(value)
+    ...readOptionalPlayerFields(value)
   };
 }
 
@@ -189,7 +189,7 @@ function dedupePrematchPlayers(players: PrematchPlayer[]): PrematchPlayer[] {
   return dedupedPlayers;
 }
 
-function extractOptionalPlayerFields(value: Record<string, unknown>): Partial<PrematchPlayer> {
+function readOptionalPlayerFields(value: Record<string, unknown>): Partial<PrematchPlayer> {
   const fields: Partial<PrematchPlayer> = {};
   // An explicit null current team means the player has left the slots.
   const team = value.team === null ? undefined :
@@ -197,7 +197,7 @@ function extractOptionalPlayerFields(value: Record<string, unknown>): Partial<Pr
   const initialTeam = readOptionalTeamId(value.initialTeam);
   const finalTeam = readOptionalTeamId(value.finalTeam);
   const role = readOptionalString(value.role) ?? readOptionalString(value.roomRole) ?? readOptionalString(value.type);
-  const isCaptain = readBoolean(value.isCaptain);
+  const isCaptain = readOptionalBoolean(value.isCaptain);
   const ratingSnapshot = readOptionalNumber(value.ratingSnapshot);
   const rdSnapshot = readOptionalNumber(value.rdSnapshot);
   const displayRatingSnapshot = readOptionalNumber(value.displayRatingSnapshot);
@@ -263,6 +263,6 @@ function readTeamMetadata(
   };
 }
 
-function readBoolean(value: unknown): boolean | undefined {
+function readOptionalBoolean(value: unknown): boolean | undefined {
   return typeof value === 'boolean' ? value : undefined;
 }
