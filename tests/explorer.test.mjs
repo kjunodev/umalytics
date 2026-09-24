@@ -10,7 +10,7 @@ function harness(globals = {}) {
   const context = vm.createContext({ URL, URLSearchParams, Error, console, AbortController, setTimeout, clearTimeout,
     getUmaDisplayName: (id, name) => name, getUmaPortraitUrl: id => `portrait:${id}`, normalizeUmaOutfitId: id => id,
     ...globals });
-  load(context, 'utils/matchDetection.ts'); load(context, 'utils/explorerData.ts');
+  load(context, 'matchDetection'); load(context, 'explorerData');
   return context;
 }
 
@@ -89,7 +89,7 @@ function service(globals = {}) {
     getCachedPlayerProfiles: async () => ({}), rememberCachedPlayerProfiles: async () => {},
     getApiCooldown: () => undefined, fetchJson: async path => { calls.push(path); return fixture; },
     ...globals });
-  load(h, 'utils/explorerTypes.ts'); load(h, 'utils/explorerService.ts');
+  load(h, 'explorerTypes'); load(h, 'explorerService');
   return { h, calls };
 }
 
@@ -134,7 +134,7 @@ test('rate-limit errors preserve a retry timestamp and missing records have an a
 });
 
 test('retry failures retain useful displayed stats, but a confirmed private response removes them', () => {
-  const h = harness(); load(h, 'utils/explorerState.ts');
+  const h = harness(); load(h, 'explorerState');
   const old = { discordId: '1', matches: 20, fetchedAt: 100, statsPrivate: false };
   const failed = h.mergeExplorerProfiles({ '1': old }, { '1': { discordId: '1', matches: null, error: '429', statsPrivate: false } });
   assert.equal(failed['1'].matches, 20); assert.equal(failed['1'].fetchedAt, 100);

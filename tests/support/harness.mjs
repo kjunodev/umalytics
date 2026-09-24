@@ -46,26 +46,24 @@ export const MODULES = {
 };
 
 const pathByName = new Map(Object.entries(MODULES));
-const knownPaths = new Set(Object.values(MODULES));
 
 // Dependencies each module needs evaluated into the same vm context first,
 // matching the preload order the original per-test-file loaders hard coded.
 const PRELOADS = {
-  'utils/profileCache.ts': ['utils/profileMerge.ts'],
-  'utils/explorerState.ts': ['utils/profileMerge.ts'],
-  'utils/explorerService.ts': ['utils/profileMerge.ts'],
-  'entrypoints/pageHook.ts': ['utils/pageHookRuntime.ts'],
-  'entrypoints/content.ts': ['utils/roomEvents.ts', 'utils/rosterIdentity.ts'],
+  profileCache: ['profileMerge'],
+  explorerState: ['profileMerge'],
+  explorerService: ['profileMerge'],
+  pageHook: ['pageHookRuntime'],
+  content: ['roomEvents', 'rosterIdentity'],
 };
 
-function resolvePath(id) {
-  if (pathByName.has(id)) return pathByName.get(id);
-  if (knownPaths.has(id)) return id;
-  throw new Error(`Unknown module: ${id}`);
+function resolvePath(name) {
+  if (!pathByName.has(name)) throw new Error(`Unknown module: ${name}`);
+  return pathByName.get(name);
 }
 
-export function readModule(id) {
-  return fs.readFileSync(path.join(root, resolvePath(id)), 'utf8');
+export function readModule(name) {
+  return fs.readFileSync(path.join(root, resolvePath(name)), 'utf8');
 }
 
 function stripImportsAndExports(source) {
@@ -85,41 +83,47 @@ function applyFastPatches(source) {
 
 const loadedByContext = new WeakMap();
 
-function markLoaded(context, relPath) {
+// Returns false if `name` was already loaded in this context with the same
+// `fast` flag (a no-op re-load to skip), or throws if it was already loaded
+// with a different `fast` flag (an inconsistent re-load, not a safe skip).
+function trackLoad(context, name, fast) {
   let seen = loadedByContext.get(context);
-  if (!seen) { seen = new Set(); loadedByContext.set(context, seen); }
-  if (seen.has(relPath)) return false;
-  seen.add(relPath);
+  if (!seen) { seen = new Map(); loadedByContext.set(context, seen); }
+  if (seen.has(name)) {
+    const previous = seen.get(name);
+    if (previous !== fast) throw new Error(`Module "${name}" already loaded in this context with fast=${previous}, cannot reload with fast=${fast}`);
+    return false;
+  }
+  seen.set(name, fast);
   return true;
 }
 
 // Strips imports/exports and evaluates the source with stripTypeScriptTypes
 // in the given vm context. Used by regression, explorer and explorer-transport.
-export function loadModule(context, id, options = {}) {
-  const relPath = resolvePath(id);
-  if (!markLoaded(context, relPath)) return;
-  for (const dep of PRELOADS[relPath] ?? []) loadModule(context, dep);
-  let source = stripImportsAndExports(readModule(relPath));
-  if (options.fast) source = applyFastPatches(source);
+export function loadModule(context, name, options = {}) {
+  const fast = Boolean(options.fast);
+  if (!trackLoad(context, name, fast)) return;
+  for (const dep of PRELOADS[name] ?? []) loadModule(context, dep);
+  let source = stripImportsAndExports(readModule(name));
+  if (fast) source = applyFastPatches(source);
   vm.runInContext(stripTypeScriptTypes(source, { mode: 'transform' }), context);
 }
 
 // Strips imports/exports and evaluates the source through the TypeScript
 // compiler instead of stripTypeScriptTypes. Used by recent-history.
-export function loadModuleTS(context, id) {
-  const relPath = resolvePath(id);
-  if (!markLoaded(context, relPath)) return;
-  for (const dep of PRELOADS[relPath] ?? []) loadModuleTS(context, dep);
-  const source = stripImportsAndExports(readModule(relPath));
+export function loadModuleTS(context, name) {
+  if (!trackLoad(context, name, false)) return;
+  for (const dep of PRELOADS[name] ?? []) loadModuleTS(context, dep);
+  const source = stripImportsAndExports(readModule(name));
   const output = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
   vm.runInContext(output, context);
 }
 
 // Parses a .tsx module once so individual function declarations can be
 // extracted and evaluated in isolation.
-export function parseTsxModule(id) {
-  const relPath = resolvePath(id);
-  return ts.createSourceFile(path.basename(relPath), readModule(relPath), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+export function parseTsxModule(name) {
+  const relPath = resolvePath(name);
+  return ts.createSourceFile(path.basename(relPath), readModule(name), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
 }
 
 const JSX_COMPILER_OPTIONS = { target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.React, jsxFactory: 'element' };

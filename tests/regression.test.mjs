@@ -36,8 +36,8 @@ function apiHarness({privateBuild=false, responder, latency=2}={}) {
       }};
     }
   });
-  evaluate(c,'utils/profileConstants.ts'); evaluate(c,'utils/umaReleaseOrder.ts'); evaluate(c,'utils/umaPortraits.ts');
-  evaluate(c,'utils/requestQueue.ts');evaluate(c,'utils/playerProfileApi.ts',{fast:true});
+  evaluate(c,'profileConstants'); evaluate(c,'umaReleaseOrder'); evaluate(c,'umaPortraits');
+  evaluate(c,'requestQueue');evaluate(c,'playerProfileApi',{fast:true});
   return {c,calls,get peak(){return peak;},get aborts(){return aborts;}};
 }
 
@@ -122,7 +122,7 @@ function backgroundHarness({stored = {}} = {}) {
     fetchPlayerProfileSummaries:async (p,options)=>{const gate=deferred();fetches.push({players:p,options,gate});return await gate.promise ?? {};},
     sendRoomDomScanRequest:async()=>{await c.handlePrematchRosterDetected(roster());return{activeLobby:true,matchCode:'ROOM01'};}
   });
-  evaluate(c,'utils/profileConstants.ts');evaluate(c,'utils/rosterDisplay.ts');evaluate(c,'utils/profileCache.ts');evaluate(c,'entrypoints/background.ts');
+  evaluate(c,'profileConstants');evaluate(c,'rosterDisplay');evaluate(c,'profileCache');evaluate(c,'background');
   return {c,snapshots,fetches,alarms,stored,advance(ms){clock+=ms;},get now(){return clock;},get windowCount(){return windowCount;},set cached(s){cached=s;},set latest(r){latest=r;}};
 }
 
@@ -175,7 +175,7 @@ test('fresh cached profiles need no network',async()=>{
 
 test('duplicate content scans coalesce while acknowledgement is pending; failed sends can retry',async()=>{
   const gate=deferred();let sends=0;
-  const c=context({sendPrematchRoster:()=>{sends++;return gate.promise;}});evaluate(c,'entrypoints/content.ts');
+  const c=context({sendPrematchRoster:()=>{sends++;return gate.promise;}});evaluate(c,'content');
   const a=c.publishRoster(roster(),'synced'),b=c.publishRoster(roster(),'synced');await tick();assert.equal(sends,1);
   gate.resolve();await Promise.all([a,b]);
   let fail=true;c.sendPrematchRoster=async()=>{sends++;if(fail)throw new Error('Connection error');};
@@ -185,7 +185,7 @@ test('duplicate content scans coalesce while acknowledgement is pending; failed 
 
 test('DOM draft updates preserve phase/turn within a match, never across matches',async()=>{
   const sent=[];const c=context({sendDraftSnapshot:async s=>sent.push(s),window:{location:{href:'https://drafter.uma.guide/spectate/ROOM01'}},extractMatchCodeFromUrl:()=> 'ROOM01'});
-  evaluate(c,'entrypoints/content.ts');
+  evaluate(c,'content');
   const teams={team1:{id:'team1',maps:[],umas:[]},team2:{id:'team2',maps:[],umas:[]}};
   await c.publishDraftSnapshot({matchCode:'ROOM01',teams,phase:'pick',currentTeam:'team1',source:'synced-draft-state'});
   teams.team1.umas.push({kind:'pick',name:'Uma'});
@@ -196,8 +196,8 @@ test('DOM draft updates preserve phase/turn within a match, never across matches
 });
 
 test('team normalization resolves final/initial teams and drops spectators without slots',()=>{
-  const c=context({cleanTeamName:x=>x});evaluate(c,'utils/syncPayload.ts');evaluate(c,'utils/playerExtraction.ts');
-  evaluate(c,'utils/rosterDisplay.ts');
+  const c=context({cleanTeamName:x=>x});evaluate(c,'syncPayload');evaluate(c,'playerExtraction');
+  evaluate(c,'rosterDisplay');
   const fixture={syncedDraftState_multiplayer:{roomId:'ROOM01',participants:players().map((p,i)=>i<2?{...p,team:undefined,finalTeam:'team1'}:p)}};
   const r=c.normalizeRosterForDisplay(c.extractPrematchRosterFromSyncedDraftState(fixture));
   assert.equal(r.players.length,5);assert.equal(r.teams.team1.players.length,2);assert.equal(r.teams.team2.players.length,3);
@@ -208,7 +208,7 @@ test('team normalization resolves final/initial teams and drops spectators witho
 });
 
 test('forced reconnect replays rich synced roster instead of replacing it with partial DOM data',async()=>{
-  const sent=[];const c=context({sendPrematchRoster:async r=>sent.push(r)});evaluate(c,'entrypoints/content.ts');
+  const sent=[];const c=context({sendPrematchRoster:async r=>sent.push(r)});evaluate(c,'content');
   await c.publishRoster(roster(),'synced');
   await c.publishRoster(roster('ROOM01',1),'dom',{force:true});
   assert.equal(sent.length,2);assert.equal(sent.at(-1).players.length,5);
@@ -240,7 +240,7 @@ test('A9C7T2 fixture scouts 9 team-slot players and never the 4 spectators',asyn
 });
 
 test('explicit spectator roles and cleared current slots override historical teams',()=>{
-  const c=context({cleanTeamName:x=>x});evaluate(c,'utils/syncPayload.ts');evaluate(c,'utils/playerExtraction.ts');
+  const c=context({cleanTeamName:x=>x});evaluate(c,'syncPayload');evaluate(c,'playerExtraction');
   const fixture=players(5);
   fixture[0]={...fixture[0],role:'Spectator'};
   fixture[1]={...fixture[1],roomRole:'spectator',role:'captain'};
@@ -361,7 +361,7 @@ test('returning to an earlier lobby restores its profiles without another API ba
 });
 
 test('profile archive excludes partial data and bounds age, count and byte size',()=>{
-  const c=context();evaluate(c,'utils/profileCache.ts');const now=Date.now();
+  const c=context();evaluate(c,'profileCache');const now=Date.now();
   const incoming=Object.fromEntries(Array.from({length:130},(_,i)=>[String(i),{discordId:String(i),fetchedAt:now-i,profileUrl:'fixture'}]));
   incoming.partial={discordId:'partial',fetchedAt:now,isPartial:true};
   incoming.old={discordId:'old',fetchedAt:now-25*60*60*1000};
@@ -381,7 +381,7 @@ test('initial all-time stats publish before a slow profile endpoint completes',a
 });
 
 test('request pacing spaces start times and cancellation does not dispatch abandoned jobs',async()=>{
-  const c=context();evaluate(c,'utils/requestQueue.ts');const queue=vm.runInContext('new RequestQueue(3, 30)',c);
+  const c=context();evaluate(c,'requestQueue');const queue=vm.runInContext('new RequestQueue(3, 30)',c);
   const starts=[];const controller=new AbortController();
   await Promise.all(Array.from({length:4},()=>queue.run(controller.signal,async()=>{starts.push(performance.now());})));
   assert(starts.slice(1).every((time,i)=>time-starts[i]>=27),JSON.stringify(starts));
@@ -402,7 +402,7 @@ test('private and public caches are separate and public mode rejects private/leg
   const stored={};const storage={get:async key=>({[key]:stored[key]}),set:async values=>Object.assign(stored,values)};
   function storageContext(privateBuild) {
     const c=context({__UMALYTICS_PRIVATE_PROFILE_DATA__:privateBuild,browser:{storage:{local:storage}}});
-    evaluate(c,'utils/profileCache.ts');evaluate(c,'utils/profileStorage.ts');return c;
+    evaluate(c,'profileCache');evaluate(c,'profileStorage');return c;
   }
   const privateContext=storageContext(true);const secret={discordId:'1',fetchedAt:Date.now(),statsPrivate:true,matches:40};
   await privateContext.rememberCachedPlayerProfiles({'1':secret});
@@ -415,7 +415,7 @@ test('private and public caches are separate and public mode rejects private/leg
 });
 
 test('unscoped or foreign socket/storage rosters cannot replace the M95Z2Z team',()=>{
-  const c=context();evaluate(c,'utils/syncPayload.ts');
+  const c=context();evaluate(c,'syncPayload');
   const small={rankedQueueRoster:players(2).map(p=>({...p,team:'team2'}))};
   assert.equal(c.selectRoomSyncedState(small,'M95Z2Z'),null);
   assert.equal(c.selectRoomSyncedState({roomCode:'OTHER1',data:small},'M95Z2Z'),null);
@@ -428,7 +428,7 @@ test('unscoped or foreign socket/storage rosters cannot replace the M95Z2Z team'
 
 test('same-room departures and empty rosters remain authoritative; console context is explicit',async()=>{
   const c=context({sendPrematchRoster:async r=>sent.push(r)});const sent=[];
-  evaluate(c,'utils/syncPayload.ts');evaluate(c,'entrypoints/content.ts');
+  evaluate(c,'syncPayload');evaluate(c,'content');
   const identified=c.selectRoomSyncedState({roomCode:'M95Z2Z',players:players(2)},'M95Z2Z');
   assert.equal(identified.syncedDraftState_multiplayer.players.length,2);
   assert(c.selectRoomSyncedState({syncedDraftState_multiplayer:{participants:players()}},'M95Z2Z',true));
@@ -440,7 +440,7 @@ test('same-room departures and empty rosters remain authoritative; console conte
 });
 
 test('synced payload traversal is bounded and rejects cyclic/foreign nested data',()=>{
-  const c=context();evaluate(c,'utils/syncPayload.ts');const cycle={};cycle.self=cycle;
+  const c=context();evaluate(c,'syncPayload');const cycle={};cycle.self=cycle;
   assert.equal(c.selectRoomSyncedState(cycle,'M95Z2Z'),null);
   assert.equal(c.selectRoomSyncedState({roomCode:'OTHER1',data:{players:players()}},'M95Z2Z',true),null);
   const data={roomCode:'M95Z2Z',roomId:'cec650b6-a357-4d35-9133-7b6db44ae46f'};
@@ -462,7 +462,7 @@ test('activating another drafter tab follows its roster without waiting for prof
 test('content keeps ten players when a later unscoped two-player payload arrives',async()=>{
   const sent=[];const c=context({cleanTeamName:x=>x,document:{},extractRoomCodeFromRoomDom:()=> 'M95Z2Z',
     extractDraftSnapshotFromSyncedDraftState:()=>null,sendPrematchRoster:async r=>sent.push(r)});
-  evaluate(c,'utils/syncPayload.ts');evaluate(c,'utils/playerExtraction.ts');evaluate(c,'entrypoints/content.ts');
+  evaluate(c,'syncPayload');evaluate(c,'playerExtraction');evaluate(c,'content');
   const event=(players,roomCode)=>({type:'umalytics:synced-draft-state',hookVersion:4,source:'websocket',payload:{syncedDraftState_multiplayer:{roomCode,rankedQueueRoster:players}}});
   await c.handleWindowMessage(event(players(10),'M95Z2Z'),'M95Z2Z');
   await c.handleWindowMessage(event(players(2),undefined),'M95Z2Z');
@@ -477,7 +477,7 @@ test('content keeps ten players when a later unscoped two-player payload arrives
 
 function roomHarness() {
   const c=context({cleanTeamName:x=>x, getUmaDisplayName:(id,name)=>name??id, normalizeUmaOutfitId:x=>x});
-  evaluate(c,'utils/matchDetection.ts');evaluate(c,'utils/syncPayload.ts');evaluate(c,'utils/playerExtraction.ts');evaluate(c,'utils/roomEvents.ts');
+  evaluate(c,'matchDetection');evaluate(c,'syncPayload');evaluate(c,'playerExtraction');evaluate(c,'roomEvents');
   return {c,state:vm.runInContext('new RoomEventState()',c)};
 }
 function matchEvent({room='M95Z2Z',version=1,phase='map-pick',members=players(10),rules}={}) {
@@ -497,7 +497,7 @@ test('room code normalization supports host display and join/spectate routes',()
 function domHarness(body) {
   const {document,HTMLElement}=parseHTML('<html><body>'+body+'</body></html>');
   HTMLElement.prototype.getBoundingClientRect=function(){return {top:0,left:Number(this.getAttribute('data-left')??0)};};
-  const c=context({document});evaluate(c,'utils/matchDetection.ts');evaluate(c,'utils/textCleanup.ts');evaluate(c,'utils/domLobbyExtraction.ts');
+  const c=context({document});evaluate(c,'matchDetection');evaluate(c,'textCleanup');evaluate(c,'domLobbyExtraction');
   return {c,document};
 }
 const realTrainerRow=(name='CLUE | 기',avatar='https://cdn.discordapp.com/avatars/634868914484019202/avatar.png')=>`<div data-trainer-player="true"><span class="trainer-companion"><img alt="Fine Motion companion" src="/uma/1001.png"></span><button data-trainer-trigger="true" aria-label="View ${name}'s trainer card"><img alt="${name}" src="${avatar}"></button><div><button data-trainer-trigger="true">${name}</button></div><span>Captain</span><span>Host</span></div>`;
@@ -608,7 +608,7 @@ test('scope merge retains timestamps, and an unfetched scope is not considered f
 
 test('recorder caps the trace and never stores arbitrary payloads, identifiers, or tokens',async()=>{
   const stored={};const c=context({browser:{storage:{local:{get:async()=>({}),set:async value=>Object.assign(stored,value)}}}});
-  evaluate(c,'utils/diagnosticRecorder.ts');
+  evaluate(c,'diagnosticRecorder');
   const clean=c.sanitizeDiagnostic({kind:'room',reason:'match-snapshot',room:'M95Z2Z',team1:5,token:'SECRET',payload:{chat:'SECRET'},discordId:'SECRET',endpoint:'SECRET',phase:'SECRET'});
   assert(!JSON.stringify(clean).includes('SECRET'));
   for(let i=0;i<250;i++)c.recordDiagnostic({kind:'room',reason:'match-snapshot',version:i,team1:5,team2:5});
@@ -622,7 +622,7 @@ function contentRoomHarness({delayDraft}={}) {
     extractRoomCodeFromRoomDom:()=>visibleRoom,extractPrematchRosterFromRoomDom:()=>domRoster,
     extractDraftSnapshotFromDraftDom:()=>null,extractDraftSnapshotFromSyncedDraftState:()=>null,
     sendDraftSnapshot:async()=>{if(delayDraft)await delayDraft.promise;},sendPrematchRoster:async roster=>sent.push(structuredClone(roster))});
-  evaluate(c,'utils/matchDetection.ts');evaluate(c,'utils/syncPayload.ts');evaluate(c,'utils/playerExtraction.ts');evaluate(c,'entrypoints/content.ts');
+  evaluate(c,'matchDetection');evaluate(c,'syncPayload');evaluate(c,'playerExtraction');evaluate(c,'content');
   const send=event=>c.handleWindowMessage({type:'umalytics:room-event',hookVersion:4,payload:event});
   return {c,sent,send,show(room,roster){visibleRoom=room;domRoster=roster;}};
 }
@@ -657,7 +657,7 @@ test('scope switch cancels old work and passes the new scope through the backgro
 test('page hook forwards typed frames but does not promote arbitrary player arrays',()=>{
   const {c}=roomHarness();const messages=[];
   Object.assign(c,{Blob,ArrayBuffer,TextDecoder,defineUnlistedScript:()=>{},window:{location:{origin:'https://drafter.uma.guide'},postMessage:message=>messages.push(message)}});
-  evaluate(c,'entrypoints/pageHook.ts');
+  evaluate(c,'pageHook');
   c.inspectPossiblePayload('42'+JSON.stringify(['server:event',matchEvent()]),'websocket','M95Z2Z');
   c.inspectPossiblePayload({roomCode:'M95Z2Z',players:players(2)},'websocket','M95Z2Z');
   c.inspectPossiblePayload({roomCode:'M95Z2Z',players:players(2)},'storage','M95Z2Z');
@@ -665,7 +665,7 @@ test('page hook forwards typed frames but does not promote arbitrary player arra
 });
 
 test('unknown and private experience are never labelled as zero games',()=>{
-  const c=context();evaluate(c,'utils/profileAvailability.ts');
+  const c=context();evaluate(c,'profileAvailability');
   assert.equal(c.missingUmaHistoryLabel(undefined,'allTime'),'Stats not loaded yet');
   assert.equal(c.missingUmaHistoryLabel({scopeFetchedAt:{currentSeason:1}},'allTime'),'Stats not loaded for this scope');
   assert.equal(c.missingUmaHistoryLabel({statsPrivate:true},'allTime'),'Stats are private');
@@ -692,7 +692,7 @@ test('unchanged warm rosters do not republish profiles or reset their age across
 });
 
 test('stats age uses the selected scope, never a room publication timestamp',()=>{
-  const c=context(); evaluate(c,'utils/profileConstants.ts'); evaluate(c,'utils/profileTiming.ts');
+  const c=context(); evaluate(c,'profileConstants'); evaluate(c,'profileTiming');
   const snapshot={updatedAt:999_999,profiles:{a:{fetchedAt:1200,scopeFetchedAt:{currentSeason:1000,allTime:500}},b:{fetchedAt:1100,scopeFetchedAt:{currentSeason:900}}}};
   assert.equal(c.latestStatsCheckAt(snapshot,'currentSeason'),1000);
   assert.equal(c.latestStatsCheckAt(snapshot,'allTime'),500);
@@ -725,12 +725,12 @@ test('confirmed maps use the drafter combined order and preserve distinct course
 test('page hook startup never reads site localStorage or sessionStorage',()=>{
   const w={location:{origin:'https://drafter.uma.guide'},console:{debug(){},log(){},info(){}},addEventListener(){},WebSocket:class {addEventListener(){} }};
   Object.defineProperties(w,{localStorage:{get(){throw new Error('Unexpected storage read');}},sessionStorage:{get(){throw new Error('Unexpected storage read');}}});
-  const c=context({window:w,defineUnlistedScript:fn=>fn()}); evaluate(c,'entrypoints/pageHook.ts');
+  const c=context({window:w,defineUnlistedScript:fn=>fn()}); evaluate(c,'pageHook');
 });
 
 test('DOM fallback preserves visible combined map numbers and leaves vetoes unnumbered',()=>{
   const {document}=parseHTML('<section><button aria-label="Open Nakayama 2000m map helper"><div>3</div><div>Nakayama</div><div>2000m Turf</div></button><button aria-label="Open Hanshin 2200m map helper"><span class="line-through">Hanshin</span>\n2200m Turf</button></section>');
-  const c=context();evaluate(c,'utils/draftExtraction.ts');
+  const c=context();evaluate(c,'draftExtraction');
   const maps=c.extractDomMaps('team1',document.querySelector('section'));
   assert.equal(maps[0].order,3);assert.equal(maps[1].order,undefined);assert.equal(maps[1].status,'vetoed');
 });
@@ -738,7 +738,7 @@ test('DOM fallback preserves visible combined map numbers and leaves vetoes unnu
 
 test('custom-room nickname and companion identities survive empty initialization snapshots',()=>{
   for (const nickname of [null,'Mimi','Rumi']) {
-    const {state,c}=roomHarness();evaluate(c,'utils/rosterIdentity.ts');
+    const {state,c}=roomHarness();evaluate(c,'rosterIdentity');
     state.apply(matchEvent({room:'CUSTOM',phase:'lobby',members:null}),'CUSTOM');
     const participant={actorUserId:'actor-rumi',discordId:'436071695955263509',displayName:'Rumi',nickname,role:'captain',team:'team1'};
     state.apply({type:'room.presence.updated',matchId:'CUSTOM',participants:[participant],rankedQueueRoster:[]},'CUSTOM');
@@ -816,7 +816,7 @@ test('early hook captures socket events before listener startup and replays only
     console:{log(){},debug(){},info(){}},addEventListener(){},postMessage:m=>messages.push(m),
     WebSocket:class {addEventListener(type,fn){socketListener=fn;}}};
   Object.assign(c,{window:w,document:{},extractRoomCodeFromRoomDom:()=>room,Blob,ArrayBuffer,TextDecoder,defineUnlistedScript:fn=>fn()});
-  evaluate(c,'entrypoints/pageHook.ts');new w.WebSocket('wss://drafter-api.uma.guide/socket.io/');
+  evaluate(c,'pageHook');new w.WebSocket('wss://drafter-api.uma.guide/socket.io/');
   socketListener({data:'42'+JSON.stringify(['server:event',matchEvent({version:5})])});
   socketListener({data:'42'+JSON.stringify(['server:event',matchEvent({version:3})])});
   socketListener({data:'42'+JSON.stringify(['server:event',{type:'room.presence.updated',matchId:'M95Z2Z',participants:players(10),secret:'DO-NOT-COPY'}])});
