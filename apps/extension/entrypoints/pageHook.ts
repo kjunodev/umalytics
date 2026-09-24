@@ -1,2 +1,2 @@
-import { installPageHook } from '../utils/pageHookRuntime';
+import { installPageHook } from '../room/pageHookRuntime';
 export default defineUnlistedScript(installPageHook);

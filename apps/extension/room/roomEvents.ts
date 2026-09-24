@@ -1,7 +1,7 @@
 import type { DraftSnapshot, PrematchRoster, TeamId } from '@umalytics/shared';
 import { normalizeMatchCode } from './matchDetection';
 import { normalizePrematchRosterFromPlayers } from './playerExtraction';
-import { getUmaDisplayName, normalizeUmaOutfitId } from './umaPortraits';
+import { getUmaDisplayName, normalizeUmaOutfitId } from '../umas/umaPortraits';
 
 type RoomRecord = Record<string, any>;
 const ROOM_EVENT_TYPES = new Set(['match.snapshot', 'room.presence.updated', 'participant.uma-assignments.snapshot', 'room.captain.changed']);

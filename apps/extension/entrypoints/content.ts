@@ -1,26 +1,27 @@
-import { decodeRoomEvent, RoomEventState } from '../utils/roomEvents';
-import { canReuseSyncedRoster } from '../utils/rosterIdentity';
+import { decodeRoomEvent, RoomEventState } from '../room/roomEvents';
+import { canReuseSyncedRoster } from '../room/rosterIdentity';
 import { browser } from 'wxt/browser';
-import { injectScript } from 'wxt/utils/inject-script';
-import type { ScriptPublicPath } from 'wxt/utils/inject-script';
+import { injectScript } from '#imports';
+import type { ScriptPublicPath } from '#imports';
 import type { DraftSnapshot, PrematchRoster } from '@umalytics/shared';
-import { extractMatchCodeFromUrl } from '../utils/matchDetection';
+import { extractMatchCodeFromUrl } from '../room/matchDetection';
 import {
   isUmaLyticsContentMessage,
   sendDraftSnapshot,
   sendDiagnosticEvent,
   sendPrematchRoster,
   type RoomDomScanResult
-} from '../utils/messaging';
+} from '../runtime/messaging';
 import {
   extractPrematchRosterFromRoomDom,
   extractRoomCodeFromRoomDom
-} from '../utils/domLobbyExtraction';
+} from '../room/domLobbyExtraction';
 import {
   extractDraftSnapshotFromDraftDom,
   extractDraftSnapshotFromSyncedDraftState
-} from '../utils/draftExtraction';
-import { extractPrematchRosterFromSyncedDraftState } from '../utils/playerExtraction';
+} from '../room/draftExtraction';
+import { extractPrematchRosterFromSyncedDraftState } from '../room/playerExtraction';
+import { isRecord } from '../room/recordReaders';
 
 const SYNCED_DRAFT_STATE_MESSAGE_TYPE = 'umalytics:synced-draft-state';
 const PAGE_HOOK_SCRIPT_PATH = '/pageHook.js' as ScriptPublicPath;
@@ -527,8 +528,4 @@ function isTransientRuntimeMessageError(caught: unknown): boolean {
     caught.message.includes('The message port closed before a response was received') ||
     caught.message.includes('Could not establish connection. Receiving end does not exist')
   );
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
 }

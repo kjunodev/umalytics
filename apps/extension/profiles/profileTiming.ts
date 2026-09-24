@@ -1,5 +1,5 @@
 import type { PlayerStatsScope } from '@umalytics/shared';
-import type { PlayerProfileSummariesSnapshot } from './profileStorage';
+import type { PlayerProfileSummariesSnapshot } from './profileTypes';
 import { MANUAL_PROFILE_REFRESH_COOLDOWN_MS } from './profileConstants';
 
 /** Room publications are not stats checks. Use the selected scope's real timestamp. */

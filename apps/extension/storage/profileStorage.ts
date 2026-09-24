@@ -1,6 +1,7 @@
-import { mergeProfileCache } from './profileCache';
+import { mergeProfileCache } from '../profiles/profileCache';
 import { browser } from 'wxt/browser';
 import type { PlayerProfileSummary } from '@umalytics/shared';
+import type { PlayerProfileSummariesSnapshot } from '../profiles/profileTypes';
 
 export const PLAYER_PROFILE_SUMMARIES_STORAGE_KEY = 'playerProfileSummaries';
 declare const __UMALYTICS_PRIVATE_PROFILE_DATA__: boolean;
@@ -28,31 +29,6 @@ export function rememberCachedPlayerProfiles(profiles: Record<string, PlayerProf
   });
   archiveWrites = write.catch(() => {});
   return write;
-}
-
-export type PlayerProfileLoadStatus = 'queued' | 'loading' | 'loaded' | 'private' | 'timeout' | 'error';
-
-export interface PlayerProfileLoadState {
-  discordId: string;
-  status: PlayerProfileLoadStatus;
-  startedAt?: number;
-  finishedAt?: number;
-  updatedAt: number;
-  error?: string;
-  stage?: string;
-  retryAt?: number;
-}
-
-export interface PlayerProfileSummariesSnapshot {
-  buildMode?: 'private' | 'public';
-  matchCode?: string;
-  runId?: number;
-  startedAt?: number;
-  manualRefreshAt?: number;
-  profiles: Record<string, PlayerProfileSummary>;
-  profileStates?: Record<string, PlayerProfileLoadState>;
-  loadingDiscordIds: string[];
-  updatedAt: number;
 }
 
 type PlayerProfileSummariesStorage = {

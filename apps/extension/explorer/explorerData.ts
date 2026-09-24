@@ -1,7 +1,7 @@
 import type { DraftMapSelection, DraftSnapshot, DraftUmaAction, PrematchPlayer, PrematchRoster, TeamId } from '@umalytics/shared';
 import type { HistoricalMatch, PlayerSearchResult } from './explorerTypes';
-import { normalizeMatchCode } from './matchDetection';
-import { getUmaDisplayName, getUmaPortraitUrl, normalizeUmaOutfitId } from './umaPortraits';
+import { normalizeMatchCode } from '../room/matchDetection';
+import { getUmaDisplayName, getUmaPortraitUrl, normalizeUmaOutfitId } from '../umas/umaPortraits';
 
 const record = (value: unknown): Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : {};
 const rows = (value: unknown): Record<string, unknown>[] => Array.isArray(value) ? value.map(record) : [];

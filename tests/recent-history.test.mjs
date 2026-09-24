@@ -1,12 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
 import vm from 'node:vm';
-import ts from 'typescript';
+import { loadModuleTS, loadFunction, parseTsxModule } from './support/harness.mjs';
 
-const base = new URL('../apps/extension/', import.meta.url);
-const source = fs.readFileSync(new URL('entrypoints/scout/App.tsx', base), 'utf8');
-const syntax = ts.createSourceFile('App.tsx', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+const playerDetailSyntax = parseTsxModule('uiPlayerDetailScene');
+const recentMatchesSyntax = parseTsxModule('uiPlayerRecentMatchesList');
+const scoutDataSyntax = parseTsxModule('uiScoutData');
 function harness(privateBuild = false) {
   const c = vm.createContext({ console, __UMALYTICS_PRIVATE_PROFILE_DATA__: privateBuild,
     element: (type, props, ...children) => ({ type, props, children }),
@@ -18,15 +17,14 @@ function harness(privateBuild = false) {
     ScoutingReport: 'Report', BestUmasList: 'Best', filterSnapshotForBuild: x => x,
     filterProfileStatesForDisplay: x => x, getLoadingDiscordIdsForDisplay: () => [],
   });
-  for (const file of ['profileConstants.ts', 'profileMerge.ts', 'profileCache.ts', 'explorerState.ts']) {
-    const code = fs.readFileSync(new URL(`utils/${file}`, base), 'utf8').replace(/^import[\s\S]*?;\r?\n/gm, '').replace(/^export /gm, '');
-    vm.runInContext(ts.transpileModule(code, {compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText, c);
+  for (const name of ['profileConstants', 'profileMerge', 'profileCache', 'explorerState']) {
+    loadModuleTS(c, name);
   }
-  for (const name of ['getDisplayedProfileStats','RecentMatchesList','PlayerDetailScene','isDisplayableStoredProfile','normalizeProfileSnapshotForDisplay']) {
-    const node = syntax.statements.find(n => ts.isFunctionDeclaration(n) && n.name?.text === name);
-    assert(node, name);
-    vm.runInContext(ts.transpileModule(node.getText(syntax), {compilerOptions:{target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.React,jsxFactory:'element'}}).outputText,c);
-  }
+  loadFunction(c, playerDetailSyntax, 'getDisplayedProfileStats');
+  loadFunction(c, playerDetailSyntax, 'PlayerDetailScene');
+  loadFunction(c, recentMatchesSyntax, 'RecentMatchesList');
+  loadFunction(c, scoutDataSyntax, 'isDisplayableStoredProfile');
+  loadFunction(c, scoutDataSyntax, 'normalizeProfileSnapshotForDisplay');
   return c;
 }
 const entry = {matchId:'FIX001',reportedAt:'2026-09-18T12:00:00Z',mode:'ranked',verificationState:'confirmed',umaId:null,umaName:'Unknown Uma',isWinner:true,pointsScored:3,podiums:1,isMvp:false};

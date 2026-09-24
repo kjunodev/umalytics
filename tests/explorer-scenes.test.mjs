@@ -1,13 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
 import vm from 'node:vm';
-import ts from 'typescript';
+import { loadFunction, parseTsxModule, readModule } from './support/harness.mjs';
 
-const source = fs.readFileSync(new URL('../apps/extension/entrypoints/scout/App.tsx', import.meta.url), 'utf8');
-const syntax = ts.createSourceFile('App.tsx', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
-const declaration = syntax.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === 'HistoricalScene');
-const code = ts.transpileModule(declaration.getText(syntax), { compilerOptions: { jsx: ts.JsxEmit.React, jsxFactory: 'element', target: ts.ScriptTarget.ES2022 } }).outputText;
+const historySyntax = parseTsxModule('uiHistoryScene');
+const draftSyntax = parseTsxModule('uiDraftScene');
 function sceneHarness(selected) {
   const c = vm.createContext({
     element: (type, props, ...children) => ({type, props, children}),
@@ -16,7 +13,7 @@ function sceneHarness(selected) {
     getSelectedPlayerContext: (teams, key) => { for (const team of teams) { const player = team.players.find(p => p.discordId === key); if (player) return {team, player}; } },
     PlayerDetailScene: 'Details', DraftScene: 'Draft', UmaPlannerScene: 'Umas', TeamSection: 'Team',
   });
-  vm.runInContext(code, c);
+  loadFunction(c, historySyntax, 'HistoricalScene');
   return c.HistoricalScene;
 }
 const player = {discordId:'123456789012345678',displayName:'Player'};
@@ -47,17 +44,15 @@ test('History details select a real roster member and do not replace Draft or Um
   assert.equal(sceneHarness('unknown')({...props,scene:'lobby'}).type,'section');
 });
 test('Explorer styling cannot override shared draft button geometry', () => {
-  const css = fs.readFileSync(new URL('../apps/extension/entrypoints/scout/styles.css', import.meta.url),'utf8');
+  const css = readModule('scoutStyles');
   assert.doesNotMatch(css,/\.explorer-view\s+button\s*\{/);
   assert.match(css,/\.draft-pick-slot button\s*\{[^}]*padding:\s*3px/s);
   assert.match(css,/scrollbar-gutter:\s*stable/);
 });
 
 test('Live and History pick slots use identical known-outfit portraits regardless of captured image URL', () => {
-  const slot = syntax.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === 'DraftPickSlot');
-  const compiled = ts.transpileModule(slot.getText(syntax), {compilerOptions:{jsx:ts.JsxEmit.React,jsxFactory:'element',target:ts.ScriptTarget.ES2022}}).outputText;
   const c = vm.createContext({element:(type,props,...children)=>({type,props,children}),UmaImage:'Image',getUmaPortraitUrl:id=>`portrait/${id}`,isKnownUmaOutfitId:id=>id==='100601'});
-  vm.runInContext(compiled,c);
+  loadFunction(c, draftSyntax, 'DraftPickSlot');
   const image = result => result.children.flatMap(child=>child?.children ?? []).flatMap(child=>child?.children ?? []).find(child=>child?.type==='Image').props.imageUrl;
   const render = action => c.DraftPickSlot({action,experienceCount:0,isSelected:false,onSelect(){}});
   assert.equal(image(render({umaId:'100601',name:'Oguri',imageUrl:'captured/other.png'})), 'portrait/100601');
