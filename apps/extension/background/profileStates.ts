@@ -1,7 +1,7 @@
 import type { PlayerProfileSummary, PrematchPlayer } from '@umalytics/shared';
 import { mergeProfileScopes } from '../profiles/profileMerge';
 import type { ApiCooldown } from '../profiles/playerProfileApi';
-import type { PlayerProfileLoadState, PlayerProfileLoadStatus } from '../storage/profileStorage';
+import type { PlayerProfileLoadState, PlayerProfileLoadStatus } from '../profiles/profileTypes';
 
 const MAX_AUTOMATIC_RETRIES = 2;
 export interface ProfileRecovery {

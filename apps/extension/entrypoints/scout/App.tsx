@@ -9,9 +9,9 @@ import { getRefreshCooldownMs, latestStatsCheckAt } from '../../profiles/profile
 import { getTeamGroups, normalizeRosterForDisplay } from '../../room/rosterDisplay';
 import {
   getPlayerProfileSummaries,
-  PLAYER_PROFILE_SUMMARIES_STORAGE_KEY,
-  type PlayerProfileSummariesSnapshot
+  PLAYER_PROFILE_SUMMARIES_STORAGE_KEY
 } from '../../storage/profileStorage';
+import type { PlayerProfileSummariesSnapshot } from '../../profiles/profileTypes';
 import {
   getLatestDraftSnapshot,
   LATEST_DRAFT_SNAPSHOT_STORAGE_KEY

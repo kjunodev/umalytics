@@ -3,11 +3,8 @@ import type { DraftSnapshot, PlayerProfileSummary, PlayerStatsScope, PrematchRos
 import { latestStatsCheckAt } from '../profiles/profileTiming';
 import { BEST_UMA_SCORE_VERSION, RECENT_HISTORY_VERSION } from '../profiles/profileConstants';
 import { normalizeRosterForDisplay } from '../room/rosterDisplay';
-import {
-  filterSnapshotForBuild,
-  type PlayerProfileLoadState,
-  type PlayerProfileSummariesSnapshot
-} from '../storage/profileStorage';
+import { filterSnapshotForBuild } from '../storage/profileStorage';
+import type { PlayerProfileLoadState, PlayerProfileSummariesSnapshot } from '../profiles/profileTypes';
 import type { LobbyLockState } from '../storage/lobbyLockStorage';
 import { formatRelativeAge, formatStatsScopeShortLabel } from './common/format';
 import { getDisplayedProfileStats } from './player/PlayerDetailScene';
