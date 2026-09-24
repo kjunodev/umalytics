@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import { loadFunction, parseTsxModule, readModule } from './support/harness.mjs';
 
-const syntax = parseTsxModule('scoutApp');
+const historySyntax = parseTsxModule('uiHistoryScene');
+const draftSyntax = parseTsxModule('uiDraftScene');
 function sceneHarness(selected) {
   const c = vm.createContext({
     element: (type, props, ...children) => ({type, props, children}),
@@ -12,7 +13,7 @@ function sceneHarness(selected) {
     getSelectedPlayerContext: (teams, key) => { for (const team of teams) { const player = team.players.find(p => p.discordId === key); if (player) return {team, player}; } },
     PlayerDetailScene: 'Details', DraftScene: 'Draft', UmaPlannerScene: 'Umas', TeamSection: 'Team',
   });
-  loadFunction(c, syntax, 'HistoricalScene');
+  loadFunction(c, historySyntax, 'HistoricalScene');
   return c.HistoricalScene;
 }
 const player = {discordId:'123456789012345678',displayName:'Player'};
@@ -51,7 +52,7 @@ test('Explorer styling cannot override shared draft button geometry', () => {
 
 test('Live and History pick slots use identical known-outfit portraits regardless of captured image URL', () => {
   const c = vm.createContext({element:(type,props,...children)=>({type,props,children}),UmaImage:'Image',getUmaPortraitUrl:id=>`portrait/${id}`,isKnownUmaOutfitId:id=>id==='100601'});
-  loadFunction(c, syntax, 'DraftPickSlot');
+  loadFunction(c, draftSyntax, 'DraftPickSlot');
   const image = result => result.children.flatMap(child=>child?.children ?? []).flatMap(child=>child?.children ?? []).find(child=>child?.type==='Image').props.imageUrl;
   const render = action => c.DraftPickSlot({action,experienceCount:0,isSelected:false,onSelect(){}});
   assert.equal(image(render({umaId:'100601',name:'Oguri',imageUrl:'captured/other.png'})), 'portrait/100601');
