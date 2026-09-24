@@ -273,6 +273,15 @@ test('background skips batch settling only when both team rosters have five slot
   }
 });
 
+test('a roster missing team2 loads with the settling wait',async()=>{
+  const h=backgroundHarness();const incomplete=roster('ROOM01',10);
+  incomplete.teams={team1:{id:'team1',players:incomplete.players.slice(0,5)}};
+  const pending=h.c.performRosterEnrichment(incomplete,{},0,new AbortController().signal);
+  await waitUntil(()=>h.fetches.length===1);
+  assert.equal(h.fetches[0].options.rosterComplete,false);
+  h.fetches[0].gate.resolve();await pending;
+});
+
 test('failed refresh preserves usable cached data, but confirmed private responses replace it',()=>{
   const h=backgroundHarness();
   const previous={discordId:'1',matches:5,fetchedAt:123};
