@@ -7,6 +7,7 @@ import type { PartyVisual } from '../common/partyVisuals';
 import { getPlayerPartyVisual, getPlayerRowClassName, getTeamPartyVisuals } from '../common/partyVisuals';
 import { StatCell, getDisplayedProfileStats, getLookupDiscordId, getPlayerNote, getStatsMessage } from '../player/PlayerDetailScene';
 import { TopUmasList, UmaResolutionNote } from '../player/TopUmasList';
+import { IS_PRIVATE_BUILD } from '../scoutData';
 
 export function TeamSection({
   team,
@@ -71,7 +72,7 @@ export function PlayerRow({
   partyVisual?: PartyVisual;
   onShowDetails: () => void;
 }) {
-  const displayedProfile = getDisplayedProfileStats(profile, statsScope);
+  const displayedProfile = getCardProfile(profile, statsScope);
   const rating = profile?.conservativeRating ?? profile?.rating ?? player.displayRatingSnapshot ?? player.ratingSnapshot;
   const discordId = getLookupDiscordId(player);
   const profileUrl = profile?.profileUrl ?? player.profileUrl;
@@ -162,6 +163,16 @@ export function PlayerRow({
       <p className={note === undefined ? 'player-note empty' : 'player-note'}>{note ?? ' '}</p>
     </li>
   );
+}
+
+export function getCardProfile(
+  profile: PlayerProfileSummary | undefined, statsScope: PlayerStatsScope, privateBuild = IS_PRIVATE_BUILD
+): PlayerProfileSummary | undefined {
+  const selectedProfile = getDisplayedProfileStats(profile, statsScope);
+  return privateBuild || selectedProfile === undefined ? selectedProfile : {
+    ...selectedProfile, recentMatches: [], recentForm: undefined,
+    historyTotal: undefined, historySummary: undefined
+  };
 }
 
 export function CaptainCrown() {

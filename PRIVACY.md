@@ -1,12 +1,12 @@
 # UmaLytics public build: data handling
 
-Updated for the batch scouting flow.
+Updated for the per-player scouting flow.
 
 Development update: History requests a public completed match by the code you submit. Profiles searches the public player directory using the name you submit, or looks up the exact ID from your input/profile URL. These requests omit browser credentials and use the same API pacing and cache as live scouting. Match and search selections remain in window memory, separate from the live roster; fetched profile summaries may enter the existing bounded profile archive.
 
-UmaLytics is a browser extension for Uma Drafter. It observes room/team membership and confirmed draft state on drafter.uma.guide. For a lobby, it requests seasons and the leaderboard, then makes one batch request for up to ten roster players in the selected Season or All-time scope. The batch includes public identity, ranked statistics and a recent match preview; another scope is requested when selected. If the batch endpoint fails, the extension uses the existing per-player statistics and profile requests. Requests contain the player identifiers required by those endpoints. API fetches omit browser credentials. Refer to Uma Drafter for its own service practices.
+UmaLytics is a browser extension for Uma Drafter. It observes room/team membership and confirmed draft state on drafter.uma.guide. For a lobby, it requests seasons and the leaderboard, then makes paced per-player statistics requests for the selected Season or All-time scope and profile requests for titles. Profile responses are cached for 24 hours; another statistics scope is requested when selected. The public build makes no batch request during lobby loading. Requests contain the player identifiers required by those endpoints. API fetches omit browser credentials. Refer to Uma Drafter for its own service practices.
 
-Opening a player's details requests the first page of that player's public ranked match history; Load more requests subsequent pages. This also works when that player's statistics are hidden. The public build displays history but never derives wins, losses, win rate, points per game, MVP totals or Uma statistics from it. Public identity, rank or rating can be displayed independently of hidden detailed statistics.
+Opening a player's details requests the first page of that player's public ranked match history; Load more requests subsequent pages. This also works when that player's statistics are hidden. Recent results and form appear in details from the first history page, not on lobby cards. The public build displays history but never derives wins, losses, win rate, points per game, MVP totals or Uma statistics from it. Public identity, rank or rating can be displayed independently of hidden detailed statistics.
 
 ## Local storage
 

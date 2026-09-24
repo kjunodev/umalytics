@@ -23,7 +23,7 @@ function players(count=5) {
 }
 const roster = (match='ROOM01', count=5) => ({matchCode:match,players:players(count)});
 const stats = {summary:{matchesIncluded:4,totalPointsScored:12},umaEntries:[{umaId:'100101',matches:4,wins:2,losses:2,pointsScored:12}]};
-function apiHarness({privateBuild=false, responder, latency=2, fast=true, sessionStorage, batch=false}={}) {
+function apiHarness({privateBuild=false, responder, latency=2, fast=true, sessionStorage}={}) {
   const calls=[],callTimes=[],diagnostics=[]; let active=0, peak=0, aborts=0;
   const c=context({__UMALYTICS_PRIVATE_PROFILE_DATA__:privateBuild,
     ...(sessionStorage ? {browser:{storage:{session:sessionStorage}}} : {}),
@@ -47,7 +47,6 @@ function apiHarness({privateBuild=false, responder, latency=2, fast=true, sessio
   });
   evaluate(c,'profileConstants'); evaluate(c,'umaReleaseOrder'); evaluate(c,'umaPortraits');
   evaluate(c,'requestQueue');evaluate(c,'playerProfileApi',{fast});
-  if (!batch) c.fetchPlayerProfileSummaries = c.fetchPlayerProfileSummariesLegacy;
   return {c,calls,callTimes,diagnostics,get peak(){return peak;},get aborts(){return aborts;}};
 }
 
@@ -55,7 +54,7 @@ test('stats requests start while shared setup is pending; no HTML/assets request
   const h=apiHarness({responder:url=>url.pathname==='/api/seasons'?{hang:true}:undefined});
   let starts=0;
   const pending=h.c.fetchPlayerProfileSummaries(players(),{onStart:()=>{starts++;}});
-  await sleep(50);
+  await waitUntil(()=>starts===5 && h.calls.some(p=>p.includes('/stats?')));
   assert.equal(starts,5);
   assert(h.calls.some(p=>p.includes('/stats?')),JSON.stringify(h.calls));
   assert(!h.calls.some(p=>p.includes('/assets/') || p==='/'));
@@ -100,7 +99,8 @@ test('identical in-flight profile requests share one fetch and one caller can ca
   const path=`/api/stats/players/${players(1)[0].discordId}/profile`;
   const a=h.c.fetchJson(path,first.signal,'profile');
   const b=h.c.fetchJson(path,second.signal,'profile');
-  await sleep(5);first.abort(new Error('Switched rooms'));
+  await waitUntil(()=>h.calls.filter(call=>call===path).length===1);
+  first.abort(new Error('Switched rooms'));
   await assert.rejects(a,/Switched rooms/);
   assert.equal((await b).displayName,'Fixture');
   assert.equal(h.calls.filter(call=>call===path).length,1);

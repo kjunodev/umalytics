@@ -1,4 +1,4 @@
-import type { PlayerProfileSummary, PlayerStatsScope, PrematchPlayer, PrematchTeam } from '@umalytics/shared';
+import type { PlayerProfileSummary, PlayerRecentMatchSummary, PlayerStatsScope, PrematchPlayer, PrematchTeam } from '@umalytics/shared';
 import { useEffect, useRef, useState } from 'react';
 import { cancelPlayerHistoryPageRequest, sendPlayerHistoryPageRequest } from '../../runtime/messaging';
 import { recentHistoryEmptyMessage } from '../../profiles/profileMerge';
@@ -35,14 +35,19 @@ export function PlayerDetailScene({
   const profileUrl = profile?.profileUrl ?? player.profileUrl;
   const note = getPlayerNote(profile, discordId);
   const statsMessage = getStatsMessage(displayedProfile, profile, isProfileLoading, discordId);
-  const notableBadges = getNotableBadges(displayedProfile);
   const partyVisual = getPlayerPartyVisual(player, getTeamPartyVisuals(team?.players ?? []));
   const isCaptain = player.isCaptain === true || player.role === 'captain';
   const historyKey = `${player.discordId}:${statsScope}`;
   const pendingHistoryRequests = useRef(new Set<string>());
   const [historyPage, setHistoryPage] = useState<{
-    key: string; page: number; total: number; matches: NonNullable<PlayerProfileSummary['recentMatches']>; loading: boolean; error?: string;
+    key: string; page: number; total: number; matches: NonNullable<PlayerProfileSummary['recentMatches']>;
+    firstPageMatches?: NonNullable<PlayerProfileSummary['recentMatches']>;
+    summary?: PlayerProfileSummary['historySummary']; loading: boolean; error?: string;
   }>({ key: historyKey, page: 0, total: 0, matches: [], loading: false });
+  const historyLoaded = historyPage.key === historyKey && historyPage.page > 0;
+  const detailProfile = historyLoaded ? withDetailHistory(displayedProfile, historyPage.firstPageMatches ?? [], historyPage.total, historyPage.summary) : displayedProfile;
+  const notableBadges = getNotableBadges(detailProfile === undefined ? undefined :
+    historyLoaded ? detailProfile : { ...detailProfile, recentForm: undefined });
 
   useEffect(() => {
     setHistoryPage({ key: historyKey, page: 0, total: 0, matches: [], loading: true });
@@ -61,7 +66,8 @@ export function PlayerDetailScene({
     try {
       const result = await sendPlayerHistoryPageRequest(discordId, statsScope, page, requestId);
       setHistoryPage(previous => previous.key === historyKey ? {
-        key: historyKey, page, total: result.total,
+        key: historyKey, page, total: result.total, summary: page === 1 ? result.summary : previous.summary,
+        firstPageMatches: page === 1 ? result.matches : previous.firstPageMatches,
         matches: page === 1 ? result.matches : [...previous.matches, ...result.matches], loading: false
       } : previous);
     } catch (error) {
@@ -155,14 +161,14 @@ export function PlayerDetailScene({
         </div>
         <div className="detail-card detail-wide">
           <RecentMatchesList
-            recentMatches={historyPage.key === historyKey && historyPage.page > 0 ? historyPage.matches : displayedProfile?.recentMatches}
+            recentMatches={historyLoaded ? historyPage.matches : []}
             playerName={player.displayName}
             emptyMessage={historyPage.loading ? 'Loading match history.' : historyPage.error ??
-              (historyPage.key === historyKey && historyPage.page > 0 ? 'No recent match history found.' : recentHistoryEmptyMessage(displayedProfile))}
-            total={historyPage.key === historyKey && historyPage.page > 0 ? historyPage.total : displayedProfile?.historyTotal}
+              (historyLoaded ? 'No recent match history found.' : recentHistoryEmptyMessage(displayedProfile))}
+            total={historyLoaded ? historyPage.total : undefined}
             loading={historyPage.loading}
             error={historyPage.error}
-            onLoadMore={historyPage.key === historyKey && historyPage.page > 0 ? () => void loadHistoryPage(historyPage.page + 1) : undefined}
+            onLoadMore={historyLoaded ? () => void loadHistoryPage(historyPage.page + 1) : undefined}
           />
         </div>
         <div className="detail-card detail-full">
@@ -177,6 +183,31 @@ export function PlayerDetailScene({
       <p className={note === undefined ? 'player-note empty' : 'player-note'}>{note ?? ' '}</p>
     </section>
   );
+}
+
+export function withDetailHistory(
+  profile: PlayerProfileSummary | undefined, firstPageMatches: PlayerRecentMatchSummary[],
+  total: number, summary?: PlayerProfileSummary['historySummary']
+): PlayerProfileSummary | undefined {
+  if (profile === undefined) return undefined;
+  const recentMatches = firstPageMatches.filter(match =>
+    ['confirmed', 'corrected', 'reported'].includes(match.verificationState)).slice(0, 5);
+  const confirmed = recentMatches.filter(match => match.verificationState === 'confirmed');
+  const matches = confirmed.length;
+  const scoredMatches = confirmed.filter(match => match.pointsScored > 0).length;
+  const wins = confirmed.filter(match => match.isWinner === true).length;
+  const points = confirmed.reduce((sum, match) => sum + match.pointsScored, 0);
+  return {
+    ...profile, recentMatches, historyTotal: total, historySummary: summary,
+    recentHistoryStatus: 'loaded',
+    recentForm: {
+      matches, scoredMatches, scoringRate: matches > 0 ? scoredMatches / matches : null,
+      wins, winRate: matches > 0 ? wins / matches : null, points,
+      pointsPerGame: matches > 0 ? points / matches : null,
+      podiums: confirmed.reduce((sum, match) => sum + match.podiums, 0),
+      mvpMatches: confirmed.filter(match => match.isMvp).length
+    }
+  };
 }
 
 export function getLookupDiscordId(player: PrematchPlayer): string | undefined {

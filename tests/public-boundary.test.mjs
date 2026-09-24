@@ -30,4 +30,10 @@ test('community source can display history but cannot reconstruct statistics fro
  assert(config.includes('const privateProfileDataBuild = false;'));
  const build=fs.readFileSync(new URL('../scripts/build-all.mjs',import.meta.url),'utf8');
  assert(build.includes("for (const mode of ['public'])"));
+ const background=fs.readFileSync(new URL('../apps/extension/entrypoints/background.ts',import.meta.url),'utf8');
+ const explorer=fs.readFileSync(new URL('../apps/extension/explorer/explorerService.ts',import.meta.url),'utf8');
+ assert(background.includes('fetchPlayerProfileSummaries('));
+ assert(explorer.includes('fetchPlayerProfileSummaries('));
+ assert(!background.includes('fetchBatchPlayerProfileSummaries'));
+ assert(!explorer.includes('fetchBatchPlayerProfileSummaries'));
 });

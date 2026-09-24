@@ -108,7 +108,7 @@ interface ApiBatchPlayer {
 }
 
 interface ApiBatchResponse { mode: string; season: string | null; players: ApiBatchPlayer[] }
-export interface PlayerHistoryPage { page: number; total: number; matches: PlayerRecentMatchSummary[] }
+export interface PlayerHistoryPage { page: number; total: number; matches: PlayerRecentMatchSummary[]; summary?: PlayerProfileSummary['historySummary'] }
 
 type CapturedFetch<T> =
   | { ok: true; value: T }
@@ -162,7 +162,7 @@ type UmaMetadataLookup = Map<string, UmaMetadata>;
 let leaderboardRequest: Promise<LeaderboardLookup> | undefined;
 let bundledUmaMetadata: UmaMetadataLookup | undefined;
 
-export async function fetchPlayerProfileSummaries(
+export async function fetchBatchPlayerProfileSummaries(
   players: PrematchPlayer[],
   options: {
     scope?: 'currentSeason' | 'allTime' | 'both'; signal?: AbortSignal;
@@ -177,17 +177,10 @@ export async function fetchPlayerProfileSummaries(
   const uniquePlayers = uniqueByDiscordId(players);
   if (uniquePlayers.length === 0) return {};
   await (batchAvailabilityLoad ??= restoreBatchAvailability());
-  if (Date.now() < batchUnavailableUntil) return fetchPlayerProfileSummariesLegacy(players, options);
+  if (Date.now() < batchUnavailableUntil) return fetchPlayerProfileSummaries(players, options);
   const seasonPromise = getActiveSeasonId();
   const leaderboardPromise = getActiveLeaderboard(seasonPromise);
-  if (options.rosterComplete !== true) {
-    await new Promise<void>((resolve, reject) => {
-      const timer = setTimeout(() => { options.signal?.removeEventListener('abort', abort); resolve(); }, BATCH_SETTLE_MS);
-      const abort = () => { clearTimeout(timer); reject(options.signal?.reason ?? new Error('Request cancelled.')); };
-      if (options.signal?.aborted) abort();
-      else options.signal?.addEventListener('abort', abort, { once: true });
-    });
-  }
+  await waitForBatchSettle(options.signal, options.rosterComplete);
   const season = await seasonPromise;
   if (options.scope !== 'allTime' && season.activeSeasonId === undefined) {
     return Object.fromEntries(uniquePlayers.map(player => [player.discordId,
@@ -198,14 +191,14 @@ export async function fetchPlayerProfileSummaries(
   for (const player of uniquePlayers) await options.onStart?.(player);
   let response: ApiBatchResponse;
   try {
-    const value = await fetchJson<unknown>(query, options.signal, 'shared');
+    const value = await fetchJson<unknown>(query, options.signal, 'background');
     if (!isBatchResponse(value, uniquePlayers)) throw new Error('Invalid batch response.');
     response = value;
   } catch (error) {
     if (options.signal?.aborted) throw error;
     if (error instanceof ApiRequestError && error.status === 404) await rememberBatchUnavailable();
     if (error instanceof ApiRequestError && error.status === 429) throw error;
-    return fetchPlayerProfileSummariesLegacy(players, options);
+    return fetchPlayerProfileSummaries(players, options);
   }
   const leaderboard = await leaderboardPromise;
   const metadata = bundledUmaMetadata ??= buildReleaseOrderUmaMetadata();
@@ -236,7 +229,7 @@ async function rememberBatchUnavailable(): Promise<void> {
   catch { /* Memory fallback remains available. */ }
 }
 
-async function fetchPlayerProfileSummariesLegacy(
+export async function fetchPlayerProfileSummaries(
   players: PrematchPlayer[],
   options: {
     scope?: 'currentSeason' | 'allTime' | 'both';
@@ -246,6 +239,7 @@ async function fetchPlayerProfileSummariesLegacy(
     onSummary?: (summary: PlayerProfileSummary) => void | Promise<void>;
     onProgress?: (summary: PlayerProfileSummary) => void | Promise<void>;
     onWait?: (seconds: number) => void | Promise<void>;
+    rosterComplete?: boolean;
   } = {}
 ): Promise<Record<string, PlayerProfileSummary>> {
   const uniquePlayers = uniqueByDiscordId(players);
@@ -334,7 +328,17 @@ async function captureFetch<T>(promise: Promise<T>): Promise<CapturedFetch<T>> {
   }
 }
 
-async function waitForBatchBudget(signal?: AbortSignal, onWait?: (seconds: number) => void | Promise<void>): Promise<void> {
+export async function waitForBatchSettle(signal?: AbortSignal, rosterComplete = false): Promise<void> {
+  if (rosterComplete) return;
+  await new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(() => { signal?.removeEventListener('abort', abort); resolve(); }, BATCH_SETTLE_MS);
+    const abort = () => { clearTimeout(timer); reject(signal?.reason ?? new Error('Request cancelled.')); };
+    if (signal?.aborted) abort();
+    else signal?.addEventListener('abort', abort, { once: true });
+  });
+}
+
+export async function waitForBatchBudget(signal?: AbortSignal, onWait?: (seconds: number) => void | Promise<void>): Promise<void> {
   while (true) {
     signal?.throwIfAborted();
     const now = Date.now();
@@ -401,7 +405,7 @@ function mapHistoryEntry(entry: ApiHistoryEntry): PlayerRecentMatchSummary {
   };
 }
 
-function mapBatchPlayer(
+export function mapBatchPlayer(
   player: PrematchPlayer, entry: ApiBatchPlayer, scope: 'allTime' | 'currentSeason',
   activeSeasonId: string | undefined, leaderboard: LeaderboardLookup, metadata: UmaMetadataLookup
 ): PlayerProfileSummary {
@@ -443,7 +447,9 @@ export async function fetchPlayerHistoryPage(
   const query = `/api/stats/players/${encodeURIComponent(discordId)}/history?page=${page}&pageSize=20&mode=ranked${season?.activeSeasonId ? `&season=${encodeURIComponent(season.activeSeasonId)}` : ''}`;
   const result = await fetchJson<unknown>(query, signal, 'history');
   if (!isObject(result) || !Number.isInteger(result.total) || !Array.isArray(result.playerHistory)) throw new Error('Invalid history response.');
-  return { page, total: result.total as number, matches: result.playerHistory.map((entry: unknown) => {
+  return { page, total: result.total as number,
+    summary: isObject(result.summary) ? result.summary as unknown as PlayerProfileSummary['historySummary'] : undefined,
+    matches: result.playerHistory.map((entry: unknown) => {
     if (!isObject(entry) || typeof entry.matchId !== 'string') throw new Error('Invalid history entry.');
     return mapHistoryEntry(entry as unknown as ApiHistoryEntry);
   }) };

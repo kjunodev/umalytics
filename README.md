@@ -26,14 +26,14 @@ History keeps its selected match separate from the live lobby. Any accompanying 
 
 - Starting-room trainer identification, with player identities kept independent of companion images and spectators excluded from the roster.
 - Versioned room events and DOM fallback for lobby and draft detection.
-- Cached player summaries, selected-scope loading, and explicit private/unavailable states. A lobby normally uses one batch request for up to ten players in the selected scope, plus shared season and leaderboard requests; switching scope loads the other scope.
+- Cached player summaries, selected-scope loading, and explicit private/unavailable states. A lobby uses paced per-player stats and profile requests, plus shared season and leaderboard requests; switching scope loads the other scope. The public build makes no batch request during lobby loading.
 - Paced API requests, request cancellation on room changes, and bounded automatic recovery after rate limits.
 - Confirmed picks, bans, vetoes, map order and a tiebreaker view.
 - Local diagnostics that you can copy when reporting a problem.
 
 ## Privacy
 
-This source and its packages respect private ranked stats. The batch response supplies a recent match preview, and opening a player's details requests the first public history page; Load more requests additional pages, including for players with hidden stats. History is displayed but never used to calculate ranked statistics. Loading a completed match by code displays that match's publicly exposed draft. The community configuration cannot enable hidden-profile reconstruction with a build flag. Public identity, rank or rating may still appear when separately exposed by the site; private detailed statistics remain unavailable, including in profile lookup.
+This source and its packages respect private ranked stats. Opening a player's details requests the first public history page for recent results and form; Load more requests additional pages, including for players with hidden stats. Lobby cards have no history data, and the public build makes no batch request. History is displayed but never used to calculate ranked statistics. Loading a completed match by code displays that match's publicly exposed draft. The community configuration cannot enable hidden-profile reconstruction with a build flag. Public identity, rank or rating may still appear when separately exposed by the site; private detailed statistics remain unavailable, including in profile lookup.
 
 The extension contacts Uma Drafter's services with player identifiers. Scouting state and a bounded diagnostic trace stay in local extension storage. There is no UmaLytics backend, analytics service or automatic diagnostic upload. See [PRIVACY.md](PRIVACY.md).
 

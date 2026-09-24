@@ -1,7 +1,7 @@
 import { browser } from 'wxt/browser';
-import type { DraftSnapshot, PrematchRoster, PlayerRecentMatchSummary, PlayerStatsScope } from '@umalytics/shared';
+import type { DraftSnapshot, PrematchRoster, PlayerProfileSummary, PlayerRecentMatchSummary, PlayerStatsScope } from '@umalytics/shared';
 
-export interface PlayerHistoryPage { page: number; total: number; matches: PlayerRecentMatchSummary[] }
+export interface PlayerHistoryPage { page: number; total: number; matches: PlayerRecentMatchSummary[]; summary?: PlayerProfileSummary['historySummary'] }
 
 export const ROOM_DOM_SCAN_REQUEST_MESSAGE_TYPE = 'room-dom-scan-requested';
 

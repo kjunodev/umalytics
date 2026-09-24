@@ -5,6 +5,14 @@ import { loadModule } from './support/harness.mjs';
 
 const ids = Array.from({ length: 10 }, (_, index) => String(100000000000000000n + BigInt(index)));
 const players = count => ids.slice(0, count).map((discordId, index) => ({ discordId, displayName: `Roster ${index}` }));
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+async function waitUntil(predicate, timeoutMs = 1500) {
+  const deadline = performance.now() + timeoutMs;
+  while (!predicate()) {
+    if (performance.now() > deadline) throw new Error('Timed out waiting for fixture condition');
+    await sleep(5);
+  }
+}
 const stats = () => ({ summary: { matchesIncluded: 4, totalPointsScored: 12, totalPodiumPlacements: 5, totalMvpMatches: 1 },
   umaEntries: [{ umaId: '100101', matches: 4, wins: 3, losses: 1, pointsScored: 12, podiumPlacements: 5, mvpMatches: 1 }] });
 const historySummary = () => ({ wins: 99, losses: 88, pointsScored: 999, podiumPlacements: 77,
@@ -50,14 +58,17 @@ function harness({ batchStatus = 200, batchPlayers, latency = 1, fast = true, hi
 
 test('a complete roster starts batch loading without the settling timer', async () => {
   const h = harness({ fast: false });
-  await h.c.fetchPlayerProfileSummaries(players(10), { scope: 'currentSeason', rosterComplete: true });
+  for (const name of ['fetchBatchPlayerProfileSummaries', 'waitForBatchBudget', 'waitForBatchSettle', 'mapBatchPlayer']) {
+    assert.equal(typeof h.c[name], 'function', `${name} remains exported for the private build`);
+  }
+  await h.c.fetchBatchPlayerProfileSummaries(players(10), { scope: 'currentSeason', rosterComplete: true });
   assert.equal(h.calls.filter(path => path.includes('/batch?')).length, 1);
   assert(!h.timerDelays.includes(1200));
 });
 
 test('every request diagnostic, including batch and history, retains its endpoint', async () => {
   const h = harness();
-  await h.c.fetchPlayerProfileSummaries(players(2), { scope: 'allTime', rosterComplete: true });
+  await h.c.fetchBatchPlayerProfileSummaries(players(2), { scope: 'allTime', rosterComplete: true });
   await h.c.fetchPlayerHistoryPage(ids[0], 'allTime', 1);
   const sanitizer = vm.createContext({});
   loadModule(sanitizer, 'diagnosticRecorder');
@@ -68,11 +79,21 @@ test('every request diagnostic, including batch and history, retains its endpoin
     sanitizer.sanitizeDiagnostic(value)?.endpoint === value.endpoint));
 });
 
-test('cold ten-player lobby uses one batch call and keeps all public stats from stats', async () => {
-  const h = harness({ fast: false, latency: 10 });
-  const started = performance.now();
+test('public cold ten-player lobby uses paced stats and profile requests without batch or history', async () => {
+  const h = harness();
   const result = await h.c.fetchPlayerProfileSummaries(players(10), { scope: 'currentSeason' });
-  assert(performance.now() - started < 1500);
+  assert.equal(h.calls.length, 22);
+  assert.equal(h.calls.filter(path => path.includes('/stats?')).length, 10);
+  assert.equal(h.calls.filter(path => path.endsWith('/profile')).length, 10);
+  assert.equal(h.calls.filter(path => path.includes('/batch?') || path.includes('/history?')).length, 0);
+  assert.equal(result[ids[0]].recentMatches.length, 0);
+  assert.equal(result[ids[0]].historyTotal, undefined);
+  assert.equal(result[ids[0]].matches, 4);
+});
+
+test('batch mapping keeps public core stats independent of history for private callers', async () => {
+  const h = harness({ fast: false, latency: 10 });
+  const result = await h.c.fetchBatchPlayerProfileSummaries(players(10), { scope: 'currentSeason', rosterComplete: true });
   assert.equal(h.calls.filter(path => path.includes('/batch?')).length, 1);
   assert.equal(h.calls.length, 3);
   assert(!h.calls.some(path => path.endsWith('/profile') || path.includes('/history?')));
@@ -101,7 +122,7 @@ test('hidden, unknown, and malformed batch entries remain independent', async ()
     batchPlayer(ids[2], { stats: { summary: null, umaEntries: [] } })
   ];
   const h = harness({ batchPlayers: fixture });
-  const result = await h.c.fetchPlayerProfileSummaries(players(3), { scope: 'allTime' });
+  const result = await h.c.fetchBatchPlayerProfileSummaries(players(3), { scope: 'allTime' });
   assert.equal(result[ids[0]].statsPrivate, true);
   assert.equal(result[ids[0]].title, 'Fixture title');
   assert.equal(result[ids[1]].displayName, 'Roster 1');
@@ -113,31 +134,31 @@ test('hidden, unknown, and malformed batch entries remain independent', async ()
 
 test('batch 404 falls back to the original selected-scope path and is remembered', async () => {
   const h = harness({ batchStatus: 404 });
-  await h.c.fetchPlayerProfileSummaries(players(10), { scope: 'currentSeason' });
+  await h.c.fetchBatchPlayerProfileSummaries(players(10), { scope: 'currentSeason' });
   assert.equal(h.calls.filter(path => path.includes('/batch?')).length, 1);
   assert.equal(h.calls.filter(path => path.endsWith('/profile')).length, 10);
   assert.equal(h.calls.filter(path => path.includes('/stats?')).length, 10);
   assert.equal(h.calls.length, 23);
-  await h.c.fetchPlayerProfileSummaries(players(1), { scope: 'currentSeason' });
+  await h.c.fetchBatchPlayerProfileSummaries(players(1), { scope: 'currentSeason' });
   assert.equal(h.calls.filter(path => path.includes('/batch?')).length, 1);
   const future = Date.now() + 10 * 60 * 1000 + 1;
   h.c.Date = class extends Date { static now() { return future; } };
-  await h.c.fetchPlayerProfileSummaries(players(1), { scope: 'currentSeason' });
+  await h.c.fetchBatchPlayerProfileSummaries(players(1), { scope: 'currentSeason' });
   assert.equal(h.calls.filter(path => path.includes('/batch?')).length, 2);
 });
 
 test('batch 429 uses the API cooldown and does not run the fallback', async () => {
   const h = harness({ batchStatus: 429 });
-  await assert.rejects(h.c.fetchPlayerProfileSummaries(players(1), { scope: 'allTime' }), /HTTP 429/);
+  await assert.rejects(h.c.fetchBatchPlayerProfileSummaries(players(1), { scope: 'allTime' }), /HTTP 429/);
   assert.equal(h.c.getApiCooldown().status, 429);
   assert(!h.calls.some(path => path.endsWith('/profile') || path.includes('/stats?')));
 });
 
 test('batch 5xx also falls back without disabling future batch attempts', async () => {
   const h = harness({ batchStatus: 503 });
-  await h.c.fetchPlayerProfileSummaries(players(1), { scope: 'allTime' });
+  await h.c.fetchBatchPlayerProfileSummaries(players(1), { scope: 'allTime' });
   assert(h.calls.some(path => path.endsWith('/profile')));
-  await h.c.fetchPlayerProfileSummaries(players(1), { scope: 'allTime' });
+  await h.c.fetchBatchPlayerProfileSummaries(players(1), { scope: 'allTime' });
   assert.equal(h.calls.filter(path => path.includes('/batch?')).length, 2);
 });
 
@@ -147,14 +168,14 @@ test('players arriving one at a time settle into one batch call', async () => {
   for (let count = 1; count <= 10; count += 1) {
     const controller = new AbortController();
     requests.push(controller);
-    void h.c.fetchPlayerProfileSummaries(players(count), { scope: 'currentSeason', signal: controller.signal })
+    void h.c.fetchBatchPlayerProfileSummaries(players(count), { scope: 'currentSeason', signal: controller.signal })
       .catch(() => {});
     if (count < 10) {
       await new Promise(resolve => setTimeout(resolve, 2));
       controller.abort(new Error('Roster expanded'));
     }
   }
-  await new Promise(resolve => setTimeout(resolve, 70));
+  await waitUntil(() => h.calls.filter(path => path.includes('/batch?')).length === 1);
   assert.equal(h.calls.filter(path => path.includes('/batch?')).length, 1);
 });
 
@@ -163,7 +184,7 @@ test('rolling batch budget publishes a wait and resumes without per-player fallb
   vm.runInContext('batchStartedAt.push(...Array(8).fill(Date.now() - 59970))', h.c);
   const waits = [];
   const started = performance.now();
-  const result = await h.c.fetchPlayerProfileSummaries(players(1), { scope: 'allTime', onWait: seconds => waits.push(seconds) });
+  const result = await h.c.fetchBatchPlayerProfileSummaries(players(1), { scope: 'allTime', onWait: seconds => waits.push(seconds) });
   assert(waits.length >= 1 && waits[0] >= 1);
   assert(performance.now() - started >= 25);
   assert.equal(result[ids[0]].matches, 4);
