@@ -3,28 +3,23 @@ import { hasCurrentHistoryState, mergeProfileScopes } from '../profiles/profileM
 import { registerExplorerService } from '../explorer/explorerService';
 import { normalizeRosterForDisplay } from '../room/rosterDisplay';
 import { browser } from 'wxt/browser';
-import type { ScriptPublicPath } from '#imports';
-import type { PlayerProfileSummary, PrematchPlayer, PrematchRoster } from '@umalytics/shared';
+import type { PlayerProfileSummary, PrematchRoster } from '@umalytics/shared';
 import {
   isUmaLyticsMessage,
-  sendRoomDomScanRequest,
-  type LobbyReconnectResult,
-  type RoomDomScanResult
+  type LobbyReconnectResult
 } from '../runtime/messaging';
 import {
   buildUnavailablePlayerSummary,
   fetchPlayerProfileSummaries,
   getApiCooldown,
-  restoreApiCooldown,
-  type ApiCooldown
+  restoreApiCooldown
 } from '../profiles/playerProfileApi';
 import {
   getPlayerProfileSummaries,
   getCachedPlayerProfiles,
   rememberCachedPlayerProfiles,
   setPlayerProfileSummaries,
-  type PlayerProfileLoadState,
-  type PlayerProfileLoadStatus
+  type PlayerProfileLoadState
 } from '../storage/profileStorage';
 import {
   BEST_UMA_SCORE_VERSION,
@@ -39,17 +34,34 @@ import {
   setLatestPrematchRoster
 } from '../storage/rosterStorage';
 import { getLobbyLockState } from '../storage/lobbyLockStorage';
-import { extractMatchCodeFromUrl } from '../room/matchDetection';
-
-const SCOUT_POPOUT_PATH = '/scout.html';
-const CONTENT_SCRIPT_PATH = '/content-scripts/content.js' as ScriptPublicPath;
-const DRAFTER_URL_PATTERN = 'https://drafter.uma.guide/*';
-const SCOUT_POPOUT_WIDTH = 1320;
-const SCOUT_POPOUT_HEIGHT = 1100;
+import {
+  MAX_AUTOMATIC_RETRIES,
+  buildProfileLoadStates,
+  buildCompletedProfileState,
+  getErrorMessage,
+  getLoadingDiscordIds,
+  getRetainedProfiles,
+  hasCurrentStatsShape,
+  hasUsableProfileStats,
+  isDiscordSnowflake,
+  isPendingProfileState,
+  markProfilesForRecovery,
+  retainUsableProfile,
+  type ProfileRecovery
+} from '../background/profileStates';
+import {
+  configureScoutWindow,
+  handleScoutWindowRemoved,
+  openScoutWindow
+} from '../background/scoutWindow';
+import {
+  getActiveDrafterTab,
+  getTabMatchCode,
+  reconnectOpenDrafterTabs,
+  requestRoomDomScan
+} from '../background/drafterTabs';
 
 let enrichmentRunId = 0;
-let scoutWindowId: number | undefined;
-let openingWindow: Promise<void> | undefined;
 let reconnecting: Promise<LobbyReconnectResult> | undefined;
 let activeEnrichment: { key: string; controller: AbortController; promise: Promise<void>; finishedAt?: number } | undefined;
 let profileWrites = Promise.resolve();
@@ -59,19 +71,13 @@ let navigationRunId = 0;
 let lastManualRefreshAt = 0;
 const RECOVERY_ALARM = 'umalytics-profile-recovery';
 const RECOVERY_STORAGE_KEY = 'profileRecovery';
-const MAX_AUTOMATIC_RETRIES = 2;
-interface ProfileRecovery {
-  key: string;
-  attempt: number;
-  retryAt: number;
-  cooldown: ApiCooldown;
-  exhausted?: boolean;
-}
 let selectedStatsScope: 'currentSeason' | 'allTime' = 'currentSeason';
 interface EnrichmentOptions { forceRefresh?: boolean; recoveryAttempt?: number }
 let pendingRecovery: ProfileRecovery | undefined;
 let recoveryWrites = Promise.resolve();
 let initialization = Promise.resolve();
+
+configureScoutWindow({ handleLobbyReconnectRequested, reportEnrichmentError });
 
 export default defineBackground(() => {
   registerExplorerService(() => initialization);
@@ -101,9 +107,7 @@ export default defineBackground(() => {
   });
 
   browser.windows?.onRemoved.addListener((windowId) => {
-    if (windowId === scoutWindowId) {
-      scoutWindowId = undefined;
-    }
+    handleScoutWindowRemoved(windowId);
   });
 
   void initialization.then(handleLobbyReconnectRequested).catch(reportEnrichmentError);
@@ -155,12 +159,6 @@ export default defineBackground(() => {
   });
 });
 
-function openScoutWindow(): Promise<void> {
-  if (openingWindow !== undefined) return openingWindow;
-  openingWindow = createOrFocusScoutWindow().finally(() => { openingWindow = undefined; });
-  return openingWindow;
-}
-
 async function handleActiveDrafterTab(tabId: number): Promise<void> {
   const navigationId = ++navigationRunId;
   const tab = await browser.tabs.get(tabId);
@@ -181,71 +179,6 @@ async function handleActiveDrafterTab(tabId: number): Promise<void> {
   // The scan publishes a roster back to the background; never hold rosterWrites
   // while awaiting that acknowledgement.
   if (navigationId === navigationRunId) await requestRoomDomScan(tabId, { force: true });
-}
-
-async function createOrFocusScoutWindow(): Promise<void> {
-  // The UI can render cached data before any page scan or network request finishes.
-  void handleLobbyReconnectRequested().catch(reportEnrichmentError);
-
-  if (scoutWindowId !== undefined) {
-    try {
-      await browser.windows.update(scoutWindowId, {
-        focused: true,
-        width: SCOUT_POPOUT_WIDTH,
-        height: SCOUT_POPOUT_HEIGHT
-      });
-      return;
-    } catch {
-      scoutWindowId = undefined;
-    }
-  }
-
-  const scoutWindow = await browser.windows.create({
-    url: browser.runtime.getURL(SCOUT_POPOUT_PATH),
-    type: 'popup',
-    width: SCOUT_POPOUT_WIDTH,
-    height: SCOUT_POPOUT_HEIGHT,
-    focused: true
-  });
-
-  scoutWindowId = scoutWindow?.id;
-}
-
-async function reconnectOpenDrafterTabs(): Promise<void> {
-  const tabs = await browser.tabs.query({ url: DRAFTER_URL_PATTERN });
-  await Promise.all(tabs.map((tab) => injectContentScriptIntoTab(tab.id)));
-}
-
-async function injectContentScriptIntoTab(tabId: number | undefined): Promise<void> {
-  if (tabId === undefined) {
-    return;
-  }
-
-  try {
-    await browser.scripting.executeScript({
-      target: { tabId },
-      files: [CONTENT_SCRIPT_PATH]
-    });
-  } catch (caught) {
-    console.debug('[UmaLytics] Content script reconnect skipped:', caught);
-  }
-}
-
-async function getActiveDrafterTab(): Promise<Browser.tabs.Tab | undefined> {
-  const tabs = await browser.tabs.query({ active: true, currentWindow: true });
-  const activeCurrentWindowTab = tabs.find((tab) => tab.url?.startsWith('https://drafter.uma.guide/') === true);
-
-  if (activeCurrentWindowTab !== undefined) {
-    return activeCurrentWindowTab;
-  }
-
-  const drafterTabs = await browser.tabs.query({ url: DRAFTER_URL_PATTERN });
-
-  return (
-    drafterTabs.find((tab) => tab.active) ??
-    drafterTabs.find((tab) => getTabMatchCode(tab) !== undefined) ??
-    drafterTabs[0]
-  );
 }
 
 async function handlePrematchRosterDetected(roster: PrematchRoster): Promise<void> {
@@ -306,26 +239,6 @@ async function reconnectLobby(): Promise<LobbyReconnectResult> {
   return { activeLobby: true, matchCode: activeMatchCode };
 }
 
-async function requestRoomDomScan(
-  tabId: number | undefined,
-  options: { force?: boolean } = {}
-): Promise<RoomDomScanResult | undefined> {
-  if (tabId === undefined) {
-    return undefined;
-  }
-
-  try {
-    return await sendRoomDomScanRequest(tabId, options);
-  } catch (caught) {
-    await injectContentScriptIntoTab(tabId);
-    try { return await sendRoomDomScanRequest(tabId, options); }
-    catch (retryError) {
-      console.debug('[UmaLytics] Room DOM scan request skipped:', retryError);
-      return undefined;
-    }
-  }
-}
-
 async function clearActiveLobbyState(): Promise<void> {
   enrichmentRunId += 1;
   activeEnrichment?.controller.abort(new Error('Lobby changed.'));
@@ -337,18 +250,6 @@ async function clearActiveLobbyState(): Promise<void> {
     clearLatestPrematchRoster(),
     clearLatestDraftSnapshot()
   ]);
-}
-
-function getTabMatchCode(tab: Browser.tabs.Tab | undefined): string | undefined {
-  if (tab?.url === undefined) {
-    return undefined;
-  }
-
-  try {
-    return extractMatchCodeFromUrl(tab.url);
-  } catch {
-    return undefined;
-  }
 }
 
 async function handleProfileRefreshRequested(roster: PrematchRoster): Promise<void> {
@@ -580,15 +481,6 @@ function getEnrichmentKey(roster: PrematchRoster): string {
   return JSON.stringify([selectedStatsScope, roster.matchCode, [...new Set(roster.players.map(player => player.discordId))].sort()]);
 }
 
-function markProfilesForRecovery(states: Record<string, PlayerProfileLoadState>, ids: string[], recovery: ProfileRecovery): void {
-  for (const id of ids) {
-    if (states[id] === undefined) continue;
-    states[id] = { ...states[id], status: 'queued', retryAt: recovery.retryAt,
-      stage: `API paused after HTTP ${recovery.cooldown.status}; automatic retry ${recovery.attempt}/${MAX_AUTOMATIC_RETRIES}`,
-      error: states[id].error ?? `HTTP ${recovery.cooldown.status}: ${recovery.cooldown.path}`, updatedAt: Date.now() };
-  }
-}
-
 function persistProfileRecovery(): Promise<void> {
   const value = pendingRecovery;
   const write = recoveryWrites.then(async () => {
@@ -625,78 +517,6 @@ async function resumeProfileRecovery(): Promise<void> {
   await enrichRosterProfiles(roster, { recoveryAttempt: recovery.attempt, forceRefresh: false });
 }
 
-function retainUsableProfile(previous: PlayerProfileSummary | undefined, next: PlayerProfileSummary): PlayerProfileSummary {
-  // Keep useful cached data on transport failure, but never override a confirmed privacy response.
-  if (next.error !== undefined && next.statsPrivate !== true && previous !== undefined &&
-      hasUsableProfileStats(previous) && !hasUsableProfileStats(next)) {
-    return { ...previous, error: next.error };
-  }
-  return mergeProfileScopes(previous, next);
-}
-
-
-function buildProfileLoadStates(
-  profiles: Record<string, PlayerProfileSummary>,
-  loadingPlayers: PrematchPlayer[],
-  now: number
-): Record<string, PlayerProfileLoadState> {
-  const profileStates = Object.fromEntries(
-    Object.entries(profiles).map(([discordId, profile]) => [
-      discordId,
-      buildCompletedProfileState(discordId, profile, profile.fetchedAt)
-    ] as const)
-  );
-
-  for (const player of loadingPlayers) {
-    profileStates[player.discordId] = {
-      discordId: player.discordId,
-      status: 'queued',
-      updatedAt: now
-    };
-  }
-
-  return profileStates;
-}
-
-function buildCompletedProfileState(
-  discordId: string,
-  profile: PlayerProfileSummary,
-  finishedAt: number
-): PlayerProfileLoadState {
-  return {
-    discordId,
-    status: getProfileLoadStatus(profile),
-    startedAt: profile.fetchedAt,
-    finishedAt,
-    updatedAt: finishedAt,
-    error: profile.error
-  };
-}
-
-function getProfileLoadStatus(profile: PlayerProfileSummary): PlayerProfileLoadStatus {
-  if (profile.error !== undefined) {
-    return /timed out|taking longer/i.test(profile.error) ? 'timeout' : 'error';
-  }
-
-  if (profile.statsPrivate === true && !hasUsableProfileStats(profile)) {
-    return 'private';
-  }
-
-  return 'loaded';
-}
-
-function hasUsableProfileStats(profile: PlayerProfileSummary): boolean {
-  return (
-    typeof profile.matches === 'number' ||
-    (profile.topUmas?.length ?? 0) > 0 ||
-    (profile.bestUmas?.length ?? 0) > 0 ||
-    (profile.allUmas?.length ?? 0) > 0 ||
-    (profile.recentMatches?.length ?? 0) > 0 ||
-    (typeof profile.currentSeasonStats?.matches === 'number' && profile.currentSeasonStats.matches > 0) ||
-    (typeof profile.allTimeStats?.matches === 'number' && profile.allTimeStats.matches > 0)
-  );
-}
-
 async function writeProfileSnapshot(
   matchCode: string | undefined,
   profiles: Record<string, PlayerProfileSummary>,
@@ -714,39 +534,6 @@ async function writeProfileSnapshot(
     loadingDiscordIds: getLoadingDiscordIds(profileStates),
     updatedAt: Date.now()
   });
-}
-
-function getLoadingDiscordIds(profileStates: Record<string, PlayerProfileLoadState>): string[] {
-  return Object.values(profileStates)
-    .filter(isPendingProfileState)
-    .map((state) => state.discordId);
-}
-
-function getErrorMessage(caught: unknown): string {
-  return caught instanceof Error ? caught.message : String(caught);
-}
-
-function isPendingProfileState(state: PlayerProfileLoadState | undefined): boolean {
-  return state?.status === 'loading' || state?.status === 'queued';
-}
-
-function getRetainedProfiles(
-  cachedProfiles: Record<string, PlayerProfileSummary>,
-  freshProfiles: Record<string, PlayerProfileSummary>,
-  discordIds: string[]
-): Record<string, PlayerProfileSummary> {
-  return Object.fromEntries(
-    discordIds
-      .map((discordId) => [discordId, cachedProfiles[discordId] ?? freshProfiles[discordId]] as const)
-      .filter((entry): entry is readonly [string, PlayerProfileSummary] => (
-        entry[1] !== undefined &&
-        (entry[1].error === undefined || hasUsableProfileStats(entry[1]))
-      ))
-  );
-}
-
-function isDiscordSnowflake(value: string): boolean {
-  return /^\d{16,20}$/.test(value);
 }
 
 function getFreshProfiles(
@@ -773,13 +560,5 @@ function getFreshProfiles(
           profile.allTimeStats?.recentHistoryVersion === RECENT_HISTORY_VERSION
         );
       })
-  );
-}
-
-function hasCurrentStatsShape(profile: PlayerProfileSummary): boolean {
-  return (
-    profile.currentSeasonStats !== undefined &&
-    profile.allTimeStats !== undefined &&
-    Array.isArray(profile.allTimeStats.allUmas)
   );
 }

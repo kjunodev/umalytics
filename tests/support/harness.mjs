@@ -43,6 +43,11 @@ export const MODULES = {
   textCleanup: 'room/textCleanup.ts',
   umaPortraits: 'umas/umaPortraits.ts',
   umaReleaseOrder: 'umas/umaReleaseOrder.ts',
+
+  // background (phase 3)
+  profileStates: 'background/profileStates.ts',
+  scoutWindow: 'background/scoutWindow.ts',
+  drafterTabs: 'background/drafterTabs.ts',
 };
 
 const pathByName = new Map(Object.entries(MODULES));
@@ -50,6 +55,7 @@ const pathByName = new Map(Object.entries(MODULES));
 // Dependencies each module needs evaluated into the same vm context first,
 // matching the preload order the original per-test-file loaders hard coded.
 const PRELOADS = {
+  background: ['profileStates', 'scoutWindow', 'drafterTabs'],
   profileCache: ['profileMerge'],
   explorerState: ['profileMerge'],
   explorerService: ['profileMerge'],
