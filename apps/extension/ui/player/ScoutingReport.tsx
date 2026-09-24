@@ -1,5 +1,5 @@
 import type { PlayerProfileSummary, PlayerTopUmaSummary } from '@umalytics/shared';
-import { hasUsableProfileStats } from '../common/badges';
+import { hasDisplayableProfileLists } from '../common/badges';
 import { formatDecimal, formatNumber, formatPercent, formatRecord } from '../common/format';
 
 export type SampleConfidence = 'small' | 'steady' | 'proven';
@@ -11,7 +11,7 @@ export function ScoutingReport({
   profile: PlayerProfileSummary | undefined;
   emptyMessage?: string;
 }) {
-  if (profile === undefined || !hasUsableProfileStats(profile) || profile.error !== undefined) {
+  if (profile === undefined || !hasDisplayableProfileLists(profile) || profile.error !== undefined) {
     return (
       <section className="scouting-report" aria-label="Player scouting report">
         <p>Scouting Report</p>

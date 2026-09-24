@@ -24,9 +24,9 @@ test('background hasUsableProfileStats treats a bare matches count as usable', (
   assert.equal(c.hasUsableProfileStats(matchesOnlyProfile), true);
 });
 
-test('UI hasUsableProfileStats requires a non-empty Uma/match list, not just a matches count', () => {
+test('UI hasDisplayableProfileLists requires a non-empty Uma/match list, not just a matches count', () => {
   const c = uiContext();
-  assert.equal(c.hasUsableProfileStats(matchesOnlyProfile), false);
+  assert.equal(c.hasDisplayableProfileLists(matchesOnlyProfile), false);
 });
 
 test('background hasUsableProfileStats treats current-season matches as usable', () => {
@@ -34,19 +34,19 @@ test('background hasUsableProfileStats treats current-season matches as usable',
   assert.equal(c.hasUsableProfileStats(currentSeasonOnlyProfile), true);
 });
 
-test('UI hasUsableProfileStats ignores current-season matches with no Uma/match lists', () => {
+test('UI hasDisplayableProfileLists ignores current-season matches with no Uma/match lists', () => {
   const c = uiContext();
-  assert.equal(c.hasUsableProfileStats(currentSeasonOnlyProfile), false);
+  assert.equal(c.hasDisplayableProfileLists(currentSeasonOnlyProfile), false);
 });
 
-test('background and UI hasUsableProfileStats agree when topUmas is populated', () => {
+test('background hasUsableProfileStats and UI hasDisplayableProfileLists agree when topUmas is populated', () => {
   const background = backgroundContext();
   const ui = uiContext();
   assert.equal(background.hasUsableProfileStats(topUmasProfile), true);
-  assert.equal(ui.hasUsableProfileStats(topUmasProfile), true);
+  assert.equal(ui.hasDisplayableProfileLists(topUmasProfile), true);
 });
 
-test('UI hasUsableProfileStats returns false for an undefined profile', () => {
+test('UI hasDisplayableProfileLists returns false for an undefined profile', () => {
   const c = uiContext();
-  assert.equal(c.hasUsableProfileStats(undefined), false);
+  assert.equal(c.hasDisplayableProfileLists(undefined), false);
 });
