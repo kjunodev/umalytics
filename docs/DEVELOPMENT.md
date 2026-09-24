@@ -21,7 +21,7 @@ The extension's postinstall/typecheck prepares WXT generated types. Keep separat
 | pnpm build | Public Chromium build |
 | pnpm build:all | Public Chromium and Firefox builds with manifest/privacy checks |
 
-Generated bundles live in apps/extension/.output. Checked build snapshots live in .releases; latest.json describes the latest pair. This repository supports public builds only. The build configuration rejects a private-mode environment flag, and the API source contains no private-history retrieval or reconstruction implementation.
+Generated bundles live in apps/extension/.output. Checked build snapshots live in .releases; latest.json describes the latest pair. This repository supports public builds only. The build configuration rejects a private-mode environment flag. Public history pages may be fetched and displayed, but public statistics must never be calculated from them.
 
 ## Architecture
 
@@ -35,6 +35,10 @@ Generated bundles live in apps/extension/.output. Checked build snapshots live i
 | Shared package | TypeScript contracts across extension contexts |
 
 Fresh complete profiles are reused for 15 minutes. The reusable archive is bounded to 100 profiles and approximately 4 MiB, and trims entries older than 24 hours when processed. The local diagnostic trace is capped at 200 sanitized entries. These limits apply to the archive/trace, not every byte of extension storage.
+
+Lobby enrichment uses paced per-player stats requests for the selected Season or All-time scope, plus a seasons request and a leaderboard request scheduled at a lower priority so every stats request starts first; switching scope loads the other stats scope. Lobby cards make no profile request and show no title, since names come from the roster. The public build makes no batch request during lobby loading. The batch client, response mapper, roster settling, and budget helpers remain available for private integration. Opening a player's details requests that player's profile once, at 'profile' priority, for their title; the response is cached for 24 hours and the request is cancelled if details close first. A title already present on the profile summary (for example from a batch response) is used without a request. Opening details also requests a 20-entry public history page, including for hidden-stats players; the first page supplies recent results and form, and Load more fetches another page. No other view starts history paging. History responses are cached for five minutes and never feed the public statistics mapper.
+
+Requests are paced by `DEFAULT_REQUEST_INTERVAL_MS` (500 ms in the public build). A 429 doubles the pacing interval, capped at 2000 ms; once doubled, every 20 consecutive successful requests step the interval back toward the base by ×0.75, never below it. `setBaseRequestInterval(ms)`, bounded to at least 250 ms, lets a build choose a different base pace without editing the constant; the public build never calls it.
 
 ## Release checks
 

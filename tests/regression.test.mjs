@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import { parseHTML } from 'linkedom';
-import { loadModule } from './support/harness.mjs';
+import { loadModule, readModule } from './support/harness.mjs';
 const evaluate = loadModule;
 const deferred = () => { let resolve; const promise = new Promise(r => { resolve = r; }); return {promise,resolve}; };
 const tick = () => new Promise(r => setImmediate(r));
@@ -54,7 +54,7 @@ test('stats requests start while shared setup is pending; no HTML/assets request
   const h=apiHarness({responder:url=>url.pathname==='/api/seasons'?{hang:true}:undefined});
   let starts=0;
   const pending=h.c.fetchPlayerProfileSummaries(players(),{onStart:()=>{starts++;}});
-  await sleep(50);
+  await waitUntil(()=>starts===5 && h.calls.some(p=>p.includes('/stats?')));
   assert.equal(starts,5);
   assert(h.calls.some(p=>p.includes('/stats?')),JSON.stringify(h.calls));
   assert(!h.calls.some(p=>p.includes('/assets/') || p==='/'));
@@ -70,16 +70,19 @@ test('10-player cold load respects global request cap and returns usable stats',
   assert(Object.values(result).every(p=>p.error===undefined && p.matches===4), JSON.stringify(Object.values(result).map(p=>p.error)));
   assert.equal(h.calls.filter(p=>p==='/api/seasons').length,1);
   assert.equal(h.calls.filter(p=>p.startsWith('/api/leaderboard')).length,1);
-  assert.equal(h.calls.length,32);
+  assert.equal(h.calls.length,22);
 });
 
-test('10-player 100 ms fixture publishes all seasonal stats within the paced budget',async()=>{
+test('at the unchanged 500 ms pace, 10-player stats resolve within ~5.5 s and the whole lobby within ~6.5 s',async()=>{
   const h=apiHarness({latency:100,fast:false});const resolved=new Map();const start=performance.now();
   await h.c.fetchPlayerProfileSummaries(players(10),{scope:'currentSeason',onProgress:summary=>{
     if(summary.currentSeasonStats.matches===4 && !resolved.has(summary.discordId)) resolved.set(summary.discordId,performance.now()-start);
   }});
+  const lobbyMs=performance.now()-start;
   const times=[...resolved.values()];
-  assert.equal(times.length,10);assert(Math.min(...times)<1500);assert(Math.max(...times)<6500);
+  assert.equal(times.length,10);assert(Math.min(...times)<1500);
+  assert(Math.max(...times)<5500,`stats should resolve within ~5.5s, took ${Math.max(...times)}ms`);
+  assert(lobbyMs<6500,`the whole lobby should resolve within ~6.5s, took ${lobbyMs}ms`);
   assert(h.callTimes.slice(1).every((time,i)=>time-h.callTimes[i]>=450));
 });
 
@@ -99,7 +102,8 @@ test('identical in-flight profile requests share one fetch and one caller can ca
   const path=`/api/stats/players/${players(1)[0].discordId}/profile`;
   const a=h.c.fetchJson(path,first.signal,'profile');
   const b=h.c.fetchJson(path,second.signal,'profile');
-  await sleep(5);first.abort(new Error('Switched rooms'));
+  await waitUntil(()=>h.calls.filter(call=>call===path).length===1);
+  first.abort(new Error('Switched rooms'));
   await assert.rejects(a,/Switched rooms/);
   assert.equal((await b).displayName,'Fixture');
   assert.equal(h.calls.filter(call=>call===path).length,1);
@@ -205,9 +209,11 @@ test('cancelling a roster aborts active requests and does not start queued profi
   const h=apiHarness({responder:url=>url.pathname.includes('/players/')?{hang:true}:undefined});
   const controller=new AbortController(); let summaries=0;
   const pending=h.c.fetchPlayerProfileSummaries(players(10),{signal:controller.signal,onSummary:()=>{summaries++;}});
-  await sleep(15);controller.abort(new Error('Switched rooms'));
+  await waitUntil(()=>h.calls.some(path=>path.includes('/players/')));
+  controller.abort(new Error('Switched rooms'));
   await assert.rejects(pending,/Switched rooms/);
-  assert.equal(summaries,0);assert(h.aborts>0);
+  await waitUntil(()=>h.aborts>0);
+  assert.equal(summaries,0);
 });
 
 test('public source stops at private stats even if a runtime flag is supplied',async()=>{
@@ -259,6 +265,24 @@ test('same membership and team/phase changes share one enrichment run',async()=>
   const q=h.c.enrichRosterProfiles(r);assert.equal(p,q);await tick();assert.equal(h.fetches.length,1);
   for(let i=0;i<20;i++) assert.equal(h.c.enrichRosterProfiles({...r,phase:`phase-${i}`}),p);
   h.fetches[0].gate.resolve();await p;
+});
+
+test('background skips batch settling only when both team rosters have five slots',async()=>{
+  for(const [count,expected] of [[9,false],[10,true]]) {
+    const h=backgroundHarness();const pending=h.c.enrichRosterProfiles(roster('ROOM01',count));
+    await waitUntil(()=>h.fetches.length===1);
+    assert.equal(h.fetches[0].options.rosterComplete,expected);
+    h.fetches[0].gate.resolve();await pending;
+  }
+});
+
+test('a roster missing team2 loads with the settling wait',async()=>{
+  const h=backgroundHarness();const incomplete=roster('ROOM01',10);
+  incomplete.teams={team1:{id:'team1',players:incomplete.players.slice(0,5)}};
+  const pending=h.c.performRosterEnrichment(incomplete,{},0,new AbortController().signal);
+  await waitUntil(()=>h.fetches.length===1);
+  assert.equal(h.fetches[0].options.rosterComplete,false);
+  h.fetches[0].gate.resolve();await pending;
 });
 
 test('failed refresh preserves usable cached data, but confirmed private responses replace it',()=>{
@@ -384,11 +408,11 @@ test('cooldown preserves HTTP cause and successful endpoints are reused on recov
   const callsBefore=h.calls.length;
   await h.c.fetchPlayerProfileSummaries(players(1));
   assert.equal(h.calls.length,callsBefore,'no HTTP requests while cooling down');
-  const profileCallsBefore=h.calls.filter(p=>p.endsWith('/profile')).length;
+  const seasonCallsBefore=h.calls.filter(p=>p==='/api/seasons').length;
   failing=false;clock=cooldown.until;
   const result=Object.values(await h.c.fetchPlayerProfileSummaries(players(1)))[0];
   assert.equal(result.error,undefined);assert.equal(result.allTimeStats.matches,4);
-  assert.equal(h.calls.filter(p=>p.endsWith('/profile')).length,Math.max(1,profileCallsBefore),'successful profile endpoint reused');
+  assert.equal(h.calls.filter(p=>p==='/api/seasons').length,seasonCallsBefore,'successful shared endpoint reused, unaffected by the stats cooldown');
 });
 
 test('HTTP date Retry-After and server failures preserve their recovery deadline',async()=>{
@@ -514,9 +538,9 @@ test('request pacing spaces start times and cancellation does not dispatch aband
 test('paced starts choose priority first and retain FIFO within each priority',async()=>{
   const c=context();evaluate(c,'requestQueue');const queue=vm.runInContext('new RequestQueue(3, 30)',c);
   const signal=new AbortController().signal;const starts=[];
-  const jobs=[['background','old'],['profile','profile'],['stats','stats-a'],['history','history'],['shared','shared'],['stats','stats-b']];
+  const jobs=[['background','old'],['profile','profile'],['stats','stats-a'],['history','history'],['shared','shared'],['stats','stats-b'],['leaderboard','leaderboard']];
   await Promise.all(jobs.map(([priority,name])=>queue.run(signal,async()=>{starts.push([name,performance.now()]);},priority)));
-  assert.deepEqual(starts.map(([name])=>name),['shared','stats-a','stats-b','profile','history','old']);
+  assert.deepEqual(starts.map(([name])=>name),['shared','stats-a','stats-b','leaderboard','profile','history','old']);
   assert(starts.slice(1).every(([,time],i)=>time-starts[i][1]>=27));
 });
 
@@ -526,6 +550,52 @@ test('a 429 increases request spacing and the cooldown persists that spacing',as
   assert(h.c.getApiCooldown().startIntervalMs>initial);
   const next=apiHarness();next.c.restoreApiCooldown(h.c.getApiCooldown());
   assert.equal(vm.runInContext('requestStartIntervalMs',next.c),h.c.getApiCooldown().startIntervalMs);
+});
+
+test('a cold 10-player public lobby makes 12 requests, no profile/history/batch, and stats lead the leaderboard',async()=>{
+  const h=apiHarness();
+  const result=await h.c.fetchPlayerProfileSummaries(players(10),{scope:'currentSeason'});
+  assert.equal(Object.keys(result).length,10);
+  assert.equal(h.calls.length,12);
+  assert.equal(h.calls.filter(p=>p.includes('/stats?')).length,10);
+  assert.equal(h.calls.filter(p=>p==='/api/seasons').length,1);
+  assert.equal(h.calls.filter(p=>p.startsWith('/api/leaderboard')).length,1);
+  assert.equal(h.calls.filter(p=>p.endsWith('/profile')).length,0);
+  assert.equal(h.calls.filter(p=>p.includes('/history?')).length,0);
+  assert.equal(h.calls.filter(p=>p.includes('/batch?')).length,0);
+  const leaderboardStart=h.callTimes[h.calls.findIndex(p=>p.startsWith('/api/leaderboard'))];
+  const statStartTimes=h.calls.map((p,i)=>p.includes('/stats?')?h.callTimes[i]:undefined).filter(time=>time!==undefined);
+  assert.equal(statStartTimes.length,10);
+  assert(statStartTimes.every(time=>time<=leaderboardStart),'every stats request must start before the leaderboard request');
+});
+
+test('pacing recovers toward the base interval after sustained success following a 429',async()=>{
+  let clock=Date.now();class Clock extends Date {static now(){return clock;}}
+  const h=apiHarness({responder:url=>url.pathname==='/api/seasons'?{status:429,headers:{'retry-after':'1'}}:undefined});
+  h.c.Date=Clock;
+  await h.c.fetchJson('/api/seasons',undefined,'shared').catch(()=>{});
+  const afterBackoff=vm.runInContext('requestStartIntervalMs',h.c);
+  const base=vm.runInContext('baseRequestIntervalMs',h.c);
+  assert(afterBackoff>base,'a 429 must double the interval above the base');
+  clock=h.c.getApiCooldown().until;
+  for(let i=0;i<19;i++) await h.c.fetchJson(`/api/stats/players/${String(100000000000000000n+BigInt(i))}/profile`,undefined,'profile');
+  assert.equal(vm.runInContext('requestStartIntervalMs',h.c),afterBackoff,'no recovery step before the 20th consecutive success');
+  await h.c.fetchJson(`/api/stats/players/${String(100000000000000000n+BigInt(19))}/profile`,undefined,'profile');
+  const afterRecovery=vm.runInContext('requestStartIntervalMs',h.c);
+  assert.equal(afterRecovery,Math.max(base,afterBackoff*0.75),'the 20th consecutive success steps the interval back by 0.75x');
+  assert(afterRecovery>=base,'recovery can never go below the base interval');
+});
+
+test('setBaseRequestInterval is bounded to at least 250 ms and the public build never calls it',async()=>{
+  const h=apiHarness();
+  h.c.setBaseRequestInterval(50);
+  assert.equal(vm.runInContext('baseRequestIntervalMs',h.c),250);
+  assert.equal(vm.runInContext('requestStartIntervalMs',h.c),250);
+  h.c.setBaseRequestInterval(900);
+  assert.equal(vm.runInContext('baseRequestIntervalMs',h.c),900);
+  assert.equal(vm.runInContext('requestStartIntervalMs',h.c),900);
+  const background=readModule('background');
+  assert(!background.includes('setBaseRequestInterval'),'the public build never overrides the default pace');
 });
 
 test('private and public caches are separate and public mode rejects private/legacy private data',async()=>{
@@ -630,14 +700,14 @@ function domHarness(body) {
   const c=context({document});evaluate(c,'matchDetection');evaluate(c,'textCleanup');evaluate(c,'domLobbyExtraction');
   return {c,document};
 }
-const realTrainerRow=(name='CLUE | 기',avatar='https://cdn.discordapp.com/avatars/634868914484019202/avatar.png')=>`<div data-trainer-player="true"><span class="trainer-companion"><img alt="Fine Motion companion" src="/uma/1001.png"></span><button data-trainer-trigger="true" aria-label="View ${name}'s trainer card"><img alt="${name}" src="${avatar}"></button><div><button data-trainer-trigger="true">${name}</button></div><span>Captain</span><span>Host</span></div>`;
+const realTrainerRow=(name='Fixture Trainer | 기',avatar='https://cdn.discordapp.com/avatars/100000000000000098/avatar.png')=>`<div data-trainer-player="true"><span class="trainer-companion"><img alt="Fine Motion companion" src="/uma/1001.png"></span><button data-trainer-trigger="true" aria-label="View ${name}'s trainer card"><img alt="${name}" src="${avatar}"></button><div><button data-trainer-trigger="true">${name}</button></div><span>Captain</span><span>Host</span></div>`;
 const lobbyFixture=(left,right)=>`<button title="Copy room code" aria-label="Copy room code">6XN-84X</button><section data-left="0"><h2>Team 1[edit]</h2>${left}</section><section data-left="400"><h2>Team 2</h2>${right}</section>`;
 
 test('real trainer buttons beat companion images, and room codes exist before draft',()=>{
   const {c,document}=domHarness(lobbyFixture(realTrainerRow(),'<p>Waiting for player...</p>'));
   const roster=c.extractPrematchRosterFromRoomDom(document);
   assert.equal(roster.matchCode,'6XN84X');assert.equal(roster.players.length,1);
-  assert.equal(roster.players[0].displayName,'CLUE | 기');assert.equal(roster.players[0].discordId,'634868914484019202');
+  assert.equal(roster.players[0].displayName,'Fixture Trainer | 기');assert.equal(roster.players[0].discordId,'100000000000000098');
   assert.equal(roster.teams.team1.name,'Team 1');assert.equal(roster.teams.team2.players.length,0);
 });
 
@@ -652,8 +722,8 @@ test('default avatar cannot invent an ID; a verified profile link supplies it',(
   const first=domHarness(lobbyFixture(row,'<p>Waiting for player...</p>'));
   const player=first.c.extractPrematchRosterFromRoomDom(first.document).players[0];
   assert.equal(player.displayName,'Guest');assert.equal(player.profileLookupUnavailable,true);
-  const linked=domHarness(lobbyFixture(row.replace('</div><span>Captain','<a href="/players/634868914484019202">Profile</a></div><span>Captain'),'<p>Waiting for player...</p>'));
-  assert.equal(linked.c.extractPrematchRosterFromRoomDom(linked.document).players[0].discordId,'634868914484019202');
+  const linked=domHarness(lobbyFixture(row.replace('</div><span>Captain','<a href="/players/100000000000000098">Profile</a></div><span>Captain'),'<p>Waiting for player...</p>'));
+  assert.equal(linked.c.extractPrematchRosterFromRoomDom(linked.document).players[0].discordId,'100000000000000098');
 });
 
 test('two-player presence for fifteen simulated minutes cannot erase a ten-player draft roster',()=>{
@@ -708,12 +778,13 @@ test('event decoding ignores chat and removes unrelated sensitive fields',()=>{
   assert.equal(c.decodeRoomEvent('x'.repeat(2_000_001)),null);
 });
 
-test('selected stats scope reduces ten-player cold request count from 32 to 22',async()=>{
+test('selected stats scope reduces ten-player cold request count from 22 to 12',async()=>{
   for(const scope of ['currentSeason','allTime']){
     const h=apiHarness();const summaries=await h.c.fetchPlayerProfileSummaries(players(10),{scope});
-    assert.equal(h.calls.length,22);assert.equal(Object.keys(summaries).length,10);
+    assert.equal(h.calls.length,12);assert.equal(Object.keys(summaries).length,10);
     const statCalls=h.calls.filter(p=>p.includes('/stats?'));
     assert.equal(statCalls.length,10);assert(statCalls.every(p=>p.includes('&season=')===(scope==='currentSeason')));
+    assert.equal(h.calls.filter(p=>p.endsWith('/profile')).length,0);
     assert(Object.values(summaries).every(p=>p.scopeFetchedAt[scope]>0 && p.error===undefined));
   }
 });
@@ -867,14 +938,14 @@ test('DOM fallback preserves visible combined map numbers and leaves vetoes unnu
 
 
 test('custom-room nickname and companion identities survive empty initialization snapshots',()=>{
-  for (const nickname of [null,'Mimi','Rumi']) {
+  for (const nickname of [null,'Mimi','Fixture Query']) {
     const {state,c}=roomHarness();evaluate(c,'rosterIdentity');
     state.apply(matchEvent({room:'CUSTOM',phase:'lobby',members:null}),'CUSTOM');
-    const participant={actorUserId:'actor-rumi',discordId:'436071695955263509',displayName:'Rumi',nickname,role:'captain',team:'team1'};
+    const participant={actorUserId:'actor-rumi',discordId:'100000000000000099',displayName:'Fixture Query',nickname,role:'captain',team:'team1'};
     state.apply({type:'room.presence.updated',matchId:'CUSTOM',participants:[participant],rankedQueueRoster:[]},'CUSTOM');
     state.apply({type:'participant.uma-assignments.snapshot',matchId:'CUSTOM',team:'team1',revision:0,roster:[]},'CUSTOM');
     state.apply(matchEvent({room:'CUSTOM',phase:'lobby',version:2,members:[]}),'CUSTOM');
-    const name=nickname??'Rumi';
+    const name=nickname??'Fixture Query';
     assert.equal(state.roster.players.length,1);
     assert.equal(state.roster.players[0].discordId,participant.discordId);
     assert.equal(state.roster.players[0].displayName,name);
@@ -904,11 +975,11 @@ test('avatar initials do not replace trainer names',()=>{
 });
 
 test('legacy row boundaries exclude surrounding team-label paragraphs',()=>{
-  const row='<div><p>Team 1</p><div><p>Rumi</p><span>Captain</span><img src="https://cdn.discordapp.com/avatars/436071695955263509/a.png"></div></div>';
+  const row='<div><p>Team 1</p><div><p>Fixture Query</p><span>Captain</span><img src="https://cdn.discordapp.com/avatars/100000000000000099/a.png"></div></div>';
   const {c,document}=domHarness(lobbyFixture(row,'<p>Waiting for player...</p>'));
   const roster=c.extractPrematchRosterFromRoomDom(document);
-  assert.equal(roster.players.length,1);assert.equal(roster.players[0].displayName,'Rumi');
-  assert.equal(roster.players[0].discordId,'436071695955263509');
+  assert.equal(roster.players.length,1);assert.equal(roster.players[0].displayName,'Fixture Query');
+  assert.equal(roster.players[0].discordId,'100000000000000099');
 });
 
 

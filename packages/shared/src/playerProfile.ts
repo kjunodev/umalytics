@@ -21,10 +21,24 @@ export interface PlayerRecentMatchSummary {
   umaId: string | null;
   umaName: string;
   isWinner: boolean | null;
+  result?: 'win' | 'loss' | 'unknown';
   pointsScored: number;
   podiums: number;
   isMvp: boolean;
   eloDelta?: number | null;
+  eloPlacement?: boolean;
+  umaAssignments?: Array<{ ordinal: number; umaId?: string | null }>;
+}
+
+export interface PlayerHistorySummary {
+  wins: number;
+  losses: number;
+  pointsScored: number;
+  podiumPlacements: number;
+  firstPlaceFinishes: number;
+  secondPlaceFinishes: number;
+  thirdPlaceFinishes: number;
+  mvpAwards: number;
 }
 
 export interface PlayerRecentFormSummary {
@@ -55,6 +69,8 @@ export interface PlayerProfileStatsSummary {
   bestUmas?: PlayerTopUmaSummary[];
   allUmas?: PlayerTopUmaSummary[];
   recentMatches?: PlayerRecentMatchSummary[];
+  historyTotal?: number;
+  historySummary?: PlayerHistorySummary;
   recentForm?: PlayerRecentFormSummary;
   unresolvedUmaMatches?: number;
   disqualifiedMatches?: number;
@@ -88,6 +104,8 @@ export interface PlayerProfileSummary {
   bestUmas?: PlayerTopUmaSummary[];
   allUmas?: PlayerTopUmaSummary[];
   recentMatches?: PlayerRecentMatchSummary[];
+  historyTotal?: number;
+  historySummary?: PlayerHistorySummary;
   recentForm?: PlayerRecentFormSummary;
   unresolvedUmaMatches?: number;
   disqualifiedMatches?: number;
