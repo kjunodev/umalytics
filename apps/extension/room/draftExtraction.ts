@@ -11,7 +11,7 @@ import type {
 } from '@umalytics/shared';
 import { extractRoomCodeFromRoomDom } from './domLobbyExtraction';
 import { cleanTeamName } from './textCleanup';
-import { getUmaDisplayName, normalizeUmaOutfitId } from './umaPortraits';
+import { getUmaDisplayName, normalizeUmaOutfitId } from '../umas/umaPortraits';
 
 const TEAM_IDS = ['team1', 'team2'] as const satisfies readonly TeamId[];
 

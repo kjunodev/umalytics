@@ -1,23 +1,23 @@
-import { recordDiagnostic, getDiagnosticTrace } from '../utils/diagnosticRecorder';
-import { hasCurrentHistoryState, mergeProfileScopes } from '../utils/profileMerge';
-import { registerExplorerService } from '../utils/explorerService';
-import { normalizeRosterForDisplay } from '../utils/rosterDisplay';
+import { recordDiagnostic, getDiagnosticTrace } from '../runtime/diagnosticRecorder';
+import { hasCurrentHistoryState, mergeProfileScopes } from '../profiles/profileMerge';
+import { registerExplorerService } from '../explorer/explorerService';
+import { normalizeRosterForDisplay } from '../room/rosterDisplay';
 import { browser } from 'wxt/browser';
-import type { ScriptPublicPath } from 'wxt/utils/inject-script';
+import type { ScriptPublicPath } from '#imports';
 import type { PlayerProfileSummary, PrematchPlayer, PrematchRoster } from '@umalytics/shared';
 import {
   isUmaLyticsMessage,
   sendRoomDomScanRequest,
   type LobbyReconnectResult,
   type RoomDomScanResult
-} from '../utils/messaging';
+} from '../runtime/messaging';
 import {
   buildUnavailablePlayerSummary,
   fetchPlayerProfileSummaries,
   getApiCooldown,
   restoreApiCooldown,
   type ApiCooldown
-} from '../utils/playerProfileApi';
+} from '../profiles/playerProfileApi';
 import {
   getPlayerProfileSummaries,
   getCachedPlayerProfiles,
@@ -25,21 +25,21 @@ import {
   setPlayerProfileSummaries,
   type PlayerProfileLoadState,
   type PlayerProfileLoadStatus
-} from '../utils/profileStorage';
+} from '../storage/profileStorage';
 import {
   BEST_UMA_SCORE_VERSION,
   MANUAL_PROFILE_REFRESH_COOLDOWN_MS,
   PROFILE_CACHE_TTL_MS,
   RECENT_HISTORY_VERSION
-} from '../utils/profileConstants';
-import { getLatestDraftSnapshot, clearLatestDraftSnapshot, setLatestDraftSnapshot } from '../utils/draftStorage';
+} from '../profiles/profileConstants';
+import { getLatestDraftSnapshot, clearLatestDraftSnapshot, setLatestDraftSnapshot } from '../storage/draftStorage';
 import {
   clearLatestPrematchRoster,
   getLatestPrematchRoster,
   setLatestPrematchRoster
-} from '../utils/rosterStorage';
-import { getLobbyLockState } from '../utils/lobbyLockStorage';
-import { extractMatchCodeFromUrl } from '../utils/matchDetection';
+} from '../storage/rosterStorage';
+import { getLobbyLockState } from '../storage/lobbyLockStorage';
+import { extractMatchCodeFromUrl } from '../room/matchDetection';
 
 const SCOUT_POPOUT_PATH = '/scout.html';
 const CONTENT_SCRIPT_PATH = '/content-scripts/content.js' as ScriptPublicPath;

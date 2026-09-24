@@ -1,5 +1,5 @@
 import type { PlayerProfileSummary } from '@umalytics/shared';
-import { mergeProfileScopes } from './profileMerge';
+import { mergeProfileScopes } from '../profiles/profileMerge';
 
 /** Preserve a usable result on retry failures, but always apply confirmed privacy changes. */
 export function mergeExplorerProfiles(previous: Record<string, PlayerProfileSummary>, incoming: Record<string, PlayerProfileSummary>): Record<string, PlayerProfileSummary> {
