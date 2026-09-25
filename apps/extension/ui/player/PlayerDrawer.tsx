@@ -25,7 +25,8 @@ import {
   StatCell,
   getDisplayedProfileStats,
   getLookupDiscordId,
-  getPlayerNote
+  getPlayerNote,
+  withDetailHistory
 } from './PlayerDetailScene';
 import { formatRecentResult, getRecentResultTone } from './RecentMatchesList';
 
@@ -55,6 +56,8 @@ interface HistoryPageState {
   page: number;
   total: number;
   matches: PlayerRecentMatchSummary[];
+  firstPageMatches?: PlayerRecentMatchSummary[];
+  summary?: PlayerProfileSummary['historySummary'];
   loading: boolean;
   error?: string;
 }
@@ -79,7 +82,6 @@ export function PlayerDrawer({
   const rating = profile?.conservativeRating ?? profile?.rating ?? player.displayRatingSnapshot ?? player.ratingSnapshot;
   const discordId = getLookupDiscordId(player);
   const note = getPlayerNote(profile, discordId);
-  const notableBadges = getNotableBadges(displayedProfile);
   const partyVisual = getPlayerPartyVisual(player, getTeamPartyVisuals(team?.players ?? []));
   const isCaptain = player.isCaptain === true || player.role === 'captain';
   const displayName = profile?.displayName ?? player.displayName;
@@ -87,6 +89,13 @@ export function PlayerDrawer({
   const pendingHistoryRequests = useRef(new Set<string>());
   const [historyPage, setHistoryPage] = useState<HistoryPageState>({ key: historyKey, page: 0, total: 0, matches: [], loading: false });
   const historyLoaded = historyPage.key === historyKey && historyPage.page > 0;
+  const detailProfile = historyLoaded
+    ? withDetailHistory(displayedProfile, historyPage.firstPageMatches ?? [], historyPage.total, historyPage.summary)
+    : displayedProfile;
+  const notableBadges = getNotableBadges(
+    detailProfile === undefined ? undefined : historyLoaded ? detailProfile : { ...detailProfile, recentForm: undefined }
+  );
+  const last5 = historyLoaded ? (detailProfile?.recentMatches ?? []).slice(0, 5) : [];
   const knownTitle = typeof profile?.title === 'string' && profile.title.length > 0 ? profile.title : undefined;
   const [fetchedTitle, setFetchedTitle] = useState<{ discordId: string; title: string | null } | undefined>(undefined);
   const displayedTitle = knownTitle ?? (fetchedTitle !== undefined && fetchedTitle.discordId === discordId ? fetchedTitle.title : undefined);
@@ -101,7 +110,12 @@ export function PlayerDrawer({
     try {
       const result = await sendPlayerHistoryPageRequest(discordId, statsScope, page, requestId);
       setHistoryPage((previous) =>
-        previous.key === historyKey ? { key: historyKey, page, total: result.total, matches: result.matches, loading: false } : previous
+        previous.key === historyKey ? {
+          key: historyKey, page, total: result.total,
+          summary: page === 1 ? result.summary : previous.summary,
+          firstPageMatches: page === 1 ? result.matches : previous.firstPageMatches,
+          matches: result.matches, loading: false
+        } : previous
       );
     } catch (error) {
       setHistoryPage((previous) =>
@@ -270,6 +284,24 @@ export function PlayerDrawer({
         <section className="drawer-section drawer-history" aria-label="Match history">
           <div className="drawer-section-head">
             <h3>Match history</h3>
+            <div className="drawer-last5" aria-label="Last 5 results">
+              {Array.from({ length: 5 }, (_, index) => {
+                const match = last5[index];
+                if (match === undefined) {
+                  return (
+                    <span key={index} className="dot dot-u" aria-hidden="true">&middot;</span>
+                  );
+                }
+                const tone = getRecentResultTone(match);
+                const dotClass = tone === 'win' ? 'dot dot-w' : tone === 'loss' ? 'dot dot-l' : 'dot dot-u';
+                const label = tone === 'win' ? 'W' : tone === 'loss' ? 'L' : '·';
+                return (
+                  <span key={match.matchId} className={dotClass} title={`${label} · ${match.matchId}`}>
+                    {label}
+                  </span>
+                );
+              })}
+            </div>
             <div className="drawer-section-spacer" />
             <span className="drawer-section-hint">
               {totalMatches > 0 ? `Matches ${(currentPage - 1) * HISTORY_PAGE_SIZE + 1}–${Math.min(currentPage * HISTORY_PAGE_SIZE, totalMatches)} of ${totalMatches}` : ''}

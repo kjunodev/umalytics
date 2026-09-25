@@ -147,6 +147,38 @@
   flex-grow: 1;
 }
 
+.drawer-last5 {
+  display: flex;
+  gap: 4px;
+}
+
+.dot {
+  align-items: center;
+  border-radius: var(--radius-sm);
+  display: inline-flex;
+  font-size: 11px;
+  font-weight: 700;
+  height: 22px;
+  justify-content: center;
+  width: 22px;
+}
+
+.dot-w {
+  background: var(--accent-blue);
+  color: #ffffff;
+}
+
+.dot-l {
+  background: var(--status-loss-bg);
+  box-shadow: 0 0 0 1px var(--border-strong) inset;
+  color: var(--accent-orange);
+}
+
+.dot-u {
+  background: var(--tone-sample-bg);
+  color: var(--text-secondary);
+}
+
 .drawer-toggle-button {
   background: transparent;
   border: 1px solid var(--border-strong);

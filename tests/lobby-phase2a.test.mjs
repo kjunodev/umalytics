@@ -6,6 +6,9 @@ import { loadFunction, parseTsxModule, readModule } from './support/harness.mjs'
 const teamSectionSyntax = parseTsxModule('uiLobbyTeamSection');
 const badgeChipSyntax = parseTsxModule('uiLobbyBadgeChip');
 const playerDrawerSyntax = parseTsxModule('uiPlayerDrawer');
+const playerDetailSyntax = parseTsxModule('uiPlayerDetailScene');
+const badgesSyntax = parseTsxModule('uiCommonBadges');
+const recentMatchesSyntax = parseTsxModule('uiPlayerRecentMatchesList');
 
 function cardStateHarness() {
   const c = vm.createContext({
@@ -94,4 +97,141 @@ test('the details drawer is a fixed 600px overlay, not a page it never scrolls a
   const css = readModule('uiPlayerDrawerCss');
   assert.match(css, /\.player-drawer\s*\{[^}]*width:\s*min\(var\(--drawer-width\), 100vw\)/s);
   assert.match(css, /\.player-drawer\s*\{[^}]*overflow:\s*hidden/s);
+});
+
+function find(node, predicate) {
+  if (!node || typeof node !== 'object') return undefined;
+  if (predicate(node)) return node;
+  for (const child of (node.children ?? []).flat(Infinity)) { const result = find(child, predicate); if (result) return result; }
+}
+
+function findAll(node, predicate, results = []) {
+  if (!node || typeof node !== 'object') return results;
+  if (predicate(node)) results.push(node);
+  for (const child of (node.children ?? []).flat(Infinity)) findAll(child, predicate, results);
+  return results;
+}
+
+function drawerHarness() {
+  const c = vm.createContext({
+    console,
+    element: (type, props, ...children) => ({ type, props, children }),
+    React: { Fragment: 'Fragment' },
+    UmaImage: 'Image', BestUmaPortrait: 'Portrait', StatCell: 'Stat', ProfileDataStatus: 'Status',
+    getFallbackUmaImageUrl: () => undefined,
+    getPlayerPartyVisual: () => undefined, getTeamPartyVisuals: () => ({}),
+    getLookupDiscordId: (p) => p.discordId, getPlayerNote: () => undefined,
+    getDisplayedProfileStats: (profile) => profile,
+    formatRank: () => '#1', formatRecord: () => '-', formatPercent: () => '-', formatDecimal: () => '-', formatNumber: () => '-',
+    HISTORY_PAGE_SIZE: 5, UMA_TABLE_ROWS: 5, PAGER_SLOT_COUNT: 7,
+    UMA_SORT_COLUMNS: [
+      { key: 'matches', label: 'GP' }, { key: 'winRate', label: 'Win' },
+      { key: 'pointsPerGame', label: 'PPG' }, { key: 'performanceScore', label: 'Score' }
+    ]
+  });
+  loadFunction(c, badgesSyntax, 'hasDisplayableProfileLists');
+  loadFunction(c, badgesSyntax, 'getNotableBadges');
+  loadFunction(c, playerDetailSyntax, 'withDetailHistory');
+  loadFunction(c, recentMatchesSyntax, 'getRecentResultTone');
+  loadFunction(c, recentMatchesSyntax, 'formatRecentResult');
+  loadFunction(c, playerDrawerSyntax, 'umaSortValue');
+  loadFunction(c, playerDrawerSyntax, 'formatUmaColumnValue');
+  loadFunction(c, playerDrawerSyntax, 'getPagerSlots');
+  loadFunction(c, playerDrawerSyntax, 'PlayerDrawer');
+  return c;
+}
+
+function confirmedMatch(id, isWinner, pointsScored = 4) {
+  return {
+    matchId: id, reportedAt: '2026-01-01T00:00:00Z', mode: 'ranked', verificationState: 'confirmed',
+    umaId: 'u1', umaName: 'Uma', isWinner, pointsScored, podiums: isWinner ? 1 : 0, isMvp: false
+  };
+}
+
+function renderableDrawer(profile) {
+  const c = drawerHarness();
+  let states = [], refs = [], effects = [], stateIdx = 0, refIdx = 0, effectIdx = 0, nextId = 0;
+  c.crypto = { randomUUID: () => `req-${++nextId}` };
+  c.useState = (initial) => {
+    const i = stateIdx++;
+    if (states[i] === undefined) states[i] = [initial, (update) => { states[i][0] = typeof update === 'function' ? update(states[i][0]) : update; }];
+    return states[i];
+  };
+  c.useRef = (initial) => {
+    const i = refIdx++;
+    if (refs[i] === undefined) refs[i] = { current: initial };
+    return refs[i];
+  };
+  c.useEffect = (callback) => { effects[effectIdx++] = callback; };
+  c.cancelPlayerHistoryPageRequest = async () => {};
+  c.sendPlayerProfileRequest = () => new Promise(() => {});
+  c.cancelPlayerProfileRequest = async () => {};
+  const render = () => {
+    stateIdx = 0; refIdx = 0; effectIdx = 0;
+    return c.PlayerDrawer({
+      player: { discordId: '123456789012345678', displayName: 'Fixture' },
+      profile,
+      onClose() {},
+      context: { statsScope: 'allTime', isProfileLoading: false, now: Date.now() }
+    });
+  };
+  return { c, render, effects: () => effects };
+}
+
+test('history page one enriches badges with the real recentForm, so Consistent can appear in the drawer, matching PlayerDetailScene', async () => {
+  const profile = {
+    discordId: '123456789012345678', displayName: 'Fixture', fetchedAt: Date.now(), profileUrl: '',
+    matches: 30, wins: 15, losses: 15, winRate: 0.5, pointsPerGame: 4, mvpMatches: 2, rank: 400,
+    // A stale cached recentForm that would already qualify for Consistent, to prove it is stripped pre-load.
+    recentForm: { matches: 10, scoredMatches: 9, scoringRate: 0.9, wins: 6, winRate: 0.6, points: 40, pointsPerGame: 4, podiums: 4, mvpMatches: 1 }
+  };
+  const { c, render, effects } = renderableDrawer(profile);
+  const historyMatches = Array.from({ length: 5 }, (_, i) => confirmedMatch(`H${i}`, true, 4));
+  c.sendPlayerHistoryPageRequest = (id, scope, page) =>
+    page === 1
+      ? Promise.resolve({
+          total: 25, matches: historyMatches,
+          summary: { wins: 5, losses: 0, pointsScored: 20, podiumPlacements: 5, firstPlaceFinishes: 5, secondPlaceFinishes: 0, thirdPlaceFinishes: 0, mvpAwards: 0 }
+        })
+      : new Promise(() => {});
+
+  const before = render();
+  const badgesBefore = findAll(before, (n) => n.props?.className?.includes?.('notable-tag')).map((n) => n.children[0]);
+  assert(!badgesBefore.includes('Consistent'), 'a stale cached recentForm must not produce Consistent before page one has loaded');
+
+  effects()[0]();
+  await new Promise((resolve) => setImmediate(resolve));
+
+  const after = render();
+  const badgesAfter = findAll(after, (n) => n.props?.className?.includes?.('notable-tag')).map((n) => n.children[0]);
+  assert(badgesAfter.includes('Consistent'), 'Consistent should appear once page-1 history resolves with a high scoring rate, same as the old detail scene');
+});
+
+test('the last-5 dots beside Match history show real confirmed results once loaded, and neutral placeholders before that', async () => {
+  const profile = {
+    discordId: '123456789012345678', displayName: 'Fixture', fetchedAt: Date.now(), profileUrl: '',
+    matches: 12, wins: 7, losses: 5, winRate: 0.58, pointsPerGame: 4, mvpMatches: 1
+  };
+  const { c, render, effects } = renderableDrawer(profile);
+  const historyMatches = [
+    confirmedMatch('H0', true), confirmedMatch('H1', true), confirmedMatch('H2', true),
+    confirmedMatch('H3', false), confirmedMatch('H4', false)
+  ];
+  c.sendPlayerHistoryPageRequest = (id, scope, page) =>
+    page === 1 ? Promise.resolve({ total: 12, matches: historyMatches, summary: undefined }) : new Promise(() => {});
+
+  const before = render();
+  const dotsBefore = findAll(before, (n) => typeof n.props?.className === 'string' && n.props.className.startsWith('dot'));
+  assert.equal(dotsBefore.length, 5, 'exactly 5 dots render while history has not loaded yet');
+  assert(dotsBefore.every((n) => n.props.className === 'dot dot-u'), 'placeholder dots are neutral before history loads');
+
+  effects()[0]();
+  await new Promise((resolve) => setImmediate(resolve));
+
+  const after = render();
+  const dotsAfter = findAll(after, (n) => typeof n.props?.className === 'string' && n.props.className.startsWith('dot'));
+  assert.deepEqual(
+    Array.from(dotsAfter, (n) => n.props.className),
+    ['dot dot-w', 'dot dot-w', 'dot dot-w', 'dot dot-l', 'dot dot-l']
+  );
 });
