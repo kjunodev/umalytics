@@ -34,6 +34,7 @@ import { HistoryView, ProfilesView } from '../../ui/history/ExplorerViews';
 import { HistoricalScene, getSelectedPlayerContext, type AppScene } from '../../ui/history/HistoricalScene';
 import { TeamSection } from '../../ui/lobby/TeamSection';
 import { PlayerDetailScene } from '../../ui/player/PlayerDetailScene';
+import { PlayerDrawer } from '../../ui/player/PlayerDrawer';
 import {
   formatDiagnosticsForClipboard,
   getDiagnostics,
@@ -320,18 +321,6 @@ export default function App() {
           <h2>No lobby detected</h2>
           <p>Open an Uma Drafter lobby or spectate page to populate player scouting.</p>
         </section>
-      ) : selectedPlayerContext !== undefined ? (
-        <PlayerDetailScene
-          team={selectedPlayerContext.team}
-          player={selectedPlayerContext.player}
-          profile={profileSnapshot?.profiles[selectedPlayerContext.player.discordId]}
-          isProfileLoading={isProfileLoading(profileSnapshot, selectedPlayerContext.player.discordId)}
-          statsScope={statsScope}
-          now={now}
-          onBack={() => {
-            setSelectedPlayerKey(undefined);
-          }}
-        />
       ) : activeScene === 'draft' ? (
         <DraftScene
           snapshot={draftSnapshot}
@@ -346,18 +335,39 @@ export default function App() {
           statsScope={statsScope}
         />
       ) : (
-        <section className="team-list" aria-label="Detected lobby teams">
-          {teamGroups.map((team) => (
-            <TeamSection
-              key={`${team.id}:${team.name ?? ""}`}
-              team={team}
-              profiles={profileSnapshot?.profiles ?? {}}
-              loadingDiscordIds={getLoadingDiscordIdsForDisplay(profileSnapshot)}
-              statsScope={statsScope}
-              onSelectPlayer={setSelectedPlayerKey}
+        <>
+          <section className="team-list" aria-label="Detected lobby teams">
+            {teamGroups.map((team) => (
+              <TeamSection
+                key={`${team.id}:${team.name ?? ""}`}
+                team={team}
+                profiles={profileSnapshot?.profiles ?? {}}
+                loadingDiscordIds={getLoadingDiscordIdsForDisplay(profileSnapshot)}
+                statsScope={statsScope}
+                selectedPlayerKey={selectedPlayerKey}
+                onSelectPlayer={setSelectedPlayerKey}
+                onRetryProfile={refreshProfiles}
+                canRetryProfile={canRefresh}
+              />
+            ))}
+          </section>
+          {selectedPlayerContext === undefined ? null : (
+            <PlayerDrawer
+              player={selectedPlayerContext.player}
+              profile={profileSnapshot?.profiles[selectedPlayerContext.player.discordId]}
+              onClose={() => {
+                setSelectedPlayerKey(undefined);
+              }}
+              context={{
+                team: selectedPlayerContext.team,
+                statsScope,
+                isProfileLoading: isProfileLoading(profileSnapshot, selectedPlayerContext.player.discordId),
+                now,
+                inLobby: true
+              }}
             />
-          ))}
-        </section>
+          )}
+        </>
       )}
       </div>
     </main>
