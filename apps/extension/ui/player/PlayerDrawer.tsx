@@ -384,7 +384,7 @@ export function PlayerDrawer({
           </nav>
         </section>
 
-        {note === undefined ? null : <p className="player-note">{note}</p>}
+        {note === undefined || note === 'Profile data has not loaded yet.' ? null : <p className="player-note">{note}</p>}
       </aside>
     </>
   );

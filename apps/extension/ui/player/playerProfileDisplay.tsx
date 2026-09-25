@@ -116,7 +116,7 @@ export function getProfileDataStatus(
 
   if (profile === undefined) {
     return {
-      label: 'Profile data not loaded yet',
+      label: 'Profile data has not loaded yet.',
       tone: 'muted'
     };
   }

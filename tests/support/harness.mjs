@@ -20,7 +20,6 @@ export const MODULES = {
   uiCommonBaseCss: 'ui/common/base.css',
   uiShellCss: 'ui/shell/shell.css',
   uiLobbyCss: 'ui/lobby/lobby.css',
-  uiPlayerCss: 'ui/player/player.css',
   uiDraftCss: 'ui/draft/draft.css',
   uiUmasCss: 'ui/umas/umas.css',
   uiHistoryCss: 'ui/history/history.css',

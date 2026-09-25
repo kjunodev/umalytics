@@ -37,6 +37,22 @@ test('an unfetched profile shows the skeleton only while a fetch is in flight', 
   assert.equal(c.getCardState(undefined, undefined, false, 'd1'), 'loaded');
 });
 
+test('an unfetched card prints the profile status once in its message area', () => {
+  const c = vm.createContext({
+    element: (type, props, ...children) => ({ type, props, children }),
+    React: { Fragment: 'Fragment' }, BadgeChipRow: 'Badges', StatCell: 'Stat',
+    TopUmasList: 'Umas', UmaResolutionNote: 'Resolution',
+    formatRecord: () => '-', formatPercent: () => '-', formatDecimal: () => '-', formatNumber: () => '-'
+  });
+  loadFunction(c, teamSectionSyntax, 'CardBody');
+  const tree = c.CardBody({ state: 'loaded', player: { displayName: 'Fixture' },
+    displayedProfile: undefined, notableBadges: [], note: 'Profile data has not loaded yet.',
+    statsMessage: 'Profile data has not loaded yet.', canRetryProfile: false });
+  const statuses = findAll(tree, node => node.children?.includes?.('Profile data has not loaded yet.'));
+  assert.equal(statuses.length, 1);
+  assert.equal(statuses[0].props.className, 'card-message-title');
+});
+
 test('private stats without a usable Uma list are private on the public build, estimated only on the private build with a derived history', () => {
   const c = cardStateHarness();
   const privateProfile = { discordId: 'd1', statsPrivate: true };

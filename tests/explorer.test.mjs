@@ -52,6 +52,27 @@ test('recorded completed match maps final picks, vetoes, maps, stable IDs and te
   assert(result.roster.players.every(player => player.ratingSnapshot === undefined));
 });
 
+test('completed-match race fields populate structured chips for picks, vetoes, and tiebreaker', () => {
+  const draft = harness().parseHistoricalMatch(fixture, 'FX1A2B').draft;
+  const picked = draft.teams.team1.maps.find(map => map.mapId === 'kyoto-2000-turf-inner');
+  assert.deepEqual({ track: picked.track, distance: picked.distance, surface: picked.surface,
+    variant: picked.variant, direction: picked.direction, season: picked.season,
+    weather: picked.weather, ground: picked.ground },
+    { track: 'Kyoto', distance: 2000, surface: 'Turf', variant: 'Inner', direction: 'right',
+      season: 'Winter', weather: 'Snowy', ground: 'Soft' });
+  assert.match(picked.details, /Winter/);
+  const vetoed = draft.teams.team1.maps.find(map => map.status === 'vetoed');
+  assert.equal(vetoed.season, 'Spring');
+  assert.equal(vetoed.weather, 'Rainy');
+  assert.equal(vetoed.ground, 'Heavy');
+  assert.deepEqual({ track: draft.tiebreakerMap.track, distance: draft.tiebreakerMap.distance,
+    surface: draft.tiebreakerMap.surface, variant: draft.tiebreakerMap.variant,
+    direction: draft.tiebreakerMap.direction, season: draft.tiebreakerMap.season,
+    weather: draft.tiebreakerMap.weather, ground: draft.tiebreakerMap.ground },
+    { track: 'Hanshin', distance: 1800, surface: 'Turf', variant: 'Outer',
+      direction: 'right', season: 'Summer', weather: 'Cloudy', ground: 'Good' });
+});
+
 test('missing, wrong, or incomplete matches fail clearly; missing player IDs never infer identity', () => {
   const h = harness();
   assert.throws(() => h.parseHistoricalMatch({}, 'FX1A2B'), /different match/);
