@@ -105,7 +105,7 @@ export function parseHistoricalMatch(value: unknown, requestedCode: string): His
   const count = (value: unknown, fallback: number) => typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= 20 ? value : fallback;
   const draft: DraftSnapshot = { matchCode: code, phase: 'complete', source: 'match-history', updatedAt: Date.now(),
     teams: { team1: { id: 'team1', name: roster.teams!.team1.name, maps: [], umas: [] }, team2: { id: 'team2', name: roster.teams!.team2.name, maps: [], umas: [] } },
-    rules: { maps: count(mapRules.picksPerTeam, 0), picks: count(umaRules.teamSize, 0), bans: count(umaRules.preBansPerTeam, 0), vetoes: count(umaRules.postBansPerTeam, 0) }
+    rules: { maps: count(mapRules.picksPerTeam, 0), picks: count(umaRules.teamSize, 0), bans: count(umaRules.preBansPerTeam, 0), vetoes: count(umaRules.postBansPerTeam, 0), mapVetoes: count(mapRules.bansPerTeam, 1) }
   };
   for (const team of ['team1', 'team2'] as const) {
     const raw = record(saved[team]), target = draft.teams[team];

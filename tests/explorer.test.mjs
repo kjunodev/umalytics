@@ -48,6 +48,7 @@ test('recorded completed match maps final picks, vetoes, maps, stable IDs and te
   assert.equal(result.draft.teams.team2.maps.find(item => item.status === 'vetoed').order, 6);
   assert.match(result.draft.tiebreakerMap.name, /Hanshin/);
   assert.equal(result.draft.currentTeam, undefined);
+  assert.equal(result.draft.rules.mapVetoes, 1, 'read from rules.map.bansPerTeam in the fixture');
   assert(result.roster.players.every(player => player.ratingSnapshot === undefined));
 });
 

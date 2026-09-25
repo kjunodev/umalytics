@@ -3,6 +3,7 @@ import './draft.css';
 import type {
   DraftSnapshot,
   DraftTeamSnapshot,
+  DraftTiebreakerMap,
   DraftUmaAction,
   PlayerProfileSummary,
   PlayerStatsScope,
@@ -24,15 +25,18 @@ import {
   formatTeamName,
   getDraftGroundChip,
   getDraftInitialPickCount,
+  getDraftRaceSlotCount,
   getDraftSeasonChip,
   getDraftStageIndex,
   getDraftStages,
   getDraftSurfaceChip,
+  getDraftVetoedMaps,
   getDraftWeatherChip,
   getDraftWeatherIconKey,
   hasStructuredRaceModifiers,
   type DraftRaceCard,
-  type DraftRaceMapFields
+  type DraftRaceMapFields,
+  type DraftVetoedMap
 } from './draftFormat';
 
 export const DRAFT_MAP_SLOT_COUNT = 4;
@@ -42,6 +46,8 @@ export const DRAFT_PICK_SLOT_COUNT = 6;
 export const DRAFT_BAN_SLOT_COUNT = 2;
 
 export const DRAFT_VETO_SLOT_COUNT = 1;
+
+export const DRAFT_MAP_VETO_COUNT = 1;
 
 export function DraftScene({
   snapshot,
@@ -67,8 +73,9 @@ export function DraftScene({
 
   const initialPickCount = getDraftInitialPickCount(snapshot.rules, DRAFT_PICK_SLOT_COUNT);
   const stageIndex = getDraftStageIndex(snapshot, initialPickCount);
-  const perTeamMapSlots = snapshot.rules?.maps ?? DRAFT_MAP_SLOT_COUNT;
-  const races = buildDraftRaceCards(snapshot.teams, snapshot.tiebreakerMap, perTeamMapSlots * 2);
+  const raceSlotCount = getDraftRaceSlotCount(snapshot.rules, DRAFT_MAP_SLOT_COUNT, DRAFT_MAP_VETO_COUNT);
+  const races = buildDraftRaceCards(snapshot.teams, raceSlotCount);
+  const vetoedMaps = getDraftVetoedMaps(snapshot.teams);
 
   return (
     <section className="draft-scene" aria-label={historical ? 'Completed draft view' : 'Live draft view'}>
@@ -84,7 +91,12 @@ export function DraftScene({
           historical={historical}
           isCurrentTeam={!historical && snapshot.currentTeam === 'team1'}
         />
-        <DraftRacesPanel teams={snapshot.teams} races={races} />
+        <DraftRacesPanel
+          teams={snapshot.teams}
+          races={races}
+          tiebreakerMap={snapshot.tiebreakerMap}
+          vetoedMaps={vetoedMaps}
+        />
         <DraftTeamPanel
           team={snapshot.teams.team2}
           rules={snapshot.rules}
@@ -249,13 +261,13 @@ export function DraftPickTile({
   return (
     <li className={`draft-pick-tile ${isSelected ? 'selected' : ''}`}>
       <button type="button" onClick={onSelect} aria-pressed={isSelected} title={action.name}>
-        <span className={`draft-pick-exp ${experienceCount > 0 ? 'some' : 'none'}`}>
-          {experienceCount > 0 ? `${experienceCount} played` : 'New'}
-        </span>
         <span className="draft-pick-portrait">
           <UmaImage imageUrl={imageUrl} name={action.name} />
         </span>
         <span className="draft-pick-name">{action.name}</span>
+        <span className={`draft-pick-exp ${experienceCount > 0 ? 'some' : 'none'}`}>
+          {experienceCount > 0 ? `${experienceCount} played` : 'New'}
+        </span>
       </button>
     </li>
   );
@@ -359,10 +371,14 @@ export function getUmaExperienceForPlayer(
 
 export function DraftRacesPanel({
   teams,
-  races
+  races,
+  tiebreakerMap,
+  vetoedMaps
 }: {
   teams: DraftSnapshot['teams'];
   races: Array<DraftRaceCard | undefined>;
+  tiebreakerMap: DraftTiebreakerMap | undefined;
+  vetoedMaps: DraftVetoedMap[];
 }) {
   return (
     <section className="draft-races-panel" aria-label="Races">
@@ -377,6 +393,9 @@ export function DraftRacesPanel({
         ))}
       </div>
       <ol className="draft-race-list">
+        {tiebreakerMap === undefined ? null : (
+          <DraftRaceCardItem race={{ n: 0, team: 'tiebreaker', tiebreaker: true, map: tiebreakerMap }} teamName={undefined} />
+        )}
         {races.map((race, index) => (
           <DraftRaceCardItem
             key={race === undefined ? `race-placeholder:${index}` : `race:${race.n}`}
@@ -385,12 +404,20 @@ export function DraftRacesPanel({
             teamName={race === undefined || race.team === 'tiebreaker' ? undefined : formatTeamName(teams[race.team])}
           />
         ))}
+        {vetoedMaps.length === 0 ? null : (
+          <>
+            <li className="draft-vetoed-heading">Vetoed</li>
+            {vetoedMaps.map((vetoed, index) => (
+              <DraftVetoedMapRow key={`vetoed-map:${index}`} vetoed={vetoed} />
+            ))}
+          </>
+        )}
       </ol>
     </section>
   );
 }
 
-export function DraftRaceCardItem({ race, n, teamName }: { race: DraftRaceCard | undefined; n: number; teamName: string | undefined }) {
+export function DraftRaceCardItem({ race, n, teamName }: { race: DraftRaceCard | undefined; n?: number; teamName: string | undefined }) {
   if (race === undefined) {
     return (
       <li className="draft-race-card placeholder">
@@ -408,15 +435,14 @@ export function DraftRaceCardItem({ race, n, teamName }: { race: DraftRaceCard |
   return (
     <li
       className={`draft-race-card ${race.team}`}
-      aria-label={`Race ${n}${race.tiebreaker ? ', tiebreaker' : `, ${teamName} pick`}: ${formatRaceTrackName(map)}`}
+      aria-label={`${race.tiebreaker ? 'Tiebreaker' : `Race ${n}, ${teamName} pick`}: ${formatRaceTrackName(map)}`}
     >
-      <span className="draft-race-number">{n}</span>
+      <span className={`draft-race-number ${race.tiebreaker ? 'tiebreaker' : ''}`}>{race.tiebreaker ? 'TB' : n}</span>
       <div className="draft-race-title">
         <span className="draft-race-track">{formatRaceTrackName(map)}</span>
         {map.variant === undefined ? null : <span className="draft-race-layout">({map.variant})</span>}
         {distance === undefined ? null : <span className="draft-race-distance">{distance}</span>}
         <div className="draft-race-title-spacer" />
-        {race.tiebreaker ? <span className="draft-mod tiebreaker">Tiebreaker</span> : null}
       </div>
       {structured ? (
         <div className="draft-race-mods">
@@ -428,6 +454,24 @@ export function DraftRaceCardItem({ race, n, teamName }: { race: DraftRaceCard |
       ) : formatDraftMapDetails(map) === undefined ? null : (
         <p className="draft-race-details">{formatDraftMapDetails(map)}</p>
       )}
+    </li>
+  );
+}
+
+export function DraftVetoedMapRow({ vetoed }: { vetoed: DraftVetoedMap }) {
+  const map = vetoed.map;
+  const distance = formatRaceDistance(map.distance);
+
+  return (
+    <li
+      className={`draft-vetoed-map-row ${vetoed.team}`}
+      aria-label={`Vetoed: ${formatRaceTrackName(map)}${distance === undefined ? '' : `, ${distance}`}, picked by ${vetoed.team}`}
+    >
+      <span className="draft-vetoed-map-label">Veto</span>
+      <span className="draft-vetoed-map-name">
+        {formatRaceTrackName(map)}
+        {distance === undefined ? null : ` (${distance})`}
+      </span>
     </li>
   );
 }

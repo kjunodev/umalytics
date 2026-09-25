@@ -48,8 +48,21 @@ test('Explorer styling cannot override shared draft tile geometry', () => {
   const draftCss = readModule('uiDraftCss');
   const baseCss = readModule('uiCommonBaseCss');
   assert.doesNotMatch(explorerCss,/\.explorer-view\s+button\s*\{/);
-  assert.match(draftCss,/\.draft-pick-tile button,\n\.draft-pick-tile\.placeholder\s*\{[^}]*height:\s*118px/s);
+  assert.match(draftCss,/\.draft-pick-tile button,\n\.draft-pick-tile\.placeholder\s*\{[^}]*height:\s*128px/s);
   assert.match(baseCss,/scrollbar-gutter:\s*stable/);
+});
+
+test('the played/new chip renders as its own line under the pick name, not layered over the portrait', () => {
+  const c = vm.createContext({element:(type,props,...children)=>({type,props,children}),UmaImage:'Image',getUmaPortraitUrl:id=>`portrait/${id}`,isKnownUmaOutfitId:()=>false});
+  loadFunction(c, draftSyntax, 'DraftPickTile');
+  const result = c.DraftPickTile({action:{umaId:'100601',name:'Oguri'},experienceCount:3,isSelected:false,onSelect(){}});
+  const button = result.children.find((child) => child?.type === 'button');
+  const order = button.children.map((child) => child.props?.className);
+  assert.deepEqual(order, ['draft-pick-portrait', 'draft-pick-name', 'draft-pick-exp some'],
+    'portrait, then name, then the exp chip, in document order (no absolute overlay on the portrait)');
+
+  const draftCss = readModule('uiDraftCss');
+  assert.match(draftCss, /\.draft-pick-exp\s*\{(?:(?!position:\s*absolute)[^}])*\}/s, '.draft-pick-exp must not be absolutely positioned over the portrait');
 });
 
 test('Live and History pick tiles use identical known-outfit portraits regardless of captured image URL', () => {

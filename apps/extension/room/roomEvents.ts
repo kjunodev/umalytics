@@ -75,7 +75,7 @@ function cleanDraftTeam(value: RoomRecord): RoomRecord {
 function cleanRules(value: unknown): RoomRecord | undefined {
   if (!roomRecord(value)) return undefined;
   const count = (n: unknown, fallback: number) => typeof n === 'number' && Number.isInteger(n) && n >= 0 && n <= 32 ? n : fallback;
-  return { maps: count(value.map?.picksPerTeam ?? value.maps,4), picks: count(value.uma?.teamSize ?? value.picks,6), bans: count(value.uma?.preBansPerTeam ?? value.bans,2), vetoes: count(value.uma?.postBansPerTeam ?? value.vetoes,1) };
+  return { maps: count(value.map?.picksPerTeam ?? value.maps,4), picks: count(value.uma?.teamSize ?? value.picks,6), bans: count(value.uma?.preBansPerTeam ?? value.bans,2), vetoes: count(value.uma?.postBansPerTeam ?? value.vetoes,1), mapVetoes: count(value.map?.bansPerTeam ?? value.mapVetoes,1) };
 }
 function cleanMultiplayer(value: unknown): RoomRecord {
   if (!roomRecord(value)) return {};

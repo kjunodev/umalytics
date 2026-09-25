@@ -68,9 +68,19 @@
   outline-offset: 2px;
 }
 
+/* Card content sits above .card-hit only to establish stacking order; it
+   must not steal clicks from it, or the button only opens the drawer when
+   clicked on the small slivers of the card with no content over them. The
+   chips (own hover/focus tooltips) and the Retry button opt back in. */
 .player-row > *:not(.card-hit) {
   position: relative;
   z-index: 2;
+  pointer-events: none;
+}
+
+.chip,
+.card-message-box button {
+  pointer-events: auto;
 }
 
 .card-name-row {
@@ -121,7 +131,9 @@
 }
 
 /* Fixed two-row badge area: chips wrap inside it so stats below always line
-   up across cards, whatever badges a player has. */
+   up across cards, whatever badges a player has. overflow stays visible so
+   chip tooltips (which pop up above the chip) aren't clipped; the wrap plus
+   fixed height still keeps the area's footprint constant. */
 .card-badges {
   align-content: flex-start;
   align-items: center;
@@ -129,7 +141,7 @@
   flex-wrap: wrap;
   gap: 5px;
   height: 49px;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .chip {

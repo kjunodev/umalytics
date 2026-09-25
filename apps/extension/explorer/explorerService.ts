@@ -32,14 +32,16 @@ export async function executeExplorerRequest(request: ExplorerRequest, signal: A
   if (request.kind === 'leaderboard') return getSeasonLeaderboard(signal);
   if (request.kind === 'match') {
     const code = parseHistoryInput(request.input);
-    return parseHistoricalMatch(await fetchJson<unknown>(`/api/matches/${code}`, signal), code);
+    return parseHistoricalMatch(await fetchJson<unknown>(`/api/matches/${code}`, signal, 'background', 'match'), code);
   }
   if (request.kind === 'search') {
     const { id, query } = parsePlayerInput(request.input);
     if (id) return { players: [lookupPlayer(id)], total: 1, page: 1, pageSize: 10 };
     // The directory exposes a capped result set, not a paged global leaderboard.
     const params = new URLSearchParams({ query: query!, limit: '50' });
-    return parsePlayerSearch(await fetchJson<unknown>(`/api/players/directory-search?${params}`, signal), request.page);
+    return parsePlayerSearch(
+      await fetchJson<unknown>(`/api/players/directory-search?${params}`, signal, 'background', 'directory-search'), request.page
+    );
   }
   const profiles: Record<string, PlayerProfileSummary> = {};
   const archive = await getCachedPlayerProfiles();

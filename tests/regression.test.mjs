@@ -189,6 +189,14 @@ test('session storage failure falls back to memory and cache diagnostics name th
   assert(h.diagnostics.every(entry=>entry.endpoint!==undefined));
 });
 
+test('an explicit endpoint label overrides the dynamic last path segment in diagnostics, so per-match-code paths still aggregate under one label',async()=>{
+  const h=apiHarness();
+  await h.c.fetchJson('/api/matches/FX1A2B',undefined,'background','match');
+  await h.c.fetchJson('/api/matches/QZ9K3M',undefined,'background','match');
+  assert(h.diagnostics.every(entry=>entry.endpoint==='match'));
+  assert(!h.diagnostics.some(entry=>entry.endpoint==='FX1A2B' || entry.endpoint==='QZ9K3M'));
+});
+
 test('shared season/leaderboard requests are deduplicated and cached',async()=>{
   const h=apiHarness();
   await Promise.all([h.c.fetchPlayerProfileSummaries(players(1)),h.c.fetchPlayerProfileSummaries(players(1))]);
@@ -760,15 +768,22 @@ test('new room starts a new version sequence and rejects late old-room events',(
 });
 
 test('confirmed draft snapshots ignore preview/history duplicates and accept a newer undo',()=>{
-  const {state,c}=roomHarness();const event=matchEvent({phase:'complete',rules:{map:{picksPerTeam:3},uma:{teamSize:5,preBansPerTeam:0,postBansPerTeam:0}}});
+  const {state,c}=roomHarness();const event=matchEvent({phase:'complete',rules:{map:{picksPerTeam:3,bansPerTeam:2},uma:{teamSize:5,preBansPerTeam:0,postBansPerTeam:0}}});
   event.state.team1.pickedUmas=[{id:'100101',name:'Outfit A'}];
   event.state.availableUmas=[{id:'100102',name:'Not picked'}];event.state.draftActionHistory=[{uma:{id:'100103',name:'Undone'}}];
   event.state.pendingSelection={uma:{id:'100104',name:'Preview'}};
   const clean=c.decodeRoomEvent('42'+JSON.stringify(['server:event',event]));
   const result=state.apply(clean,'M95Z2Z');assert.equal(result.draft.teams.team1.umas.length,1);assert.equal(result.draft.rules.picks,5);assert.equal(result.draft.rules.bans,0);
+  assert.equal(result.draft.rules.mapVetoes,2,'the map veto count is read from rules.map.bansPerTeam');
   const undo=matchEvent({phase:'uma-pick',version:2});state.apply(undo,'M95Z2Z');
   assert.equal(state.draft.phase,'uma-pick');assert.equal(state.draft.teams.team1.umas.length,0);
   assert.equal(state.apply(event,'M95Z2Z').reason,'old-version');
+});
+
+test('map veto count defaults to 1 when rules.map.bansPerTeam is absent',()=>{
+  const {state}=roomHarness();
+  const result=state.apply(matchEvent({phase:'complete',rules:{map:{picksPerTeam:4},uma:{teamSize:6,preBansPerTeam:2,postBansPerTeam:1}}}),'M95Z2Z');
+  assert.equal(result.draft.rules.mapVetoes,1);
 });
 
 test('event decoding ignores chat and removes unrelated sensitive fields',()=>{

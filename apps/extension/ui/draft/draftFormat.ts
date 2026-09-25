@@ -2,7 +2,6 @@ import type {
   DraftMapSelection,
   DraftSnapshot,
   DraftTeamSnapshot,
-  DraftTiebreakerMap,
   DraftUmaAction,
   DraftUmaActionKind,
   TeamId
@@ -24,6 +23,18 @@ export function countDraftUmaKind(team: DraftTeamSnapshot | undefined, kind: Dra
 
 export function getDraftInitialPickCount(rules: DraftSnapshot['rules'], totalPickSlots: number): number {
   return rules?.picks ?? Math.max(totalPickSlots - 1, 0);
+}
+
+/** The Races column holds one slot per map each team ends up racing on: the
+ * maps they picked, minus the ones the opponent vetoed back out. */
+export function getDraftRaceSlotCount(
+  rules: DraftSnapshot['rules'],
+  totalMapSlots: number,
+  defaultMapVetoes: number
+): number {
+  const perTeamMapSlots = rules?.maps ?? totalMapSlots;
+  const mapVetoesPerTeam = rules?.mapVetoes ?? defaultMapVetoes;
+  return 2 * Math.max(perTeamMapSlots - mapVetoesPerTeam, 0);
 }
 
 export function isDraftStageComplete(
@@ -127,9 +138,11 @@ export interface DraftRaceCard {
   map: DraftRaceMapFields;
 }
 
+/** The picked-map race cards only, in draft order, numbered 1..totalMapSlots.
+ * The tiebreaker and vetoed maps render separately: TB first, then these,
+ * then a compact Vetoed section (see getDraftVetoedMaps). */
 export function buildDraftRaceCards(
   teams: DraftSnapshot['teams'],
-  tiebreakerMap: DraftTiebreakerMap | undefined,
   totalMapSlots: number
 ): Array<DraftRaceCard | undefined> {
   const picked = TEAM_IDS.flatMap((teamId) =>
@@ -138,15 +151,24 @@ export function buildDraftRaceCards(
       .map((map) => ({ map, team: teamId }))
   ).sort((left, right) => left.map.order - right.map.order);
 
-  const slots: Array<DraftRaceCard | undefined> = getDraftSlots(picked, totalMapSlots).map((entry, index) =>
+  return getDraftSlots(picked, totalMapSlots).map((entry, index) =>
     entry === undefined ? undefined : { n: index + 1, team: entry.team, tiebreaker: false, map: entry.map }
   );
+}
 
-  if (tiebreakerMap !== undefined) {
-    slots.push({ n: totalMapSlots + 1, team: 'tiebreaker', tiebreaker: true, map: tiebreakerMap });
-  }
+export interface DraftVetoedMap {
+  team: TeamId;
+  map: DraftRaceMapFields;
+}
 
-  return slots;
+/** Vetoed maps, one row per map, credited to the team whose own list held it
+ * (the team that picked it, per the same convention as Uma vetoes). */
+export function getDraftVetoedMaps(teams: DraftSnapshot['teams']): DraftVetoedMap[] {
+  return TEAM_IDS.flatMap((teamId) =>
+    teams[teamId].maps
+      .filter((map) => map.status === 'vetoed')
+      .map((map) => ({ team: teamId, map }))
+  );
 }
 
 export function formatRaceTrackName(map: DraftRaceMapFields): string {

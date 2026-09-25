@@ -88,6 +88,13 @@ button {
   border-color: var(--border-emphasis);
 }
 
+/* Lets a card's chip tooltips (card-badges overflow:visible) draw over the
+   next row/card in the grid instead of being covered by it. */
+.player-row:hover,
+.player-row:focus-within {
+  z-index: 3;
+}
+
 .player-row.is-selected {
   border-color: var(--accent-blue);
   box-shadow: 0 0 0 1px var(--accent-blue) inset;

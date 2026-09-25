@@ -847,12 +847,14 @@ async function flushPersistentResponses(): Promise<void> {
   }
 }
 
-export async function fetchJson<T>(path: string, signal?: AbortSignal, priority: RequestPriority = 'background'): Promise<T> {
+export async function fetchJson<T>(
+  path: string, signal?: AbortSignal, priority: RequestPriority = 'background', endpointLabel?: string
+): Promise<T> {
   signal?.throwIfAborted();
   let shared = inFlightRequests.get(path);
   if (shared === undefined) {
     const controller = new AbortController();
-    shared = { promise: fetchJsonOnce<T>(path, controller.signal, priority), controller, consumers: 0 };
+    shared = { promise: fetchJsonOnce<T>(path, controller.signal, priority, endpointLabel), controller, consumers: 0 };
     inFlightRequests.set(path, shared);
     const request = shared;
     void request.promise.finally(() => {
@@ -882,10 +884,12 @@ export async function fetchJson<T>(path: string, signal?: AbortSignal, priority:
   }
 }
 
-async function fetchJsonOnce<T>(path: string, signal: AbortSignal, priority: RequestPriority): Promise<T> {
+async function fetchJsonOnce<T>(path: string, signal: AbortSignal, priority: RequestPriority, endpointLabel?: string): Promise<T> {
   await loadPersistentResponses();
   signal.throwIfAborted();
-  const endpoint = path.split('?')[0]!.split('/').at(-1);
+  // The last path segment can be a dynamic ID (e.g. a match code), which would
+  // fragment diagnostics per-request; callers with such paths pass a stable label.
+  const endpoint = endpointLabel ?? path.split('?')[0]!.split('/').at(-1);
   const cached = responseCache.get(path);
   if (cached !== undefined && cached.expiresAt > Date.now()) { recordDiagnostic({ kind: 'cache', endpoint, reason: 'hit' }); return cached.value as T; }
   assertApiAvailable(path);

@@ -54,7 +54,7 @@ export interface DraftTeamSnapshot {
 export interface DraftSnapshot {
   matchCode?: MatchCode;
   version?: number;
-  rules?: { maps: number; picks: number; bans: number; vetoes: number };
+  rules?: { maps: number; picks: number; bans: number; vetoes: number; mapVetoes: number };
   phase?: string;
   currentTeam?: TeamId;
   tiebreakerMap?: DraftTiebreakerMap;

@@ -72,7 +72,7 @@ test('draft status text names the current team picking their next Uma, vetoing, 
   assert.equal(c.formatDraftStatusText(finished, 2, 6), 'Draft complete');
 });
 
-test('draft race cards merge both teams by combined order, pad pending slots, and append the tiebreaker last', () => {
+test('draft race cards merge both teams by combined order and pad pending slots, without the tiebreaker (rendered separately)', () => {
   const c = harness();
   const teams = {
     team1: team('team1', [], [
@@ -83,18 +83,39 @@ test('draft race cards merge both teams by combined order, pad pending slots, an
       { team: 'team2', name: 'Hanshin', order: 2, status: 'selected' }
     ])
   };
-  const cards = c.buildDraftRaceCards(teams, undefined, 4);
+  const cards = c.buildDraftRaceCards(teams, 4);
   assert.equal(cards.length, 4);
   assert.equal(cards[0].n, 1); assert.equal(cards[0].team, 'team1'); assert.equal(cards[0].map.name, 'Nakayama');
   assert.equal(cards[1].n, 2); assert.equal(cards[1].team, 'team2'); assert.equal(cards[1].map.name, 'Hanshin');
   assert.equal(cards[2], undefined);
   assert.equal(cards[3], undefined);
+});
 
-  const withTiebreaker = c.buildDraftRaceCards(teams, { name: 'Hakodate' }, 4);
-  assert.equal(withTiebreaker.length, 5);
-  assert.equal(withTiebreaker[4].tiebreaker, true);
-  assert.equal(withTiebreaker[4].team, 'tiebreaker');
-  assert.equal(withTiebreaker[4].n, 5);
+test('the race slot count is 2x (maps picked per team - map vetoes per team), falling back to the given defaults when rules are absent', () => {
+  const c = harness();
+  assert.equal(c.getDraftRaceSlotCount({ maps: 4, mapVetoes: 1 }, 4, 1), 6);
+  assert.equal(c.getDraftRaceSlotCount({ maps: 3, mapVetoes: 2 }, 4, 1), 2);
+  assert.equal(c.getDraftRaceSlotCount(undefined, 4, 1), 6, 'falls back to the given map-slot and veto defaults');
+  assert.equal(c.getDraftRaceSlotCount({ maps: 2, mapVetoes: 3 }, 4, 1), 0, 'never goes negative');
+});
+
+test('vetoed maps are credited to the team whose own list held them, the team that picked the map', () => {
+  const c = harness();
+  const teams = {
+    team1: team('team1', [], [
+      { team: 'team1', name: 'Nakayama', order: 1, status: 'selected' },
+      { team: 'team1', name: 'Vetoed course', status: 'vetoed' }
+    ]),
+    team2: team('team2', [], [
+      { team: 'team2', name: 'Hanshin', order: 2, status: 'selected' },
+      { team: 'team2', name: 'Another vetoed course', status: 'vetoed' }
+    ])
+  };
+  const vetoed = c.getDraftVetoedMaps(teams);
+  assert.deepEqual(vetoed.map((v) => [v.team, v.map.name]), [
+    ['team1', 'Vetoed course'],
+    ['team2', 'Another vetoed course']
+  ]);
 });
 
 test('race modifier chips look up known tones case-insensitively and fall back for unknown values', () => {

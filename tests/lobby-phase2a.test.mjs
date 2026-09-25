@@ -93,6 +93,34 @@ test('the card badge area is a fixed two-row height so cards never shift as badg
   assert.match(css, /\.chip:hover \.chip-tooltip,\s*\n?\s*\.chip:focus-visible \.chip-tooltip/);
 });
 
+test('the card badge area keeps overflow visible so chip tooltips are not clipped, and a hovered/focused card raises z-index to stack over neighbours', () => {
+  const lobbyCss = readModule('uiLobbyCss');
+  assert.match(lobbyCss, /\.card-badges\s*\{[^}]*height:\s*49px[^}]*\}/s, 'the badge area keeps its fixed height');
+  assert.match(lobbyCss, /\.card-badges\s*\{[^}]*overflow:\s*visible/s, 'overflow must not clip the chip tooltip');
+  assert.doesNotMatch(lobbyCss, /\.card-badges\s*\{[^}]*overflow:\s*hidden/s);
+
+  const baseCss = readModule('uiCommonBaseCss');
+  assert.match(
+    baseCss,
+    /\.player-row:hover,\s*\n?\s*\.player-row:focus-within\s*\{[^}]*z-index:/s,
+    'a hovered or focused card must raise its stacking order above sibling cards'
+  );
+});
+
+test('card content sits above .card-hit for stacking only, not for clicks: it is pointer-events:none except for chips and the Retry button, so the whole card opens the drawer', () => {
+  const css = readModule('uiLobbyCss');
+  assert.match(
+    css,
+    /\.player-row > \*:not\(\.card-hit\)\s*\{[^}]*pointer-events:\s*none/s,
+    'card content must not swallow clicks meant for .card-hit'
+  );
+  assert.match(
+    css,
+    /\.chip,\s*\n?\s*\.card-message-box button\s*\{[^}]*pointer-events:\s*auto/s,
+    'chips and the Retry button must opt back into pointer events for their own hover/click behavior'
+  );
+});
+
 test('the details drawer is a fixed 600px overlay, not a page it never scrolls as a whole', () => {
   const css = readModule('uiPlayerDrawerCss');
   assert.match(css, /\.player-drawer\s*\{[^}]*width:\s*min\(var\(--drawer-width\), 100vw\)/s);
