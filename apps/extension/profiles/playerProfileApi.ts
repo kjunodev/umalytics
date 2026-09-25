@@ -161,6 +161,21 @@ interface LeaderboardLookup {
   activeSeasonId?: string;
 }
 
+export interface SeasonLeaderboardEntry {
+  rank: number;
+  userId: string;
+  displayName?: string;
+  rating?: number;
+  rd?: number;
+  wins?: number;
+  losses?: number;
+}
+
+export interface SeasonLeaderboard {
+  activeSeasonId?: string;
+  entries: SeasonLeaderboardEntry[];
+}
+
 interface SeasonLookup { activeSeasonId?: string; error?: string }
 
 
@@ -667,6 +682,22 @@ function getActiveLeaderboard(seasonPromise: Promise<SeasonLookup>): Promise<Lea
     .catch((caught): LeaderboardLookup => ({ ranksByDiscordId: new Map(), error: getErrorMessage(caught) }))
     .finally(() => { budget.dispose(); leaderboardRequest = undefined; });
   return leaderboardRequest;
+}
+
+export async function getSeasonLeaderboard(signal: AbortSignal): Promise<SeasonLeaderboard> {
+  signal.throwIfAborted();
+  const lookup = await abortable(getActiveLeaderboard(getActiveSeasonId()), signal);
+  signal.throwIfAborted();
+  if (lookup.error || lookup.activeSeasonId === undefined) throw new Error(lookup.error ?? 'Active season unavailable.');
+  return { activeSeasonId: lookup.activeSeasonId,
+    entries: Array.from(lookup.ranksByDiscordId, ([userId, entry]) => ({
+      rank: entry.rank, userId,
+      ...(typeof entry.displayName === 'string' ? { displayName: entry.displayName } : {}),
+      ...(entry.rating !== undefined ? { rating: entry.rating } : {}),
+      ...(entry.rd !== undefined ? { rd: entry.rd } : {}),
+      ...(entry.wins !== undefined ? { wins: entry.wins } : {}),
+      ...(entry.losses !== undefined ? { losses: entry.losses } : {})
+    })) };
 }
 
 async function fetchActiveLeaderboard(seasonPromise: Promise<SeasonLookup>, signal: AbortSignal): Promise<LeaderboardLookup> {

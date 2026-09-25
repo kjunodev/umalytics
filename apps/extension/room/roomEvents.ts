@@ -179,8 +179,8 @@ function draftFromRoomState(state: RoomRecord, matchCode: string, version: numbe
   for (const team of ['team1','team2'] as const) {
     const value = state[team];
     const maps = [...value.pickedMaps.map((m: RoomRecord, index: number) => ({ team, mapId: m.id, name: m.track ?? m.name ?? m.id,
-      details: mapDetails(m), order: index * 2 + (team === 'team1' ? 1 : 2), status: 'selected' as const })),
-      ...value.bannedMaps.map((m: RoomRecord) => ({ team, mapId: m.id, name: m.track ?? m.name ?? m.id, details: mapDetails(m), status: 'vetoed' as const }))];
+      details: mapDetails(m), ...mapFields(m), order: index * 2 + (team === 'team1' ? 1 : 2), status: 'selected' as const })),
+      ...value.bannedMaps.map((m: RoomRecord) => ({ team, mapId: m.id, name: m.track ?? m.name ?? m.id, details: mapDetails(m), ...mapFields(m), status: 'vetoed' as const }))];
     const umas = (['pickedUmas','preBannedUmas','bannedUmas'] as const).flatMap((key, kindIndex) => value[key].map((uma: RoomRecord,index: number) => ({
       team, kind: (['pick','ban','veto'] as const)[kindIndex]!, umaId: normalizeUmaOutfitId(String(uma.id ?? '')),
       name: getUmaDisplayName(String(uma.id ?? ''), uma.name), order: index + 1
@@ -189,7 +189,12 @@ function draftFromRoomState(state: RoomRecord, matchCode: string, version: numbe
   }
   return { matchCode, version, phase: state.phase, currentTeam: isRoomTeam(state.currentTeam) ? state.currentTeam : undefined,
     source: 'synced-draft-state', teams, updatedAt: Date.now(), rules: state.rules,
-    ...(state.wildcardMap ? { tiebreakerMap: { name: state.wildcardMap.track ?? state.wildcardMap.name, details: mapDetails(state.wildcardMap) } } : {}) };
+    ...(state.wildcardMap ? { tiebreakerMap: { name: state.wildcardMap.track ?? state.wildcardMap.name, details: mapDetails(state.wildcardMap), ...mapFields(state.wildcardMap) } } : {}) };
+}
+function mapFields(map: RoomRecord) {
+  return { track: map.track, distance: map.distance, surface: map.surface, variant: map.variant,
+    direction: map.direction, season: map.conditions?.season, weather: map.conditions?.weather,
+    ground: map.conditions?.ground };
 }
 function mapDetails(map: RoomRecord): string {
   return [map.distance ? `${map.distance}m` : undefined, map.surface, map.variant, map.direction,

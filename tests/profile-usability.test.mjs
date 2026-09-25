@@ -50,3 +50,15 @@ test('UI hasDisplayableProfileLists returns false for an undefined profile', () 
   const c = uiContext();
   assert.equal(c.hasDisplayableProfileLists(undefined), false);
 });
+
+test('badge kinds are stable and MVP Menace requires 20 games and a 20% MVP rate', () => {
+  const c = uiContext();
+  const profile = { discordId: '1', rank: 8, matches: 20, mvpMatches: 4 };
+  const badges = c.getNotableBadges(profile);
+  assert.deepEqual(Array.from(badges, badge => badge.kind), ['top10', 'mvpMenace']);
+  assert.equal(badges[1].label, 'MVP Menace');
+  assert.match(badges[1].title, /20%/);
+  assert(!c.getNotableBadges({ ...profile, matches: 19 }).some(badge => badge.kind === 'mvpMenace'));
+  assert(!c.getNotableBadges({ ...profile, mvpMatches: 3 }).some(badge => badge.kind === 'mvpMenace'));
+  assert.equal(c.getNotableBadges({ statsPrivate: true })[0].kind, 'private');
+});

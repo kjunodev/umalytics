@@ -1,6 +1,6 @@
 import { browser } from 'wxt/browser';
 import type { PlayerProfileSummary, PrematchPlayer } from '@umalytics/shared';
-import { fetchJson, fetchPlayerProfileSummaries, getApiCooldown } from '../profiles/playerProfileApi';
+import { fetchJson, fetchPlayerProfileSummaries, getApiCooldown, getSeasonLeaderboard } from '../profiles/playerProfileApi';
 import { getCachedPlayerProfiles, rememberCachedPlayerProfiles } from '../storage/profileStorage';
 import { BEST_UMA_SCORE_VERSION, PROFILE_CACHE_TTL_MS, RECENT_HISTORY_VERSION } from '../profiles/profileConstants';
 import { hasCurrentHistoryState } from '../profiles/profileMerge';
@@ -10,6 +10,7 @@ import { EXPLORER_PORT, type ExplorerRequest, type ExplorerReply, type ExplorerR
 export function validateExplorerRequest(value: unknown): ExplorerRequest {
   if (!value || typeof value !== 'object') throw new Error('Invalid lookup request.');
   const input = value as Record<string, unknown>;
+  if (input.kind === 'leaderboard') return { kind: 'leaderboard' };
   if ((input.kind === 'match' || input.kind === 'search') && typeof input.input === 'string' && input.input.length <= 300) {
     if (input.kind === 'match') return { kind: 'match', input: input.input };
     if (Number.isInteger(input.page) && Number(input.page) >= 1 && Number(input.page) <= 5) return { kind: 'search', input: input.input, page: Number(input.page) };
@@ -28,6 +29,7 @@ export function validateExplorerRequest(value: unknown): ExplorerRequest {
 export async function executeExplorerRequest(request: ExplorerRequest, signal: AbortSignal,
   progress: (profiles: Record<string, PlayerProfileSummary>) => void): Promise<ExplorerResult> {
   signal.throwIfAborted();
+  if (request.kind === 'leaderboard') return getSeasonLeaderboard(signal);
   if (request.kind === 'match') {
     const code = parseHistoryInput(request.input);
     return parseHistoricalMatch(await fetchJson<unknown>(`/api/matches/${code}`, signal), code);

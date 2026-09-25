@@ -87,6 +87,7 @@ function service(globals = {}) {
   const calls = [];
   const h = harness({ BEST_UMA_SCORE_VERSION: 17, RECENT_HISTORY_VERSION: 6, PROFILE_CACHE_TTL_MS: 900000,
     getCachedPlayerProfiles: async () => ({}), rememberCachedPlayerProfiles: async () => {},
+    getSeasonLeaderboard: async () => ({ activeSeasonId: 'S1', entries: [{ rank: 1, userId: '100000000000000099', displayName: 'Leader', rating: 1700, rd: 50, wins: 12, losses: 8 }] }),
     getApiCooldown: () => undefined, fetchJson: async path => { calls.push(path); return fixture; },
     ...globals });
   load(h, 'explorerTypes'); load(h, 'explorerService');
@@ -97,6 +98,16 @@ test('lookup validates request size, IDs, page, and scope before fetching', () =
   const { h } = service();
   for (const bad of [{ kind:'profiles', scope:'allTime', players:[{discordId:'../admin'}] }, { kind:'profiles',scope:'both',players:[] }, {kind:'search',input:'Fixture Query',page:0}, {kind:'match',input:'x'.repeat(301)}]) assert.throws(() => h.validateExplorerRequest(bad));
   assert.equal(h.validateExplorerRequest({kind:'profiles',scope:'allTime',players:[{discordId:'100000000000000099',profileUrl:'https://evil.example'}]}).players[0].profileUrl, 'https://drafter.uma.guide/players/100000000000000099');
+  assert.equal(h.validateExplorerRequest({kind:'leaderboard'}).kind, 'leaderboard');
+});
+
+test('leaderboard request returns season rows without directory search or profile enrichment', async () => {
+  const { h, calls } = service();
+  const result = await h.executeExplorerRequest({ kind: 'leaderboard' }, new AbortController().signal, () => {});
+  assert.equal(result.entries[0].rank, 1);
+  assert.equal(result.entries[0].userId, '100000000000000099');
+  assert.equal(result.entries[0].wins, 12);
+  assert.deepEqual(calls, []);
 });
 
 test('history and exact ID lookup do not invoke live enrichment or write live storage', async () => {
