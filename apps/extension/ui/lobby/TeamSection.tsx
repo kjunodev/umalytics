@@ -7,7 +7,7 @@ import { formatDecimal, formatNumber, formatPercent, formatRank, formatRecord } 
 import { TEAM_SLOT_COUNT, getPlayerKey } from '../common/roster';
 import type { PartyVisual } from '../common/partyVisuals';
 import { getPlayerPartyVisual, getTeamPartyVisuals } from '../common/partyVisuals';
-import { StatCell, getDisplayedProfileStats, getLookupDiscordId, getPlayerNote, getStatsMessage } from '../player/PlayerDetailScene';
+import { StatCell, getDisplayedProfileStats, getLookupDiscordId, getPlayerNote, getStatsMessage } from '../player/playerProfileDisplay';
 import { TopUmasList, UmaResolutionNote } from '../player/TopUmasList';
 import { IS_PRIVATE_BUILD } from '../scoutData';
 
@@ -227,11 +227,17 @@ function CardBody({
         <span className="card-estimated-note">Estimated from recent match history</span>
       ) : (
         <>
-          <TopUmasList topUmas={displayedProfile?.topUmas} playerName={player.displayName} emptyMessage={statsMessage} />
-          <UmaResolutionNote profile={displayedProfile} />
+          {statsMessage === 'Profile data has not loaded yet.' ? (
+            <div className="card-message-box"><span className="card-message-title">{statsMessage}</span></div>
+          ) : (
+            <>
+              <TopUmasList topUmas={displayedProfile?.topUmas} playerName={player.displayName} emptyMessage={statsMessage} />
+              <UmaResolutionNote profile={displayedProfile} />
+            </>
+          )}
         </>
       )}
-      {state !== 'estimated' && note !== undefined ? <p className="player-note">{note}</p> : null}
+      {state !== 'estimated' && note !== undefined && note !== statsMessage ? <p className="player-note">{note}</p> : null}
     </>
   );
 }

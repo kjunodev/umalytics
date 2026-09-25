@@ -57,8 +57,17 @@ export function parsePlayerSearch(value: unknown, page = 1): PlayerSearchResult 
 
 function mapSelection(value: Record<string, unknown>, team: TeamId, status: 'selected' | 'vetoed', order?: number): DraftMapSelection {
   const conditions = record(value.conditions);
+  const distance = typeof value.distance === 'number' && Number.isFinite(value.distance) ? value.distance : undefined;
+  const track = text(value.track);
+  const surface = text(value.surface);
+  const variant = text(value.variant);
+  const direction = text(value.direction);
+  const season = text(conditions.season);
+  const weather = text(conditions.weather);
+  const ground = text(conditions.ground);
   return { team, mapId: text(value.id), name: text(value.name) ?? text(value.track) ?? 'Unknown map', status, order,
-    details: [conditions.season, conditions.weather, conditions.ground].filter(part => typeof part === 'string').join(' • ') || undefined };
+    track, distance, surface, variant, direction, season, weather, ground,
+    details: [distance === undefined ? undefined : `${distance}m`, surface, variant, direction, season, weather, ground].filter(Boolean).join(' • ') || undefined };
 }
 
 /** Read explicit final team arrays, never walk available pools or replay vetoed picks as final picks. */
@@ -130,7 +139,9 @@ export function parseHistoricalMatch(value: unknown, requestedCode: string): His
   }
   if (Object.keys(record(saved.wildcardMap)).length) {
     const wildcard = mapSelection(record(saved.wildcardMap), 'team1', 'selected');
-    draft.tiebreakerMap = { name: wildcard.name, details: wildcard.details };
+    draft.tiebreakerMap = { name: wildcard.name, details: wildcard.details, track: wildcard.track,
+      distance: wildcard.distance, surface: wildcard.surface, variant: wildcard.variant,
+      direction: wildcard.direction, season: wildcard.season, weather: wildcard.weather, ground: wildcard.ground };
   }
   if (roster.players.length === 0) warnings.push('No player IDs were saved with this match. The completed draft is still available.');
   // No historical rating snapshots are passed into the current-profile renderer.

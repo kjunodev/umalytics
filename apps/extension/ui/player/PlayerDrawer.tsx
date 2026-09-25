@@ -7,7 +7,6 @@ import type {
   PrematchPlayer,
   PrematchTeam
 } from '@umalytics/shared';
-import './player.css';
 import './playerDrawer.css';
 import {
   cancelPlayerHistoryPageRequest,
@@ -19,7 +18,7 @@ import { getFallbackUmaImageUrl, UmaImage } from '../common/UmaImage';
 import { getNotableBadges } from '../common/badges';
 import { formatDecimal, formatNumber, formatPercent, formatRank, formatRecord } from '../common/format';
 import { getPlayerPartyVisual, getTeamPartyVisuals } from '../common/partyVisuals';
-import { BestUmaPortrait } from './BestUmasList';
+import { BestUmaPortrait } from './BestUmaPortrait';
 import {
   ProfileDataStatus,
   StatCell,
@@ -27,8 +26,8 @@ import {
   getLookupDiscordId,
   getPlayerNote,
   withDetailHistory
-} from './PlayerDetailScene';
-import { formatRecentResult, getRecentResultTone } from './RecentMatchesList';
+} from './playerProfileDisplay';
+import { formatRecentResult, getRecentResultTone } from './recentMatchFormat';
 
 const HISTORY_PAGE_SIZE = 5;
 const UMA_TABLE_ROWS = 5;
@@ -190,7 +189,7 @@ export function PlayerDrawer({
               {displayedTitle === undefined ? null : <span className="player-title">{displayedTitle}</span>}
             </div>
             <div className="player-rank-line">
-              {team === undefined ? null : (
+              {team === undefined || !inLobby ? null : (
                 <>
                   <span className="player-drawer-team-dot" aria-hidden="true" />
                   <span>{inLobby ? team.name ?? team.id : undefined}</span>
@@ -385,7 +384,7 @@ export function PlayerDrawer({
           </nav>
         </section>
 
-        {note === undefined ? null : <p className="player-note">{note}</p>}
+        {note === undefined || note === 'Profile data has not loaded yet.' ? null : <p className="player-note">{note}</p>}
       </aside>
     </>
   );

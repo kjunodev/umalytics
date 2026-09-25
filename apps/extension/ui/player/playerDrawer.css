@@ -11,6 +11,38 @@
   z-index: 10;
 }
 
+.best-uma-portrait {
+  align-items: center;
+  aspect-ratio: 1;
+  background: var(--bg-inset);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  display: flex;
+  flex-shrink: 0;
+  justify-content: center;
+  overflow: hidden;
+  width: 38px;
+}
+
+.best-uma-portrait img { display: block; height: 100%; object-fit: cover; width: 100%; }
+
+.recent-result {
+  align-items: center;
+  border-radius: var(--radius-pill);
+  display: inline-flex;
+  font-size: 9px;
+  font-weight: 800;
+  height: 17px;
+  justify-content: center;
+  padding: 0 5px;
+  text-transform: uppercase;
+}
+.recent-result.win { background: var(--status-win-bg); color: var(--status-win-fg); }
+.recent-result.loss { background: var(--status-loss-bg); color: var(--status-loss-fg); }
+.recent-result.pending { background: var(--border-default); color: var(--text-secondary); }
+.recent-match-code { color: var(--text-link-hover); font-size: 10px; font-weight: 800; text-decoration: none; }
+
 /* A fixed 600px panel over the lobby, not a scene replacement. It never
    scrolls as a whole: the Umas table and match history rows scroll inside
    their own fixed-height regions instead. */
@@ -65,9 +97,7 @@
 
 .player-drawer-title-row .player-title {
   font-style: italic;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 .player-drawer-team-dot {

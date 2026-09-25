@@ -3,7 +3,11 @@
   color: var(--text-primary);
   font-family: var(--font-body);
   margin: 0 auto;
-  min-height: 100vh;
+  height: 100vh;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   padding: 16px 20px 22px;
   width: min(100%, 1280px);
 }
@@ -23,6 +27,20 @@
   height: var(--header-height);
   padding: 0 16px;
   margin-bottom: 18px;
+  flex-shrink: 0;
+}
+
+.app-scene-area {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  overflow: hidden;
+}
+
+.app-scene-area > .team-list,
+.history-scene > .team-list {
+  height: 100%;
+  overflow-y: auto;
 }
 
 .app-logo {

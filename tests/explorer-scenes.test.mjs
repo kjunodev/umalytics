@@ -1,6 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { loadFunction, parseTsxModule, readModule } from './support/harness.mjs';
 
 const historySyntax = parseTsxModule('uiHistoryScene');
@@ -8,10 +11,11 @@ const draftSyntax = parseTsxModule('uiDraftScene');
 function sceneHarness(selected) {
   const c = vm.createContext({
     element: (type, props, ...children) => ({type, props, children}),
+    React: { Fragment: 'Fragment' },
     useState: () => [selected, value => { selected = value; }], useEffect: () => {},
     getTeamGroups: roster => Object.values(roster.teams),
     getSelectedPlayerContext: (teams, key) => { for (const team of teams) { const player = team.players.find(p => p.discordId === key); if (player) return {team, player}; } },
-    PlayerDetailScene: 'Details', DraftScene: 'Draft', UmaPlannerScene: 'Umas', TeamSection: 'Team',
+    PlayerDrawer: 'Drawer', DraftScene: 'Draft', UmaPlannerScene: 'Umas', TeamSection: 'Team',
   });
   loadFunction(c, historySyntax, 'HistoricalScene');
   return c.HistoricalScene;
@@ -29,7 +33,7 @@ test('History scenes reuse the live draft and Uma renderer with the historical r
 });
 test('History lobby shows both teams and pending profiles without inventing players', () => {
   const result = sceneHarness()({...props,scene:'lobby'});
-  const teams = result.children.flat();
+  const teams = result.children.flat()[0].children.flat();
   assert.equal(teams.length,2); assert.equal(teams[0].props.team,props.roster.teams.team1);
   assert.deepEqual(Array.from(teams[0].props.loadingDiscordIds),[player.discordId]);
   assert.equal(teams[1].props.team.players.length,0);
@@ -37,11 +41,13 @@ test('History lobby shows both teams and pending profiles without inventing play
 test('History details select a real roster member and do not replace Draft or Umas', () => {
   const render = sceneHarness(player.discordId);
   const result = render({...props,scene:'lobby'});
-  assert.equal(result.type,'Details'); assert.equal(result.props.player,player);
-  assert.equal(result.props.isProfileLoading,true);
+  const [lobby, drawer] = result.children.flat();
+  assert.equal(lobby.type,'section'); assert.equal(drawer.type,'Drawer');
+  assert.equal(drawer.props.player,player);
+  assert.equal(drawer.props.context.isProfileLoading,true);
   assert.equal(render({...props,scene:'draft'}).type,'Draft');
   assert.equal(render({...props,scene:'umas'}).type,'Umas');
-  assert.equal(sceneHarness('unknown')({...props,scene:'lobby'}).type,'section');
+  assert.equal(sceneHarness('unknown')({...props,scene:'lobby'}).children.flat().filter(Boolean).length,1);
 });
 test('Explorer styling cannot override shared draft tile geometry', () => {
   const explorerCss = readModule('uiHistoryCss');
@@ -52,9 +58,16 @@ test('Explorer styling cannot override shared draft tile geometry', () => {
   assert.match(baseCss,/scrollbar-gutter:\s*stable/);
 });
 
-test('draft.css never truncates names: no text-overflow: ellipsis anywhere, so long Uma/player/track names wrap and their rows grow instead of clipping', () => {
-  const draftCss = readModule('uiDraftCss');
-  assert.doesNotMatch(draftCss, /text-overflow:\s*ellipsis/);
+test('UI CSS never truncates names with ellipsis', () => {
+  const uiRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../apps/extension/ui');
+  function check(directory) {
+    for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+      const full = path.join(directory, entry.name);
+      if (entry.isDirectory()) check(full);
+      else if (entry.name.endsWith('.css')) assert.doesNotMatch(fs.readFileSync(full, 'utf8'), /text-overflow:\s*ellipsis/i, full);
+    }
+  }
+  check(uiRoot);
 });
 
 test('the races column shares its height between race cards so the column fills the panel instead of leaving a scrollbar, only falling back to internal scroll on very short windows', () => {
