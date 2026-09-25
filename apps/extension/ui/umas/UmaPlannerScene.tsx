@@ -14,15 +14,16 @@ import {
   getUmaCatalogOptions,
   getUmaExperience,
   getUmaHistoryCounts,
+  summarizeUmaExperience,
   sortUmaCatalogOptions
 } from './umaCatalog';
 
-export const DEFAULT_UMA_CATALOG_SORT_OPTION: UmaCatalogSortOption = { value: 'lobbyHits', label: 'Total hits' };
+export const DEFAULT_UMA_CATALOG_SORT_OPTION: UmaCatalogSortOption = { value: 'lobbyHits', label: 'Most played' };
 
 export const UMA_CATALOG_SORT_OPTIONS: UmaCatalogSortOption[] = [
   DEFAULT_UMA_CATALOG_SORT_OPTION,
-  { value: 'releaseOrder', label: 'Release order' },
-  { value: 'alphabetical', label: 'Alphabetical' }
+  { value: 'releaseOrder', label: 'Release' },
+  { value: 'alphabetical', label: 'A–Z' }
 ];
 
 export const UMA_CATALOG_HIT_SCOPE_OPTIONS: UmaCatalogHitScopeOption[] = [
@@ -58,11 +59,6 @@ export function UmaPlannerScene({
   );
   const [selectedUmaId, setSelectedUmaId] = useState<string | undefined>();
   const selectedUma = filteredCatalog.find((uma) => uma.umaId === selectedUmaId) ?? filteredCatalog[0];
-  const lobbyHitTotal = useMemo(
-    () => Array.from(historyCounts.values()).reduce((total, count) => total + count, 0),
-    [historyCounts]
-  );
-  const hitScopeLabel = getHitScopeLabel(hitScope);
 
   useEffect(() => {
     if (filteredCatalog.length === 0) {
@@ -82,25 +78,19 @@ export function UmaPlannerScene({
   return (
     <section className="uma-planner-scene" aria-label="Uma planner">
       <div className="uma-planner-layout">
-        <UmaPlanningPanel
-          selectedUma={selectedUma}
-          roster={roster}
-          profiles={profiles}
-          statsScope={statsScope}
-        />
-
         <section className="uma-catalog-panel" aria-label="Uma catalog">
           <div className="uma-catalog-toolbar">
             <div className="uma-catalog-heading">
               <strong>Uma Catalog</strong>
               <span>
-                {filteredCatalog.length} {searchQuery.trim().length === 0 ? 'Umas' : 'matches'} - {lobbyHitTotal} {hitScopeLabel} hits
+                {filteredCatalog.length} {searchQuery.trim().length === 0 ? 'Umas' : 'matches'}
               </span>
             </div>
             <div className="uma-catalog-controls">
               <label className="uma-search" aria-label="Search Umas">
                 <input
                   type="search"
+                  aria-label="Search Umas"
                   value={searchQuery}
                   placeholder="Search Umas"
                   onChange={(event) => {
@@ -118,6 +108,7 @@ export function UmaPlannerScene({
                       key={option.value}
                       type="button"
                       className={option.value === hitScope ? 'active' : ''}
+                      aria-pressed={option.value === hitScope}
                       onClick={() => {
                         setHitScope(option.value);
                       }}
@@ -148,6 +139,12 @@ export function UmaPlannerScene({
             </div>
           )}
         </section>
+        <UmaPlanningPanel
+          selectedUma={selectedUma}
+          roster={roster}
+          profiles={profiles}
+          statsScope={statsScope}
+        />
       </div>
     </section>
   );
@@ -160,57 +157,19 @@ export function UmaCatalogSortMenu({
   value: UmaCatalogSortMode;
   onChange: (value: UmaCatalogSortMode) => void;
 }) {
-  const [isOpen, setIsOpen] = useState(false);
-  const selectedOption = UMA_CATALOG_SORT_OPTIONS.find((option) => option.value === value)
-    ?? DEFAULT_UMA_CATALOG_SORT_OPTION;
-
   return (
-    <div
-      className={isOpen ? 'uma-sort-menu open' : 'uma-sort-menu'}
-      onBlur={(event) => {
-        const nextFocusedElement = event.relatedTarget instanceof Node ? event.relatedTarget : null;
-
-        if (!event.currentTarget.contains(nextFocusedElement)) {
-          setIsOpen(false);
-        }
-      }}
-      onKeyDown={(event) => {
-        if (event.key === 'Escape') {
-          setIsOpen(false);
-        }
-      }}
-    >
-      <button
-        type="button"
-        className="uma-sort-trigger"
-        aria-haspopup="listbox"
-        aria-expanded={isOpen}
-        onClick={() => {
-          setIsOpen((current) => !current);
-        }}
-      >
-        <span>{selectedOption.label}</span>
-        <span className="uma-sort-chevron" aria-hidden="true" />
-      </button>
-      {isOpen ? (
-        <div className="uma-sort-options" role="listbox" aria-label="Sort Uma catalog">
-          {UMA_CATALOG_SORT_OPTIONS.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              className={option.value === value ? 'selected' : ''}
-              role="option"
-              aria-selected={option.value === value}
-              onClick={() => {
-                onChange(option.value);
-                setIsOpen(false);
-              }}
-            >
-              {option.label}
-            </button>
-          ))}
-        </div>
-      ) : null}
+    <div className="uma-sort-toggle" role="group" aria-label="Sort Uma catalog">
+      {UMA_CATALOG_SORT_OPTIONS.map((option) => (
+        <button
+          key={option.value}
+          type="button"
+          aria-pressed={value === option.value}
+          className={value === option.value ? 'active' : ''}
+          onClick={() => onChange(option.value)}
+        >
+          {option.label}
+        </button>
+      ))}
     </div>
   );
 }
@@ -231,14 +190,17 @@ export function UmaCatalogButton({
       type="button"
       className={isSelected ? 'uma-catalog-button selected' : 'uma-catalog-button'}
       aria-pressed={isSelected}
-      title={uma.name}
       onClick={() => {
         onSelect(uma.umaId);
       }}
     >
       <span className="uma-catalog-portrait">
         <UmaImage imageUrl={uma.imageUrl} name={uma.name} />
-        {historyCount > 0 ? <span className="uma-catalog-count">{historyCount}</span> : null}
+        {historyCount > 0 ? (
+          <span className="uma-catalog-count" aria-label={`${historyCount} ${historyCount === 1 ? 'player' : 'players'} played`}>
+            {historyCount}
+          </span>
+        ) : null}
       </span>
       <span className="uma-catalog-name">{uma.name}</span>
     </button>
@@ -266,22 +228,9 @@ export function UmaPlanningPanel({
 
   const action = getUmaCatalogAction(selectedUma);
   const teams = getTeamGroups(roster);
-  const totalExperience = getUmaExperience(action, roster.players, profiles, statsScope).length;
+  const experience = getUmaExperience(action, roster.players, profiles, statsScope);
+  const summary = summarizeUmaExperience(experience);
   const scopeLabel = formatStatsScopeShortLabel(statsScope);
-  const teamSummaries = TEAM_IDS.map((teamId) => {
-    const team = teams.find((team) => team.id === teamId);
-    const players = team?.players ?? [];
-    const historyCount = players.filter((player) =>
-      findScopedUmaEntry(action, profiles[player.discordId], statsScope) !== undefined
-    ).length;
-
-    return {
-      id: teamId,
-      name: team?.name ?? (teamId === 'team1' ? 'Team 1' : 'Team 2'),
-      historyCount,
-      playerCount: players.length
-    };
-  });
 
   return (
     <section className="uma-planning-panel" aria-label={`${selectedUma.name} lobby history`}>
@@ -292,27 +241,15 @@ export function UmaPlanningPanel({
         <div className="uma-planning-title">
           <h3>{selectedUma.name}</h3>
           <p>
-            {totalExperience} {totalExperience === 1 ? 'player' : 'players'} with {scopeLabel} history
+            {experience.length} {experience.length === 1 ? 'player' : 'players'} with {scopeLabel} history
           </p>
         </div>
-
-        <div className="uma-planning-summary" aria-label={`${selectedUma.name} lobby history summary`}>
-          <span>
-            <strong>{totalExperience}/{roster.players.length}</strong>
-            <small>Lobby players</small>
-          </span>
-          <span>
-            <strong>{scopeLabel}</strong>
-            <small>Stat scope</small>
-          </span>
-          {teamSummaries.map((team) => (
-            <span key={team.id}>
-              <strong>{team.historyCount}/{team.playerCount}</strong>
-              <small>{team.name}</small>
-            </span>
-          ))}
-        </div>
       </header>
+      <div className="uma-planning-summary" aria-label={`${selectedUma.name} lobby stats`}>
+        <span><small>Lobby games</small><strong>{summary.games}</strong></span>
+        <span><small>Lobby WR</small><strong>{formatPercent(summary.winRate)}</strong></span>
+        <span><small>Lobby PPG</small><strong>{formatDecimal(summary.pointsPerGame)}</strong></span>
+      </div>
 
       <div className="uma-planning-team-grid">
         {TEAM_IDS.map((teamId) => (
@@ -326,7 +263,6 @@ export function UmaPlanningPanel({
           />
         ))}
       </div>
-
     </section>
   );
 }
@@ -357,18 +293,21 @@ export function UmaPlanningTeamPanel({
           {historyCount}/{team?.players.length ?? 0} with {formatStatsScopeShortLabel(statsScope)} history
         </p>
       </header>
-      <ol className="uma-planning-slots">
-        {players.map((player, index) => (
-          <UmaPlanningPlayerSlot
-            key={player === undefined ? `${fallbackTeamId}:empty:${index}` : getPlayerKey(player)}
-            player={player}
-            action={action}
-            profile={player === undefined ? undefined : profiles[player.discordId]}
-            statsScope={statsScope}
-            slotNumber={index + 1}
-          />
-        ))}
-      </ol>
+      <table className="uma-planning-table" aria-label={`${team?.name ?? (fallbackTeamId === 'team1' ? 'Team 1' : 'Team 2')} Uma stats`}>
+        <thead><tr><th scope="col">Player</th><th scope="col">GP</th><th scope="col">WR</th><th scope="col">PPG</th></tr></thead>
+        <tbody>
+          {players.map((player, index) => (
+            <UmaPlanningPlayerSlot
+              key={player === undefined ? `${fallbackTeamId}:empty:${index}` : getPlayerKey(player)}
+              player={player}
+              action={action}
+              profile={player === undefined ? undefined : profiles[player.discordId]}
+              statsScope={statsScope}
+              slotNumber={index + 1}
+            />
+          ))}
+        </tbody>
+      </table>
     </article>
   );
 }
@@ -388,37 +327,28 @@ export function UmaPlanningPlayerSlot({
 }) {
   if (player === undefined) {
     return (
-      <li className="uma-planning-player empty">
-        <strong>Open slot</strong>
-        <span>Slot {slotNumber}</span>
-      </li>
+      <tr className="uma-planning-player empty">
+        <th scope="row">Open slot {slotNumber}</th>
+        <td>—</td><td>—</td><td>—</td>
+      </tr>
     );
   }
 
   const uma = findScopedUmaEntry(action, profile, statsScope);
 
   return (
-    <li className={uma === undefined ? 'uma-planning-player no-history' : 'uma-planning-player'}>
-      <strong>{profile?.displayName ?? player.displayName}</strong>
+    <tr className={uma === undefined ? 'uma-planning-player no-history' : 'uma-planning-player'}>
+      <th scope="row">{profile?.displayName ?? player.displayName}</th>
       {uma === undefined ? (
-        <span>{missingUmaHistoryLabel(profile, statsScope)}</span>
+        <td colSpan={3} className="uma-planning-unavailable">{missingUmaHistoryLabel(profile, statsScope)}</td>
       ) : (
-        <span className="uma-planning-stats">
-          <span>
-            <small>Games</small>
-            <b>{uma.matches}</b>
-          </span>
-          <span>
-            <small>PPG</small>
-            <b>{formatDecimal(uma.pointsPerGame)}</b>
-          </span>
-          <span>
-            <small>Win rate</small>
-            <b>{formatPercent(uma.winRate)}</b>
-          </span>
-        </span>
+        <>
+          <td>{uma.matches}</td>
+          <td>{formatPercent(uma.winRate)}</td>
+          <td>{formatDecimal(uma.pointsPerGame)}</td>
+        </>
       )}
-    </li>
+    </tr>
   );
 }
 
