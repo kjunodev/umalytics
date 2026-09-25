@@ -144,6 +144,14 @@ test('the details drawer is a fixed 600px overlay, not a page it never scrolls a
   assert.match(css, /\.player-drawer\s*\{[^}]*overflow:\s*hidden/s);
 });
 
+test('the history region can shrink and the pager stays pinned, so short viewports never clip the pager', () => {
+  const css = readModule('uiPlayerDrawerCss');
+  assert.match(css, /\.drawer-history\s*\{[^}]*min-height:\s*0/s,
+    'the history section must be allowed to shrink below its content size in a flex column');
+  assert.match(css, /\.drawer-pager\s*\{[^}]*flex-shrink:\s*0/s,
+    'the pager must never be squeezed out when the drawer runs short on vertical space');
+});
+
 test('the Umas panel no longer prints the long history-derived paragraph; it renders nothing for that case', () => {
   const c = vm.createContext({
     element: (type, props, ...children) => ({ type, props, children })
@@ -225,7 +233,7 @@ function drawerHarness() {
     getLookupDiscordId: (p) => p.discordId, getPlayerNote: () => undefined,
     getDisplayedProfileStats: (profile) => profile,
     formatRank: () => '#1', formatRecord: () => '-', formatPercent: () => '-', formatDecimal: () => '-', formatNumber: () => '-',
-    HISTORY_PAGE_SIZE: 5, UMA_TABLE_ROWS: 5, PAGER_SLOT_COUNT: 7,
+    HISTORY_PAGE_SIZE: 5, HISTORY_API_PAGE_SIZE: 20, UMA_TABLE_ROWS: 5, PAGER_SLOT_COUNT: 7,
     UMA_SORT_COLUMNS: [
       { key: 'matches', label: 'GP' }, { key: 'winRate', label: 'Win' },
       { key: 'pointsPerGame', label: 'PPG' }, { key: 'performanceScore', label: 'Score' }
@@ -239,6 +247,8 @@ function drawerHarness() {
   loadFunction(c, playerDrawerSyntax, 'umaSortValue');
   loadFunction(c, playerDrawerSyntax, 'formatUmaColumnValue');
   loadFunction(c, playerDrawerSyntax, 'getPagerSlots');
+  loadFunction(c, playerDrawerSyntax, 'apiPageForPagerPage');
+  loadFunction(c, playerDrawerSyntax, 'apiPageRowOffset');
   loadFunction(c, playerDrawerSyntax, 'PlayerDrawer');
   loadFunction(c, playerDrawerSyntax, 'EstimatedChip');
   return c;

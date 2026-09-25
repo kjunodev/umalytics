@@ -215,7 +215,8 @@
 }
 
 .drawer-history {
-  flex-grow: 1;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .drawer-section-head {
@@ -387,6 +388,8 @@
 .drawer-history-rows {
   display: flex;
   flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .drawer-history-row,
@@ -402,6 +405,52 @@
 .drawer-history-rating {
   color: var(--text-muted);
   font-size: 12px;
+}
+
+.drawer-history-points {
+  align-items: center;
+  display: inline-flex;
+  gap: 4px;
+  justify-content: flex-end;
+}
+
+.mvp-star {
+  color: var(--accent-gold);
+  cursor: help;
+  display: inline-flex;
+  position: relative;
+}
+
+.mvp-star:focus-visible {
+  outline: 2px solid var(--accent-blue);
+  outline-offset: 2px;
+}
+
+.mvp-star-tooltip {
+  background: var(--bg-page);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  bottom: calc(100% + 6px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  opacity: 0;
+  padding: 4px 8px;
+  pointer-events: none;
+  position: absolute;
+  right: 0;
+  text-align: left;
+  transition: opacity 0.12s;
+  visibility: hidden;
+  white-space: nowrap;
+  z-index: 50;
+}
+
+.mvp-star:hover .mvp-star-tooltip,
+.mvp-star:focus-visible .mvp-star-tooltip {
+  opacity: 1;
+  visibility: visible;
 }
 
 .drawer-pager {
@@ -459,5 +508,98 @@
 @media (max-width: 700px) {
   .player-drawer {
     width: 100vw;
+  }
+}
+
+/* High OS display scaling (125-150%) shrinks the CSS viewport to about
+   1280x720 or less; compact fixed-height regions so the pager stays
+   visible. */
+@media (max-height: 820px) {
+  .player-drawer {
+    gap: 6px;
+    padding: 8px 22px 2px;
+  }
+
+  .player-drawer-identity {
+    gap: 3px;
+  }
+
+  .player-drawer-title-row h2 {
+    font-size: 19px;
+  }
+
+  .player-drawer .player-badge-row {
+    max-height: 18px;
+    min-height: 18px;
+  }
+
+  .player-drawer .profile-data-status {
+    margin-top: 0;
+    min-height: 16px;
+    padding: 2px 6px;
+  }
+
+  .drawer-stat-panel .stat-cell {
+    min-height: 32px;
+    padding: 3px 6px;
+  }
+
+  .drawer-section-head {
+    min-height: 20px;
+  }
+
+  .uma-table-head .th,
+  .uma-table-head .lbl {
+    min-height: 20px;
+  }
+
+  .uma-table-rows {
+    height: 150px;
+  }
+
+  .uma-table-row {
+    height: 30px;
+  }
+
+  .drawer-history-row,
+  .drawer-history-row-skel {
+    height: 38px;
+    min-height: 38px;
+  }
+}
+
+/* A second, tighter tier for even shorter viewports: also shrink the
+   header block and stat strip, not just the two scrolling regions. */
+@media (max-height: 700px) {
+  .player-drawer {
+    gap: 2px;
+  }
+
+  .drawer-stat-panel .stat-cell {
+    min-height: 20px;
+    padding: 1px 6px;
+  }
+
+  .drawer-section-head {
+    min-height: 14px;
+  }
+
+  .uma-table-head .th,
+  .uma-table-head .lbl {
+    min-height: 16px;
+  }
+
+  .uma-table-rows {
+    height: 120px;
+  }
+
+  .uma-table-row {
+    height: 24px;
+  }
+
+  .drawer-history-row,
+  .drawer-history-row-skel {
+    height: 34px;
+    min-height: 34px;
   }
 }

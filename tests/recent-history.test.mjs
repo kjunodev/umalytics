@@ -20,7 +20,7 @@ function harness(privateBuild = false) {
     getFallbackUmaImageUrl: () => undefined,
     getPagerSlots: (page, total) => Array.from({length:total},(_,i)=>i+1),
     umaSortValue: () => 0, formatUmaColumnValue: () => '-',
-    HISTORY_PAGE_SIZE: 5, UMA_TABLE_ROWS: 5, PAGER_SLOT_COUNT: 7,
+    HISTORY_PAGE_SIZE: 5, HISTORY_API_PAGE_SIZE: 20, UMA_TABLE_ROWS: 5, PAGER_SLOT_COUNT: 7,
     UMA_SORT_COLUMNS: [{key:'matches',label:'GP'},{key:'winRate',label:'Win'},{key:'pointsPerGame',label:'PPG'},{key:'performanceScore',label:'Score'}],
     React: { Fragment: 'Fragment' }, filterSnapshotForBuild: x => x,
     filterProfileStatesForDisplay: x => x, getLoadingDiscordIdsForDisplay: () => [],
@@ -30,6 +30,8 @@ function harness(privateBuild = false) {
   }
   loadFunction(c, playerDisplaySyntax, 'getDisplayedProfileStats');
   loadFunction(c, playerDisplaySyntax, 'withDetailHistory');
+  loadFunction(c, playerDrawerSyntax, 'apiPageForPagerPage');
+  loadFunction(c, playerDrawerSyntax, 'apiPageRowOffset');
   loadFunction(c, playerDrawerSyntax, 'PlayerDrawer');
   loadFunction(c, teamSectionSyntax, 'getCardProfile');
   loadFunction(c, scoutDataSyntax, 'isDisplayableStoredProfile');
@@ -145,7 +147,7 @@ test('new season and another player cannot inherit previous scoped history; load
   assert.equal(c.mergeProfileScopes(old,other).recentMatches.length,0);
   const many=profile('allTime',Array.from({length:8},(_,i)=>({...entry,matchId:`FIX00${i}`})));
   const runtime=drawerRuntime(c,many);
-  c.sendPlayerHistoryPageRequest=async(_,__,page)=>({page,total:8,matches:many.recentMatches.slice((page-1)*5,page*5)});
+  c.sendPlayerHistoryPageRequest=async(_,__,page)=>({page,total:8,matches:many.recentMatches.slice((page-1)*20,page*20)});
   c.cancelPlayerHistoryPageRequest=async()=>{};
   c.sendPlayerProfileRequest=async()=>({title:null});
   c.cancelPlayerProfileRequest=async()=>{};
@@ -193,14 +195,15 @@ test('legacy team caches stay displayable but must refresh missing history state
   assert.equal(harness(false).hasCurrentHistoryState(old,'allTime'),true);
 });
 
-test('opening drawer requests page one, pager requests page two, and closing cancels pending work',async()=>{
+test('opening drawer requests page one, pager pages 2-4 reuse it, page 5 requests API page two, and closing cancels pending work',async()=>{
   const c=harness(true);
   const requests=[], cancelled=[], profileRequests=[], profileCancelled=[];
   const badgeProfiles=[];
   c.getNotableBadges=value=>{badgeProfiles.push(value);return [];};
+  const page1Matches=Array.from({length:20},(_,i)=>({...entry,matchId:`P1-${i+1}`}));
   c.sendPlayerHistoryPageRequest=(id,scope,page,requestId)=>{
     requests.push({id,scope,page,requestId});
-    return page===1 ? Promise.resolve({page,total:21,matches:[entry],summary:{wins:1}}) : new Promise(()=>{});
+    return page===1 ? Promise.resolve({page,total:21,matches:page1Matches,summary:{wins:1}}) : new Promise(()=>{});
   };
   c.cancelPlayerHistoryPageRequest=async requestId=>{cancelled.push(requestId);};
   c.sendPlayerProfileRequest=(id,requestId)=>{profileRequests.push({id,requestId});return new Promise(()=>{});};
@@ -214,23 +217,74 @@ test('opening drawer requests page one, pager requests page two, and closing can
   await new Promise(resolve=>setImmediate(resolve));
   const rendered=runtime.render();
   assert.equal(requests[0].page,1);
-  assert.equal(findAll(rendered,node=>node.props?.className==='drawer-history-row').length,1);
-  assert(find(rendered,node=>node.type==='a' && node.props.href.endsWith('/FIX001')));
-  assert.equal(badgeProfiles.at(-1).recentForm.matches,1);
+  assert.equal(findAll(rendered,node=>node.props?.className==='drawer-history-row').length,5);
+  assert(find(rendered,node=>node.type==='a' && node.props.href.endsWith('/P1-1')));
+  assert.equal(badgeProfiles.at(-1).recentForm.matches,5);
   assert.equal(badgeProfiles.at(-1).historySummary.wins,1);
   assert.equal(profileRequests.length,1,'opening drawer requests the profile once, alongside the first history page');
   assert.equal(profileRequests[0].id,p.discordId);
-  const detail=c.withDetailHistory(p,[entry],21,{wins:1});
-  assert.equal(detail.recentMatches[0].matchId,'FIX001');
-  assert.equal(detail.recentForm.matches,1);
+  const detail=c.withDetailHistory(p,page1Matches,21,{wins:1});
+  assert.equal(detail.recentMatches[0].matchId,'P1-1');
+  assert.equal(detail.recentForm.matches,5);
   assert.equal(detail.historySummary.wins,1);
   assert.equal(detail.matches,p.matches);
-  find(rendered,node=>node.props?.['aria-label']==='Page 2').props.onClick();
-  assert.equal(requests[1].page,2);
+
+  for (const pagerPage of [2,3,4]) {
+    find(runtime.render(),node=>node.props?.['aria-label']===`Page ${pagerPage}`).props.onClick();
+  }
+  assert.equal(requests.length,1,'pager pages 2-4 stay within the cached API page 1 response and request nothing new');
+  const page4Rendered=runtime.render();
+  assert.equal(findAll(page4Rendered,node=>node.props?.className==='drawer-history-row').length,5);
+  assert(find(page4Rendered,node=>node.type==='a' && node.props.href.endsWith('/P1-16')));
+  assert(find(page4Rendered,node=>node.type==='a' && node.props.href.endsWith('/P1-20')));
+
+  find(runtime.render(),node=>node.props?.['aria-label']==='Page 5').props.onClick();
+  assert.equal(requests[1].page,2,'page 5 crosses into API page two');
   closeHistory();
   assert.deepEqual(cancelled,[requests[1].requestId]);
   closeProfile();
   assert.deepEqual(profileCancelled,[profileRequests[0].requestId]);
+});
+
+test('exactly 5 rows render from a 20-row API response, page 4 shows matches 16-20, and page 5 fetches API page two for matches 21-25',async()=>{
+  const c=harness();
+  const page1Matches=Array.from({length:20},(_,i)=>({...entry,matchId:`M${String(i+1).padStart(2,'0')}`}));
+  const page2Matches=Array.from({length:5},(_,i)=>({...entry,matchId:`M${String(i+21).padStart(2,'0')}`}));
+  const requestedApiPages=[];
+  c.sendPlayerHistoryPageRequest=(id,scope,page)=>{
+    requestedApiPages.push(page);
+    if (page===1) return Promise.resolve({page,total:25,matches:page1Matches});
+    if (page===2) return Promise.resolve({page,total:25,matches:page2Matches});
+    return new Promise(()=>{});
+  };
+  c.cancelPlayerHistoryPageRequest=async()=>{};
+  c.sendPlayerProfileRequest=()=>new Promise(()=>{});
+  c.cancelPlayerProfileRequest=async()=>{};
+  const runtime=drawerRuntime(c,profile());
+  runtime.render();
+  runtime.effects[0]();
+  await new Promise(resolve=>setImmediate(resolve));
+
+  const page1=runtime.render();
+  assert.equal(findAll(page1,node=>node.props?.className==='drawer-history-row').length,5);
+  assert(find(page1,node=>node.type==='a' && node.props.href.endsWith('/M01')));
+  assert(find(page1,node=>node.type==='a' && node.props.href.endsWith('/M05')));
+
+  find(page1,node=>node.props?.['aria-label']==='Page 4').props.onClick();
+  await new Promise(resolve=>setImmediate(resolve));
+  const page4=runtime.render();
+  assert.equal(findAll(page4,node=>node.props?.className==='drawer-history-row').length,5);
+  assert(find(page4,node=>node.type==='a' && node.props.href.endsWith('/M16')));
+  assert(find(page4,node=>node.type==='a' && node.props.href.endsWith('/M20')));
+  assert.deepEqual(requestedApiPages,[1],'page 4 stays within the cached API page 1 response');
+
+  find(page4,node=>node.props?.['aria-label']==='Page 5').props.onClick();
+  await new Promise(resolve=>setImmediate(resolve));
+  const page5=runtime.render();
+  assert.equal(findAll(page5,node=>node.props?.className==='drawer-history-row').length,5);
+  assert(find(page5,node=>node.type==='a' && node.props.href.endsWith('/M21')));
+  assert(find(page5,node=>node.type==='a' && node.props.href.endsWith('/M25')));
+  assert.deepEqual(requestedApiPages,[1,2],'page 5 crosses into API page two and fetches it once');
 });
 
 test('a title already present on the profile summary is used without a profile request',async()=>{
