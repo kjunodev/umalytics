@@ -1,5 +1,6 @@
 .uma-planner-scene {
-  height: calc(100dvh - 116px);
+  /* Phase 4 replaces this viewport offset with the shell flex layout. */
+  height: calc(100vh - 116px);
   min-height: 0;
   overflow: hidden;
 }

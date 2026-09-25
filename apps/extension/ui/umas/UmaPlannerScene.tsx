@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import './umas.css';
 import type { DraftUmaAction, PlayerProfileSummary, PlayerStatsScope, PrematchPlayer, PrematchRoster, PrematchTeam, TeamId } from '@umalytics/shared';
 import { missingUmaHistoryLabel } from '../../profiles/profileAvailability';
@@ -59,39 +59,6 @@ export function UmaPlannerScene({
   );
   const [selectedUmaId, setSelectedUmaId] = useState<string | undefined>();
   const selectedUma = filteredCatalog.find((uma) => uma.umaId === selectedUmaId) ?? filteredCatalog[0];
-  const sceneRef = useRef<HTMLElement>(null);
-
-  useLayoutEffect(() => {
-    const scene = sceneRef.current;
-    if (scene === null) return;
-    let pendingFrame: number | undefined;
-    const fitScene = () => {
-      if (scene.getClientRects().length === 0) return;
-      const shell = scene.closest('.app-shell');
-      const bottomPadding = shell === null ? 0 : parseFloat(getComputedStyle(shell).paddingBottom);
-      const top = scene.getBoundingClientRect().top + window.scrollY;
-      const height = `${Math.max(0, window.innerHeight - top - bottomPadding)}px`;
-      if (scene.style.height !== height) scene.style.height = height;
-    };
-    const observer = new ResizeObserver(() => {
-      if (pendingFrame !== undefined) return;
-      pendingFrame = window.requestAnimationFrame(() => {
-        pendingFrame = undefined;
-        fitScene();
-      });
-    });
-    for (let parent = scene.parentElement; parent !== null; parent = parent.parentElement) {
-      observer.observe(parent);
-      for (const sibling of parent.children) observer.observe(sibling);
-    }
-    window.addEventListener('resize', fitScene);
-    fitScene();
-    return () => {
-      observer.disconnect();
-      if (pendingFrame !== undefined) window.cancelAnimationFrame(pendingFrame);
-      window.removeEventListener('resize', fitScene);
-    };
-  }, []);
 
   useEffect(() => {
     if (filteredCatalog.length === 0) {
@@ -109,7 +76,7 @@ export function UmaPlannerScene({
   }, [filteredCatalog, selectedUmaId]);
 
   return (
-    <section ref={sceneRef} className="uma-planner-scene" aria-label="Uma planner">
+    <section className="uma-planner-scene" aria-label="Uma planner">
       <div className="uma-planner-layout">
         <section className="uma-catalog-panel" aria-label="Uma catalog">
           <div className="uma-catalog-toolbar">

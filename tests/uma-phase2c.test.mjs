@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
-import { loadModule } from '../../../../tests/support/harness.mjs';
+import { loadModule } from './support/harness.mjs';
 
 function catalogContext() {
   const context = vm.createContext({
