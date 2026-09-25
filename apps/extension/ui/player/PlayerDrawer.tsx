@@ -30,6 +30,7 @@ import {
 import { formatRecentResult, getRecentResultTone } from './recentMatchFormat';
 
 const HISTORY_PAGE_SIZE = 5;
+const HISTORY_API_PAGE_SIZE = 20;
 const UMA_TABLE_ROWS = 5;
 const PAGER_SLOT_COUNT = 7;
 
@@ -50,15 +51,29 @@ export interface PlayerDrawerContext {
   inLobby?: boolean;
 }
 
-interface HistoryPageState {
-  key: string;
-  page: number;
+interface HistoryApiPage {
   total: number;
   matches: PlayerRecentMatchSummary[];
-  firstPageMatches?: PlayerRecentMatchSummary[];
   summary?: PlayerProfileSummary['historySummary'];
+}
+
+interface HistoryState {
+  key: string;
+  pagerPage: number;
+  apiPages: Record<number, HistoryApiPage>;
   loading: boolean;
   error?: string;
+}
+
+// The API paginates in blocks of 20; the pager paginates in blocks of 5.
+// Map a pager page to the API page that contains it, and to that page's
+// row offset, so moving within the same 20-row block never refetches.
+function apiPageForPagerPage(pagerPage: number): number {
+  return Math.floor(((pagerPage - 1) * HISTORY_PAGE_SIZE) / HISTORY_API_PAGE_SIZE) + 1;
+}
+
+function apiPageRowOffset(pagerPage: number): number {
+  return ((pagerPage - 1) * HISTORY_PAGE_SIZE) % HISTORY_API_PAGE_SIZE;
 }
 
 // 600px right drawer over the lobby. Reusable for the Players page (Phase 3):
@@ -86,10 +101,11 @@ export function PlayerDrawer({
   const displayName = profile?.displayName ?? player.displayName;
   const historyKey = `${player.discordId}:${statsScope}`;
   const pendingHistoryRequests = useRef(new Set<string>());
-  const [historyPage, setHistoryPage] = useState<HistoryPageState>({ key: historyKey, page: 0, total: 0, matches: [], loading: false });
-  const historyLoaded = historyPage.key === historyKey && historyPage.page > 0;
-  const detailProfile = historyLoaded
-    ? withDetailHistory(displayedProfile, historyPage.firstPageMatches ?? [], historyPage.total, historyPage.summary)
+  const [historyState, setHistoryState] = useState<HistoryState>({ key: historyKey, pagerPage: 0, apiPages: {}, loading: false });
+  const historyLoaded = historyState.key === historyKey && historyState.pagerPage > 0;
+  const historyFirstApiPage = historyState.apiPages[1];
+  const detailProfile = historyLoaded && historyFirstApiPage !== undefined
+    ? withDetailHistory(displayedProfile, historyFirstApiPage.matches, historyFirstApiPage.total, historyFirstApiPage.summary)
     : displayedProfile;
   const notableBadges = getNotableBadges(
     detailProfile === undefined ? undefined : historyLoaded ? detailProfile : { ...detailProfile, recentForm: undefined }
@@ -101,23 +117,27 @@ export function PlayerDrawer({
   const [sortKey, setSortKey] = useState<UmaSortKey>('pointsPerGame');
   const [showAllUmas, setShowAllUmas] = useState(false);
 
-  async function loadHistoryPage(page: number): Promise<void> {
+  async function loadHistoryPage(pagerPage: number): Promise<void> {
     if (discordId === undefined) return;
+    const apiPage = apiPageForPagerPage(pagerPage);
+    const cached = historyState.key === historyKey ? historyState.apiPages[apiPage] : undefined;
+    if (cached !== undefined) {
+      setHistoryState((previous) => (previous.key === historyKey ? { ...previous, pagerPage } : previous));
+      return;
+    }
     const requestId = crypto.randomUUID();
     pendingHistoryRequests.current.add(requestId);
-    setHistoryPage((previous) => (previous.key === historyKey ? { ...previous, loading: true, error: undefined } : previous));
+    setHistoryState((previous) => (previous.key === historyKey ? { ...previous, loading: true, error: undefined } : previous));
     try {
-      const result = await sendPlayerHistoryPageRequest(discordId, statsScope, page, requestId);
-      setHistoryPage((previous) =>
+      const result = await sendPlayerHistoryPageRequest(discordId, statsScope, apiPage, requestId);
+      setHistoryState((previous) =>
         previous.key === historyKey ? {
-          key: historyKey, page, total: result.total,
-          summary: page === 1 ? result.summary : previous.summary,
-          firstPageMatches: page === 1 ? result.matches : previous.firstPageMatches,
-          matches: result.matches, loading: false
+          ...previous, pagerPage, loading: false,
+          apiPages: { ...previous.apiPages, [apiPage]: { total: result.total, matches: result.matches, summary: result.summary } }
         } : previous
       );
     } catch (error) {
-      setHistoryPage((previous) =>
+      setHistoryState((previous) =>
         previous.key === historyKey
           ? { ...previous, loading: false, error: error instanceof Error ? error.message : 'History unavailable.' }
           : previous
@@ -128,7 +148,7 @@ export function PlayerDrawer({
   }
 
   useEffect(() => {
-    setHistoryPage({ key: historyKey, page: 0, total: 0, matches: [], loading: true });
+    setHistoryState({ key: historyKey, pagerPage: 0, apiPages: {}, loading: true });
     setShowAllUmas(false);
     if (discordId !== undefined) void loadHistoryPage(1);
     return () => {
@@ -170,12 +190,15 @@ export function PlayerDrawer({
   const umaColumns = UMA_SORT_COLUMNS.filter((column) => column.key !== 'performanceScore' || hasScoreColumn);
   const umaGridStyle = { gridTemplateColumns: `minmax(0, 1fr) ${umaColumns.map(() => '52px').join(' ')}` };
 
-  const historyRows = historyLoaded ? historyPage.matches : [];
+  const totalMatches = historyLoaded && historyFirstApiPage !== undefined ? historyFirstApiPage.total : 0;
+  const totalPages = Math.max(1, Math.ceil(totalMatches / HISTORY_PAGE_SIZE));
+  const currentPage = Math.min(Math.max(historyState.pagerPage, 1), totalPages);
+  const currentApiPage = historyState.apiPages[apiPageForPagerPage(currentPage)];
+  const historyRows = historyLoaded && currentApiPage !== undefined
+    ? currentApiPage.matches.slice(apiPageRowOffset(currentPage), apiPageRowOffset(currentPage) + HISTORY_PAGE_SIZE)
+    : [];
   const showRatingColumn = historyRows.some((match) => (match.eloDelta !== null && match.eloDelta !== undefined) || match.eloPlacement === true);
   const historyGridStyle = { gridTemplateColumns: showRatingColumn ? '36px 88px minmax(0, 1fr) 64px 64px' : '36px 88px minmax(0, 1fr) 64px' };
-  const totalMatches = historyLoaded ? historyPage.total : 0;
-  const totalPages = Math.max(1, Math.ceil(totalMatches / HISTORY_PAGE_SIZE));
-  const currentPage = Math.min(Math.max(historyPage.page, 1), totalPages);
   const pagerSlots = getPagerSlots(currentPage, totalPages);
 
   return (
@@ -310,7 +333,7 @@ export function PlayerDrawer({
             </span>
           </div>
           <div className="drawer-history-rows">
-            {historyPage.loading ? (
+            {historyState.loading ? (
               Array.from({ length: HISTORY_PAGE_SIZE }, (_, index) => (
                 <div key={index} className="drawer-history-row-skel" style={historyGridStyle}>
                   <span className="card-skel" style={{ width: 30, height: 20 }} />
@@ -320,7 +343,7 @@ export function PlayerDrawer({
                 </div>
               ))
             ) : historyRows.length === 0 ? (
-              <p className="section-message">{historyPage.error ?? 'No recent match history found.'}</p>
+              <p className="section-message">{historyState.error ?? 'No recent match history found.'}</p>
             ) : (
               historyRows.map((match) => (
                 <div key={match.matchId} className="drawer-history-row" style={historyGridStyle}>
@@ -339,8 +362,16 @@ export function PlayerDrawer({
                     </span>
                     <span className="uma-name" title={match.umaName}>{match.umaName}</span>
                   </span>
-                  <span className="uma-table-value">
-                    {match.pointsScored} pts{match.isMvp ? ' · MVP' : ''}
+                  <span className="uma-table-value drawer-history-points">
+                    {match.pointsScored} pts
+                    {match.isMvp ? (
+                      <span className="mvp-star" tabIndex={0}>
+                        <svg width="11" height="11" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true">
+                          <path d="M6 0l1.76 3.64L12 4.24l-3 2.92.71 4.13L6 9.27 2.29 11.29 3 7.16 0 4.24l4.24-.6z" />
+                        </svg>
+                        <span className="mvp-star-tooltip" role="tooltip">MVP</span>
+                      </span>
+                    ) : null}
                   </span>
                   {showRatingColumn ? (
                     <span className="uma-table-value drawer-history-rating">

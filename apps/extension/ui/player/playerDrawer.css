@@ -215,7 +215,8 @@
 }
 
 .drawer-history {
-  flex-grow: 1;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .drawer-section-head {
@@ -387,6 +388,8 @@
 .drawer-history-rows {
   display: flex;
   flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .drawer-history-row,
@@ -402,6 +405,52 @@
 .drawer-history-rating {
   color: var(--text-muted);
   font-size: 12px;
+}
+
+.drawer-history-points {
+  align-items: center;
+  display: inline-flex;
+  gap: 4px;
+  justify-content: flex-end;
+}
+
+.mvp-star {
+  color: var(--accent-gold);
+  cursor: help;
+  display: inline-flex;
+  position: relative;
+}
+
+.mvp-star:focus-visible {
+  outline: 2px solid var(--accent-blue);
+  outline-offset: 2px;
+}
+
+.mvp-star-tooltip {
+  background: var(--bg-page);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  bottom: calc(100% + 6px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  opacity: 0;
+  padding: 4px 8px;
+  pointer-events: none;
+  position: absolute;
+  right: 0;
+  text-align: left;
+  transition: opacity 0.12s;
+  visibility: hidden;
+  white-space: nowrap;
+  z-index: 50;
+}
+
+.mvp-star:hover .mvp-star-tooltip,
+.mvp-star:focus-visible .mvp-star-tooltip {
+  opacity: 1;
+  visibility: visible;
 }
 
 .drawer-pager {
@@ -459,5 +508,29 @@
 @media (max-width: 700px) {
   .player-drawer {
     width: 100vw;
+  }
+}
+
+/* Sean runs 125-150% OS scaling, which shrinks the effective CSS viewport
+   to roughly 1280x720. Compact the fixed-height regions so the pager
+   never gets pushed off the bottom of the drawer. */
+@media (max-height: 820px) {
+  .player-drawer {
+    gap: 10px;
+    padding: 14px 22px 12px;
+  }
+
+  .uma-table-rows {
+    height: 150px;
+  }
+
+  .uma-table-row {
+    height: 30px;
+  }
+
+  .drawer-history-row,
+  .drawer-history-row-skel {
+    height: 38px;
+    min-height: 38px;
   }
 }
