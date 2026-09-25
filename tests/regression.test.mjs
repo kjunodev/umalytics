@@ -915,12 +915,21 @@ test('manual refresh cooldown survives restart and is not extended by roster upd
 
 test('confirmed maps use the drafter combined order and preserve distinct course identities',()=>{
   const {state}=roomHarness(); const event=matchEvent();
-  for(const team of ['team1','team2']) event.state[team].pickedMaps=[1,2,3].map(n=>({id:`${team}-${n}`,track:'Nakayama',distance:2000+n*100}));
+  for(const team of ['team1','team2']) event.state[team].pickedMaps=[1,2,3].map(n=>({id:`${team}-${n}`,track:'Nakayama',distance:2000+n*100,
+    surface:'Turf',variant:'Inner',direction:'Right',conditions:{season:'Spring',weather:'Sunny',ground:'Good'}}));
   event.state.team1.bannedMaps=[{id:'veto',track:'Nakayama',distance:2500}];
+  event.state.wildcardMap={id:'wild',track:'Hanshin',distance:2200,surface:'Dirt',conditions:{season:'Winter',weather:'Rain',ground:'Heavy'}};
   const {draft}=state.apply(event,'M95Z2Z');
   assert.deepEqual(Array.from(draft.teams.team1.maps,m=>m.order),[1,3,5,undefined]);
   assert.deepEqual(Array.from(draft.teams.team2.maps,m=>m.order),[2,4,6]);
   assert.equal(new Set(draft.teams.team1.maps.map(m=>m.mapId)).size,4);
+  assert.deepEqual({ ...draft.teams.team1.maps[0] }, {team:'team1',mapId:'team1-1',name:'Nakayama',
+    details:'2100m • Turf • Inner • Right • Spring • Sunny • Good',track:'Nakayama',distance:2100,
+    surface:'Turf',variant:'Inner',direction:'Right',season:'Spring',weather:'Sunny',ground:'Good',order:1,status:'selected'});
+  assert.equal(draft.teams.team1.maps[3].distance,2500);
+  assert.equal(draft.tiebreakerMap.track,'Hanshin');
+  assert.equal(draft.tiebreakerMap.season,'Winter');
+  assert.equal(draft.tiebreakerMap.ground,'Heavy');
 });
 
 test('page hook startup never reads site localStorage or sessionStorage',()=>{

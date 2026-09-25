@@ -26,7 +26,7 @@ const batchPlayer = (id, overrides = {}) => ({ discordId: id, displayName: `Batc
   history: { total: 8, summary: historySummary(), recent: [entry(0), entry(1, 'corrected', null),
     entry(2, 'reported', false), entry(3, 'pending'), entry(4), entry(5), entry(6)] }, ...overrides });
 
-function harness({ batchStatus = 200, batchPlayers, latency = 1, fast = true, historyPages } = {}) {
+function harness({ batchStatus = 200, batchPlayers, latency = 1, fast = true, historyPages, leaderboardEntries = [] } = {}) {
   const calls = [], diagnostics = [], timerDelays = [];
   const c = vm.createContext({ console, URL, AbortController,
     setTimeout: (callback, ms) => { timerDelays.push(ms); return setTimeout(callback, ms); }, clearTimeout, Date,
@@ -41,7 +41,7 @@ function harness({ batchStatus = 200, batchPlayers, latency = 1, fast = true, hi
             options.signal.addEventListener('abort', () => { clearTimeout(timer); reject(options.signal.reason); }, { once: true });
           });
           if (url.pathname === '/api/seasons') return [{ id: 'S1', active: true }];
-          if (url.pathname === '/api/leaderboard') return { entries: [] };
+          if (url.pathname === '/api/leaderboard') return { entries: leaderboardEntries };
           if (url.pathname.endsWith('/batch')) return { mode: 'ranked', season: url.searchParams.get('season'),
             players: batchPlayers ?? url.searchParams.get('ids').split(',').map(id => batchPlayer(id)) };
           if (url.pathname.endsWith('/history')) return historyPages?.[Number(url.searchParams.get('page'))] ??
@@ -64,6 +64,25 @@ test('a complete roster starts batch loading without the settling timer', async 
   await h.c.fetchBatchPlayerProfileSummaries(players(10), { scope: 'currentSeason', rosterComplete: true });
   assert.equal(h.calls.filter(path => path.includes('/batch?')).length, 1);
   assert(!h.timerDelays.includes(1200));
+});
+
+test('season leaderboard exposes cached ranked rows without an extra endpoint', async () => {
+  const h = harness({ leaderboardEntries: [
+    { userId: ids[0], displayName: 'Leader', rating: 1700, rd: 50, wins: 12, losses: 8 },
+    { userId: ids[1], displayName: 'Runner', rating: 1600, rd: 60, wins: 10, losses: 10 }
+  ] });
+  const signal = new AbortController().signal;
+  const first = await h.c.getSeasonLeaderboard(signal);
+  const second = await h.c.getSeasonLeaderboard(signal);
+  assert.equal(first.activeSeasonId, 'S1');
+  assert.deepEqual(Array.from(first.entries, ({ rank, userId, displayName, rating, rd, wins, losses }) =>
+    ({ rank, userId, displayName, rating, rd, wins, losses })), [
+    { rank: 1, userId: ids[0], displayName: 'Leader', rating: 1700, rd: 50, wins: 12, losses: 8 },
+    { rank: 2, userId: ids[1], displayName: 'Runner', rating: 1600, rd: 60, wins: 10, losses: 10 }
+  ]);
+  assert.equal(second.entries.length, 2);
+  assert.equal(h.calls.filter(path => path === '/api/seasons').length, 1);
+  assert.equal(h.calls.filter(path => path.startsWith('/api/leaderboard?')).length, 1);
 });
 
 test('every request diagnostic, including batch and history, retains its endpoint', async () => {

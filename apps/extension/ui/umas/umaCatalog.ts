@@ -179,7 +179,13 @@ export function getUmaExperience(
   profiles: Record<string, PlayerProfileSummary>,
   statsScope: PlayerStatsScope
 ): UmaExperienceEntry[] {
+  const seenPlayers = new Set<string>();
   return rosterPlayers
+    .filter((player) => {
+      if (seenPlayers.has(player.discordId)) return false;
+      seenPlayers.add(player.discordId);
+      return true;
+    })
     .map((player) => {
       const profile = profiles[player.discordId];
       const uma = findScopedUmaEntry(action, profile, statsScope);
