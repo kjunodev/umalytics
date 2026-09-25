@@ -127,6 +127,35 @@ test('findRosterTeamForPlayer locates the current lobby team for a player, or un
   assert.equal(c.findRosterTeamForPlayer(undefined, '111'), undefined);
 });
 
+test('shouldLoadLeaderboard never fetches while inactive, regardless of cache age', () => {
+  const c = playersDataContext();
+  const now = 1_000_000;
+  assert.equal(c.shouldLoadLeaderboard(false, undefined, now), false);
+  assert.equal(c.shouldLoadLeaderboard(false, now - 1, now), false);
+  assert.equal(c.shouldLoadLeaderboard(false, now - 20 * 60 * 1000, now), false);
+});
+
+test('shouldLoadLeaderboard fetches on first activation, with no cached data yet', () => {
+  const c = playersDataContext();
+  assert.equal(c.shouldLoadLeaderboard(true, undefined, 1_000_000), true);
+});
+
+test('shouldLoadLeaderboard does not refetch on reactivation within the 10-minute cache TTL', () => {
+  const c = playersDataContext();
+  const fetchedAt = 1_000_000;
+  const now = fetchedAt + 5 * 60 * 1000; // 5 minutes later
+  assert.equal(c.shouldLoadLeaderboard(true, fetchedAt, now), false);
+});
+
+test('shouldLoadLeaderboard refetches on reactivation once the cache is older than 10 minutes', () => {
+  const c = playersDataContext();
+  const fetchedAt = 1_000_000;
+  const now = fetchedAt + 11 * 60 * 1000; // 11 minutes later
+  assert.equal(c.shouldLoadLeaderboard(true, fetchedAt, now), true);
+  // Exactly at the TTL boundary is still fresh (strictly greater-than triggers a reload).
+  assert.equal(c.shouldLoadLeaderboard(true, fetchedAt, fetchedAt + 10 * 60 * 1000), false);
+});
+
 test('players.css never truncates names and history.css has no leftover ProfilesView search/pagination rules', () => {
   const playersCss = readModule('uiPlayersCss');
   assert.doesNotMatch(playersCss, /text-overflow:\s*ellipsis/);

@@ -307,7 +307,7 @@ export default function App() {
       />
 
       <div hidden={mode !== 'history'}><HistoryView Scene={HistoricalScene} scene={historyScene} scope={historyScope} navigation={historyNavigation} /></div>
-      <div hidden={mode !== 'profiles'}><PlayersView roster={displayedRoster} statsScope={lookupScope} /></div>
+      <div hidden={mode !== 'profiles'}><PlayersView roster={displayedRoster} statsScope={lookupScope} active={mode === 'profiles'} /></div>
       <div hidden={mode !== 'live'}>
       {retryAt > 0 && (
         <p className="api-retry-notice" role="status">

@@ -18,6 +18,7 @@ import {
   leaderboardEntryToPlayer,
   pushRecentPlayer,
   rankTintClass,
+  shouldLoadLeaderboard,
   sortLeaderboardEntries,
   type LeaderboardSortKey
 } from './playersData';
@@ -36,6 +37,7 @@ interface LeaderboardState {
   loading: boolean;
   error?: string;
   retryAt?: number;
+  fetchedAt?: number;
 }
 
 interface DirectorySearchState {
@@ -57,8 +59,9 @@ function getRetryAt(caught: unknown): number | undefined {
 }
 
 // A single-player counterpart to ExplorerViews' useProfiles: the drawer only
-// ever needs the currently opened player's stats.
-function usePlayerProfile(player: PrematchPlayer | undefined, statsScope: PlayerStatsScope) {
+// ever needs the currently opened player's stats. `active` keeps this from
+// starting a profile load while the Players view is hidden.
+function usePlayerProfile(player: PrematchPlayer | undefined, statsScope: PlayerStatsScope, active: boolean) {
   const [profile, setProfile] = useState<PlayerProfileSummary | undefined>();
   const [loading, setLoading] = useState(false);
   const key = player === undefined ? '' : `${player.discordId}:${statsScope}`;
@@ -67,7 +70,7 @@ function usePlayerProfile(player: PrematchPlayer | undefined, statsScope: Player
     const controller = new AbortController();
     if (previousKey.current !== key) setProfile(undefined);
     previousKey.current = key;
-    if (player === undefined) { setLoading(false); return () => controller.abort(); }
+    if (player === undefined || !active) { setLoading(false); return () => controller.abort(); }
     setLoading(true);
     void loadExplorerProfiles([player], statsScope, next => {
       if (!controller.signal.aborted) setProfile(next[player.discordId]);
@@ -76,14 +79,14 @@ function usePlayerProfile(player: PrematchPlayer | undefined, statsScope: Player
       .catch(() => {})
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
-    // Re-run only when the identity+scope key changes.
+    // Re-run only when the identity+scope key or activation changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key]);
+  }, [key, active]);
   return { profile, loading };
 }
 
-export function PlayersView({ roster, statsScope }: { roster: PrematchRoster | undefined; statsScope: PlayerStatsScope }) {
-  const [leaderboardState, setLeaderboardState] = useState<LeaderboardState>({ loading: true });
+export function PlayersView({ roster, statsScope, active }: { roster: PrematchRoster | undefined; statsScope: PlayerStatsScope; active: boolean }) {
+  const [leaderboardState, setLeaderboardState] = useState<LeaderboardState>({ loading: false });
   const [attempt, setAttempt] = useState(0);
   const [query, setQuery] = useState('');
   const [sortKey, setSortKey] = useState<LeaderboardSortKey>('rank');
@@ -94,16 +97,26 @@ export function PlayersView({ roster, statsScope }: { roster: PrematchRoster | u
   const searchRequest = useRef<AbortController | undefined>(undefined);
 
   useEffect(() => {
+    if (!shouldLoadLeaderboard(active, leaderboardState.fetchedAt, Date.now())) return undefined;
     const controller = new AbortController();
-    setLeaderboardState(previous => ({ data: previous.data, loading: true }));
+    // Only show the skeleton before the first successful load; a background
+    // refresh on reactivation keeps the existing rows visible while it runs.
+    const showLoading = leaderboardState.data === undefined;
+    setLeaderboardState(previous => ({ ...previous, loading: showLoading, error: showLoading ? undefined : previous.error }));
     void loadSeasonLeaderboard(controller.signal)
-      .then(data => { if (!controller.signal.aborted) setLeaderboardState({ data, loading: false }); })
+      .then(data => { if (!controller.signal.aborted) setLeaderboardState({ data, loading: false, fetchedAt: Date.now() }); })
       .catch(caught => {
         if (controller.signal.aborted) return;
-        setLeaderboardState({ loading: false, error: getErrorMessage(caught), retryAt: getRetryAt(caught) });
+        setLeaderboardState(previous => ({
+          data: previous.data, fetchedAt: previous.fetchedAt, loading: false,
+          error: getErrorMessage(caught), retryAt: getRetryAt(caught)
+        }));
       });
     return () => controller.abort();
-  }, [attempt]);
+    // Re-run only on an activation transition or an explicit retry; the
+    // staleness check reads leaderboardState from this render's closure.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active, attempt]);
 
   useEffect(() => {
     let cancelled = false;
@@ -135,6 +148,7 @@ export function PlayersView({ roster, statsScope }: { roster: PrematchRoster | u
   };
 
   const runDirectorySearch = (term: string, page = 1) => {
+    if (!active) return;
     searchRequest.current?.abort();
     const controller = new AbortController();
     searchRequest.current = controller;
@@ -147,7 +161,7 @@ export function PlayersView({ roster, statsScope }: { roster: PrematchRoster | u
       });
   };
 
-  const { profile: selectedProfile, loading: selectedProfileLoading } = usePlayerProfile(selectedPlayer, statsScope);
+  const { profile: selectedProfile, loading: selectedProfileLoading } = usePlayerProfile(selectedPlayer, statsScope, active);
   const rosterTeam = selectedPlayer === undefined ? undefined : findRosterTeamForPlayer(roster, selectedPlayer.discordId);
 
   const classification = classifyPlayerQuery(query);

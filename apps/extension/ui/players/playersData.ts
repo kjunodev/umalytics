@@ -8,6 +8,19 @@ import type { RecentPlayerEntry } from '../../storage/playersRecentStorage';
 export type LeaderboardSortKey = 'rank' | 'rating' | 'win' | 'games';
 
 export const RECENT_PLAYERS_CAP = 4;
+export const LEADERBOARD_TTL_MS = 10 * 60 * 1000;
+
+/**
+ * Decides whether an activation (the Players view becoming visible) should
+ * trigger a leaderboard fetch: never while inactive, always on the first
+ * activation (no cached fetch yet), and on a later activation only once the
+ * cached data is older than LEADERBOARD_TTL_MS. `now` is passed in so this
+ * stays a pure, clock-free function for testing.
+ */
+export function shouldLoadLeaderboard(active: boolean, fetchedAt: number | undefined, now: number): boolean {
+  if (!active) return false;
+  return fetchedAt === undefined || now - fetchedAt > LEADERBOARD_TTL_MS;
+}
 
 export type PlayerQueryClassification =
   | { mode: 'lookup'; id: string }
