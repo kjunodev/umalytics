@@ -1,676 +1,237 @@
 .uma-planner-scene {
-  height: max(560px, calc(100dvh - 244px));
-  display: grid;
-  grid-template-rows: minmax(0, 1fr);
+  height: calc(100dvh - 116px);
   min-height: 0;
   overflow: hidden;
-}
-
-.uma-search,
-.uma-sort {
-  display: grid;
-  min-width: 0;
-}
-
-.uma-search input,
-.uma-sort-trigger {
-  border-radius: var(--radius-md);
-  color: var(--text-primary);
-  font: inherit;
-  font-size: 13px;
-  font-weight: 700;
-  height: 36px;
-  outline: none;
-  padding: 0 11px;
-}
-
-.uma-search input {
-  background: var(--bg-inset);
-  border: 1px solid var(--border-default);
-}
-
-.uma-sort-menu {
-  position: relative;
-}
-
-.uma-sort-trigger {
-  align-items: center;
-  background-color: var(--bg-surface-2);
-  background-image:
-    linear-gradient(45deg, transparent 50%, var(--accent-blue-soft) 50%),
-    linear-gradient(135deg, var(--accent-blue-soft) 50%, transparent 50%),
-    linear-gradient(180deg, rgba(106, 155, 255, 0.12), rgba(13, 17, 27, 0));
-  background-position:
-    calc(100% - 15px) 15px,
-    calc(100% - 10px) 15px,
-    0 0;
-  background-repeat: no-repeat;
-  background-size: 5px 5px, 5px 5px, 100% 100%;
-  border: 1px solid var(--border-strong);
-  display: flex;
-  justify-content: space-between;
-  cursor: pointer;
-  padding-right: 30px;
-  position: relative;
-  text-align: left;
-  width: 100%;
-}
-
-.uma-sort-chevron {
-  border-bottom: 2px solid var(--accent-blue-soft);
-  border-right: 2px solid var(--accent-blue-soft);
-  height: 7px;
-  position: absolute;
-  right: 13px;
-  top: 12px;
-  transform: rotate(45deg);
-  width: 7px;
-}
-
-.uma-sort-options {
-  background: var(--bg-inset);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-md);
-  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.34);
-  display: grid;
-  left: 0;
-  overflow: hidden;
-  padding: 4px;
-  position: absolute;
-  right: 0;
-  top: calc(100% + 6px);
-  z-index: 20;
-}
-
-.uma-sort-options button {
-  background: transparent;
-  border: 0;
-  border-radius: 6px;
-  color: var(--text-primary);
-  cursor: pointer;
-  font: inherit;
-  font-size: 13px;
-  font-weight: 800;
-  min-height: 32px;
-  padding: 0 10px;
-  text-align: left;
-}
-
-.uma-sort-options button:hover,
-.uma-sort-options button:focus,
-.uma-sort-options button.selected {
-  background: var(--bg-raised);
-  color: var(--text-link);
-  outline: none;
-}
-
-.uma-search input:focus,
-.uma-sort-trigger:focus {
-  border-color: var(--accent-blue);
-  box-shadow: 0 0 0 2px rgba(106, 155, 255, 0.18);
 }
 
 .uma-planner-layout {
   display: grid;
-  gap: 14px;
-  grid-template-columns: minmax(0, 0.6fr) minmax(420px, 0.4fr);
+  grid-template-columns: minmax(0, 1.75fr) minmax(320px, 1fr);
+  gap: 16px;
+  height: 100%;
   min-height: 0;
-  overflow: hidden;
 }
 
 .uma-catalog-panel,
-.uma-planning-panel,
-.uma-planning-team {
-  background: var(--bg-surface-2);
-  border: 1px solid var(--border-default);
+.uma-planning-panel {
   min-width: 0;
+  min-height: 0;
+  background: var(--bg-surface-1);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
 }
 
 .uma-catalog-panel {
   display: grid;
-  gap: 10px;
   grid-template-rows: auto minmax(0, 1fr);
-  min-height: 0;
-  overflow: hidden;
-  padding: 10px;
 }
 
 .uma-catalog-toolbar {
-  background: var(--bg-inset);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
-  color: var(--text-primary);
-  display: grid;
-  gap: 10px;
-  padding: 11px;
+  padding: 16px;
+  border-bottom: 1px solid var(--border-default);
 }
 
 .uma-catalog-heading {
-  align-items: baseline;
   display: flex;
-  gap: 8px;
-  justify-content: space-between;
-  min-width: 0;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 12px;
 }
 
 .uma-catalog-heading strong {
-  color: var(--text-primary);
-  font-size: 16px;
-  line-height: 1;
+  font: 600 22px var(--font-display);
 }
 
-.uma-catalog-heading span {
+.uma-catalog-heading span,
+.uma-planning-title p,
+.uma-planning-team p {
   color: var(--text-secondary);
   font-size: 12px;
-  font-weight: 800;
-  line-height: 1.2;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  margin: 0;
 }
 
 .uma-catalog-controls {
-  display: grid;
+  display: flex;
+  flex-wrap: wrap;
   gap: 8px;
-  grid-template-columns: minmax(0, 1fr) minmax(142px, 0.42fr);
+  align-items: center;
+}
+
+.uma-search {
+  flex: 1 1 150px;
   min-width: 0;
 }
 
-.uma-hit-scope {
-  display: grid;
-  grid-column: 1 / -1;
+.uma-search input {
+  width: 100%;
   min-width: 0;
-}
-
-.uma-hit-scope-toggle {
-  background: var(--bg-inset);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-pill);
-  color: var(--text-primary);
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  height: 30px;
-  overflow: hidden;
-  padding: 2px;
-}
-
-.uma-hit-scope-toggle button {
-  background: transparent;
-  border: 0;
-  border-radius: var(--radius-pill);
-  color: var(--text-secondary);
-  cursor: pointer;
+  height: 34px;
+  padding: 0 10px;
   font: inherit;
-  font-size: 11px;
-  font-weight: 900;
-  line-height: 1;
-  min-width: 0;
-  padding: 0 8px;
+  font-size: 12px;
+  background: var(--bg-page);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
 }
 
-.uma-hit-scope-toggle button.active {
-  background: var(--bg-raised);
-  color: var(--text-link);
+.uma-sort-toggle,
+.uma-hit-scope-toggle {
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--bg-page);
 }
+
+.uma-hit-scope { flex: 0 0 174px; }
+.uma-hit-scope-toggle { width: 174px; }
+.uma-hit-scope-toggle button { flex: 1 0 0; padding: 0; }
+
+.uma-sort-toggle button,
+.uma-hit-scope-toggle button {
+  border: 0;
+  border-radius: 4px;
+  min-height: 26px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.uma-sort-toggle button { padding: 0 9px; }
+.uma-sort-toggle button.active,
+.uma-hit-scope-toggle button.active { background: var(--bg-raised); color: var(--text-primary); }
+.uma-planner-scene button:hover { color: var(--text-primary); border-color: var(--border-emphasis); }
+.uma-planner-scene :focus-visible { outline: 2px solid var(--accent-blue); outline-offset: 2px; }
 
 .uma-catalog-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
   align-content: start;
-  display: grid;
-  gap: 10px;
-  grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
+  gap: 8px;
   min-height: 0;
-  overflow: auto;
-  padding-right: 6px;
-  scrollbar-color: var(--border-strong) var(--bg-inset);
-  scrollbar-width: thin;
+  padding: 12px;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
 }
 
-.uma-catalog-grid::-webkit-scrollbar {
-  width: 10px;
-}
-
-.uma-catalog-grid::-webkit-scrollbar-track {
-  background: var(--bg-inset);
-  border-radius: var(--radius-pill);
-}
-
-.uma-catalog-grid::-webkit-scrollbar-thumb {
-  background: var(--border-strong);
-  border: 2px solid var(--bg-inset);
-  border-radius: var(--radius-pill);
-}
-
-.uma-catalog-grid::-webkit-scrollbar-thumb:hover {
-  background: var(--border-emphasis);
-}
-
-.uma-catalog-empty {
-  align-content: center;
-  border: 1px dashed var(--border-strong);
-  border-radius: var(--radius-md);
-  background: var(--bg-inset);
-  color: var(--text-primary);
-  display: grid;
-  gap: 6px;
-  justify-items: center;
-  min-height: 220px;
-  padding: 18px;
-  text-align: center;
-}
-
-.uma-catalog-empty strong {
-  color: var(--text-primary);
-  font-size: 14px;
-  line-height: 1.2;
-}
-
-.uma-catalog-empty span {
-  color: var(--text-secondary);
-  font-size: 12px;
-  line-height: 1.35;
-  max-width: 260px;
-}
+.uma-catalog-grid,
+.uma-planning-team-grid { scrollbar-width: thin; scrollbar-color: var(--border-emphasis) transparent; overscroll-behavior: contain; }
 
 .uma-catalog-button {
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  background: var(--bg-inset);
+  gap: 7px;
+  min-width: 0;
+  padding: 10px 4px 8px;
+  background: var(--bg-surface-2);
   border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
-  color: var(--text-primary);
   cursor: pointer;
-  display: grid;
-  gap: 7px;
-  grid-template-rows: 66px auto;
-  justify-items: center;
-  min-width: 0;
-  min-height: 134px;
-  padding: 9px 6px;
-  position: relative;
-}
-
-.uma-catalog-button:hover {
-  border-color: var(--accent-blue);
 }
 
 .uma-catalog-button.selected {
-  background:
-    linear-gradient(180deg, rgba(106, 155, 255, 0.17), rgba(106, 155, 255, 0.05)),
-    var(--bg-inset);
   border-color: var(--accent-blue);
-  box-shadow: inset 0 0 0 1px rgba(156, 194, 255, 0.18);
+  background: var(--tone-skill-bg);
+  box-shadow: inset 0 0 0 1px var(--accent-blue);
 }
 
-.uma-catalog-button.selected .uma-catalog-portrait {
-  border-color: var(--accent-blue);
-  box-shadow: 0 0 0 2px rgba(106, 155, 255, 0.18);
-}
-
-.uma-catalog-portrait {
-  align-items: center;
-  align-self: start;
-  background: var(--bg-inset);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
-  color: var(--text-secondary);
-  display: inline-flex;
-  height: 62px;
-  justify-content: center;
-  overflow: visible;
+.uma-catalog-portrait,
+.uma-planning-portrait {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  background: var(--bg-raised);
+  border-radius: 50%;
+  color: var(--accent-blue-soft);
+  font: 600 19px var(--font-display);
   position: relative;
-  width: 62px;
 }
 
-.uma-catalog-portrait img {
-  border-radius: 7px;
-  height: 100%;
-  object-fit: cover;
-  width: 100%;
-}
-
-.uma-catalog-portrait > span:first-child {
-  color: var(--text-secondary);
-  font-size: 12px;
-  font-weight: 900;
-}
+.uma-catalog-portrait { width: min(52px, 100%); aspect-ratio: 1; }
+.uma-planning-portrait { width: 72px; height: 72px; }
+.uma-catalog-portrait img,
+.uma-planning-portrait img { width: 100%; height: 100%; object-fit: cover; border-radius: inherit; }
 
 .uma-catalog-count {
-  align-items: center;
-  background: linear-gradient(180deg, #38bdf8, #0284c7);
-  border: 2px solid var(--bg-page);
-  border-radius: var(--radius-pill);
-  color: #ffffff;
-  display: inline-flex;
-  font-size: 11px;
-  font-weight: 900;
-  height: 20px;
-  justify-content: center;
-  min-width: 20px;
-  padding: 0 6px;
   position: absolute;
-  right: -8px;
-  top: -8px;
-  box-shadow: 0 3px 9px rgba(106, 155, 255, 0.28), 0 1px 2px rgba(0, 0, 0, 0.44);
-  line-height: 1;
+  bottom: -2px;
+  right: -3px;
+  min-width: 19px;
+  height: 19px;
+  display: grid;
+  place-items: center;
+  padding: 0 4px;
+  border-radius: var(--radius-pill);
+  background: var(--accent-blue);
+  border: 2px solid var(--bg-surface-1);
+  color: var(--bg-page);
+  font: 600 10px var(--font-body);
 }
 
 .uma-catalog-name {
-  align-self: start;
-  display: block;
   font-size: 11px;
-  font-weight: 900;
-  line-height: 13px;
-  max-width: 100%;
-  min-height: 39px;
-  overflow: visible;
+  font-weight: 500;
+  line-height: 1.3;
   overflow-wrap: anywhere;
+  white-space: normal;
   text-align: center;
-  white-space: normal;
-  color: var(--text-primary);
 }
 
-.uma-planning-panel {
-  display: grid;
-  gap: 12px;
-  grid-template-rows: auto auto minmax(0, 1fr);
-  min-height: 0;
-  padding: 14px;
-}
+.uma-catalog-empty,
+.uma-planning-panel.empty { display: grid; align-content: center; justify-items: center; gap: 8px; color: var(--text-secondary); padding: 16px; }
 
-.uma-planning-panel.empty {
-  align-content: center;
-  justify-items: center;
-}
+.uma-planning-panel { display: grid; grid-template-rows: auto auto minmax(0, 1fr); }
+.uma-planning-heading { display: flex; align-items: center; gap: 14px; padding: 18px 16px; }
+.uma-planning-title { min-width: 0; }
+.uma-planning-title h3 { font: 600 24px/1.1 var(--font-display); margin: 0 0 7px; overflow-wrap: anywhere; }
+.uma-planning-title p { line-height: 1.5; }
 
-.uma-planning-heading {
-  align-items: center;
-  background: var(--bg-surface-2);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
-  display: grid;
-  gap: 12px;
-  grid-template-columns: 68px minmax(220px, 0.78fr) minmax(0, 1.22fr);
-  min-height: 108px;
-  padding: 12px;
-}
+.uma-planning-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin: 0 16px 16px; padding: 12px 0; background: var(--bg-inset); border: 1px solid var(--border-default); border-radius: var(--radius-md); }
+.uma-planning-summary > span { display: grid; gap: 5px; text-align: center; }
+.uma-planning-summary > span + span { border-left: 1px solid var(--border-default); }
+.uma-planning-summary small { font-size: 10px; color: var(--text-secondary); text-transform: uppercase; }
+.uma-planning-summary strong { font: 600 22px var(--font-display); font-variant-numeric: tabular-nums; }
 
-.uma-planning-portrait {
-  align-items: center;
-  background: var(--bg-inset);
-  border: 1px solid var(--border-default);
-  border-radius: 9px;
-  color: var(--text-secondary);
-  display: inline-flex;
-  height: 68px;
-  justify-content: center;
-  overflow: hidden;
-  width: 68px;
-}
+.uma-planning-team-grid { min-height: 0; overflow-y: auto; padding: 0 16px 16px; }
+.uma-planning-team + .uma-planning-team { margin-top: 18px; }
+.uma-planning-team header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 10px; margin-bottom: 8px; }
+.uma-planning-team h4 { font: 600 18px var(--font-display); margin: 0; overflow-wrap: anywhere; }
+.uma-planning-team.team1 h4 { color: var(--accent-blue-soft); }
+.uma-planning-team.team2 h4 { color: var(--accent-orange); }
+.uma-planning-team p { font-size: 10px; }
 
-.uma-planning-portrait img {
-  height: 100%;
-  object-fit: cover;
-  width: 100%;
-}
-
-.uma-planning-portrait span {
-  color: var(--text-secondary);
-  font-size: 13px;
-  font-weight: 900;
-}
-
-.uma-planning-title {
-  align-content: center;
-  display: grid;
-  min-width: 0;
-}
-
-.uma-planning-heading h3 {
-  font-size: 22px;
-  line-height: 1.1;
-  margin: 0;
-  min-width: 0;
-  overflow: visible;
-  overflow-wrap: anywhere;
-  white-space: normal;
-  color: var(--text-primary);
-}
-
-.uma-planning-heading p {
-  color: var(--text-secondary);
-  font-size: 12px;
-  font-weight: 800;
-  margin: 5px 0 0;
-}
-
-.uma-planning-summary {
-  display: grid;
-  gap: 10px;
-  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
-  min-width: 0;
-}
-
-.uma-planning-summary span {
-  background: var(--bg-surface-2);
-  border: 1px solid var(--border-default);
-  align-content: center;
-  display: grid;
-  gap: 5px;
-  min-height: 54px;
-  min-width: 0;
-  padding: 9px 12px;
-}
-
-.uma-planning-summary strong {
-  color: var(--text-primary);
-  font-size: 16px;
-  line-height: 1.1;
-  overflow-wrap: anywhere;
-}
-
-.uma-planning-summary small {
-  color: var(--text-secondary);
-  font-size: 9px;
-  font-weight: 900;
-  letter-spacing: 0.03em;
-  line-height: 1.15;
-  text-transform: uppercase;
-}
-
-.uma-planning-team-grid {
-  align-content: start;
-  display: grid;
-  gap: 10px;
-  grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: repeat(2, auto);
-  min-height: 0;
-}
-
-.uma-planning-team {
-  display: grid;
-  gap: 8px;
-  grid-template-rows: auto auto;
-  min-height: 0;
-  padding: 11px;
-}
-
-.uma-planning-team.team1 {
-  border-color: rgba(96, 165, 250, 0.35);
-}
-
-.uma-planning-team.team2 {
-  border-color: rgba(248, 113, 113, 0.35);
-}
-
-.uma-planning-team header {
-  align-items: baseline;
-  display: flex;
-  gap: 10px;
-  justify-content: space-between;
-  min-width: 0;
-}
-
-.uma-planning-team h4 {
-  font-size: 16px;
-  line-height: 1.15;
-  margin: 0;
-  overflow-wrap: anywhere;
-  color: var(--text-primary);
-}
-
-.uma-planning-team p {
-  color: var(--text-secondary);
-  font-size: 11px;
-  font-weight: 800;
-  margin: 0;
-  text-align: right;
-  white-space: normal;
-}
-
-.uma-planning-slots {
-  display: grid;
-  gap: 8px;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-
-.uma-planning-player {
-  align-content: start;
-  background: var(--bg-inset);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
-  color: var(--text-primary);
-  display: grid;
-  gap: 7px;
-  grid-template-rows: 34px auto;
-  min-height: 112px;
-  min-width: 0;
-  padding: 10px;
-}
-
-.uma-planning-player:not(.empty):not(.no-history) {
-  background: rgba(106, 155, 255, 0.1);
-  border-color: rgba(106, 155, 255, 0.38);
-}
-
+.uma-planning-table { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; }
+.uma-planning-table th,
+.uma-planning-table td { padding: 8px 6px; border-bottom: 1px solid var(--border-subtle); text-align: right; overflow-wrap: anywhere; }
+.uma-planning-table th:first-child { width: 52%; text-align: left; padding-left: 0; }
+.uma-planning-table thead th { font-size: 10px; font-weight: 500; text-transform: uppercase; color: var(--text-muted); }
+.uma-planning-player { height: 38px; }
+.uma-planning-player th { font-weight: 500; }
 .uma-planning-player.empty,
-.uma-planning-player.no-history {
-  opacity: 0.7;
+.uma-planning-player.no-history { color: var(--text-muted); }
+.uma-planning-table .uma-planning-unavailable { font-size: 10px; white-space: normal; }
+
+@media (max-width: 900px) {
+  .uma-planner-layout { grid-template-columns: minmax(0, 1.4fr) minmax(280px, 1fr); gap: 10px; }
+  .uma-catalog-grid { gap: 5px; padding: 8px; }
+  .uma-catalog-toolbar { padding: 12px; }
+  .uma-catalog-controls .uma-search { flex-basis: 100%; }
 }
 
-.uma-planning-player strong,
-.uma-planning-player span {
-  overflow: visible;
-  overflow-wrap: anywhere;
-  text-overflow: clip;
-  white-space: normal;
-}
-
-.uma-planning-player strong {
-  font-size: 13px;
-  line-height: 1.2;
-  min-height: 34px;
-  color: var(--text-primary);
-}
-
-.uma-planning-player span {
-  color: var(--text-secondary);
-  font-size: 11px;
-  line-height: 1.25;
-}
-
-.uma-planning-player > span:not(.uma-planning-stats) {
-  align-self: start;
-}
-
-.uma-planning-stats {
-  align-self: start;
-  display: grid;
-  gap: 3px;
-  margin-top: 0;
-}
-
-.uma-planning-stats span {
-  align-items: baseline;
-  display: grid;
-  gap: 8px;
-  grid-template-columns: 58px minmax(30px, 1fr);
-  min-width: 0;
-}
-
-.uma-planning-stats small {
-  color: var(--text-muted);
-  font-size: 9px;
-  font-weight: 900;
-  line-height: 1.1;
-  text-transform: uppercase;
-  white-space: nowrap;
-}
-
-.uma-planning-stats b {
-  color: var(--text-primary);
-  font-size: 11px;
-  font-weight: 900;
-  justify-self: end;
-  line-height: 1.1;
-  overflow-wrap: anywhere;
-  text-align: right;
-}
-
-@media (max-width: 1040px) {
-  .uma-planner-layout {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .uma-planning-heading {
-    grid-template-columns: 76px minmax(0, 1fr);
-  }
-
-  .uma-planning-summary {
-    grid-column: 1 / -1;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 700px) {
-  .uma-planner-scene {
-    height: auto;
-    overflow: visible;
-  }
-
-  .uma-catalog-panel {
-    height: 620px;
-  }
-
-  .uma-planner-layout,
-  .uma-planning-summary {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .uma-planning-team header {
-    align-items: flex-start;
-    display: grid;
-  }
-
-  .uma-catalog-heading,
-  .uma-catalog-controls {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .uma-catalog-heading {
-    align-items: start;
-    display: grid;
-    gap: 4px;
-  }
-
-  .uma-search {
-    min-width: 0;
-    width: 100%;
-  }
-
-  .uma-planning-slots {
-    grid-template-columns: minmax(0, 1fr);
-  }
+@media (max-width: 620px) {
+  .uma-planner-layout { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) minmax(0, 1fr); }
+  .uma-planning-heading { padding: 10px 12px; }
+  .uma-planning-summary { margin: 0 12px 10px; padding: 6px 0; }
+  .uma-planning-team-grid { padding: 0 12px 12px; }
+  .uma-catalog-heading { margin-bottom: 8px; }
+  .uma-catalog-controls { gap: 6px; }
+  .uma-sort-toggle button { padding: 0 6px; }
 }

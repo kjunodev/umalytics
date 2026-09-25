@@ -268,3 +268,20 @@ export function canUseUmaNameFallback(action: DraftUmaAction): boolean {
 
   return (RELEASE_VARIANT_BY_OUTFIT_ID.get(action.umaId) ?? '').length === 0;
 }
+
+// Aggregate published Uma summaries only; match-history pages are never inputs.
+export function summarizeUmaExperience(experience: UmaExperienceEntry[]): {
+  games: number; winRate: number | null; pointsPerGame: number | null;
+} {
+  const played = experience.filter(({ uma }) => uma.matches > 0);
+  const games = played.reduce((total, { uma }) => total + uma.matches, 0);
+  const winsKnown = played.every(({ uma }) => uma.winRate !== null);
+  const pointsKnown = played.every(({ uma }) => uma.pointsPerGame !== null);
+  return {
+    games,
+    winRate: games > 0 && winsKnown
+      ? played.reduce((total, { uma }) => total + uma.wins, 0) / games : null,
+    pointsPerGame: games > 0 && pointsKnown
+      ? played.reduce((total, { uma }) => total + uma.points, 0) / games : null
+  };
+}
