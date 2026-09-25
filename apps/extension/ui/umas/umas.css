@@ -443,28 +443,6 @@
   margin: 5px 0 0;
 }
 
-.uma-pin-button {
-  background: var(--tone-skill-bg);
-  border: 1px solid var(--accent-blue);
-  border-radius: var(--radius-pill);
-  color: var(--text-link);
-  cursor: pointer;
-  font: inherit;
-  font-size: 11px;
-  font-weight: 900;
-  line-height: 1;
-  margin-top: 8px;
-  padding: 5px 9px;
-}
-
-.uma-pin-button.pinned,
-.uma-pin-button:disabled {
-  background: var(--status-live-bg);
-  border-color: var(--accent-green);
-  color: var(--accent-green-soft);
-  cursor: default;
-}
-
 .uma-planning-summary {
   display: grid;
   gap: 10px;
@@ -641,158 +619,6 @@
   text-align: right;
 }
 
-.draft-plan-tray {
-  align-content: start;
-  background: var(--bg-surface-2);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
-  display: grid;
-  gap: 8px;
-  min-height: 0;
-  padding: 11px;
-}
-
-.draft-plan-tray header {
-  align-items: baseline;
-  display: flex;
-  gap: 10px;
-  justify-content: space-between;
-  min-width: 0;
-}
-
-.draft-plan-tray h4 {
-  color: var(--text-primary);
-  font-size: 16px;
-  line-height: 1.15;
-  margin: 0;
-}
-
-.draft-plan-tray p {
-  color: var(--text-secondary);
-  font-size: 11px;
-  font-weight: 800;
-  margin: 3px 0 0;
-}
-
-.draft-plan-tray header > span {
-  color: var(--text-secondary);
-  font-size: 11px;
-  font-weight: 900;
-  white-space: nowrap;
-}
-
-.draft-plan-empty {
-  align-items: center;
-  border: 1px dashed var(--border-default);
-  border-radius: var(--radius-md);
-  background: var(--bg-inset);
-  color: var(--text-secondary);
-  display: flex;
-  font-size: 12px;
-  font-weight: 800;
-  min-height: 78px;
-  padding: 12px;
-}
-
-.draft-plan-list {
-  display: grid;
-  gap: 8px;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  grid-template-rows: repeat(4, minmax(54px, auto));
-}
-
-.draft-plan-card {
-  background: var(--bg-inset);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  min-width: 0;
-  overflow: hidden;
-}
-
-.draft-plan-card.selected {
-  background:
-    linear-gradient(90deg, rgba(106, 155, 255, 0.14), rgba(13, 17, 27, 0)),
-    var(--bg-inset);
-  border-color: var(--accent-blue);
-}
-
-.draft-plan-select {
-  align-items: center;
-  background: transparent;
-  border: 0;
-  color: inherit;
-  cursor: pointer;
-  display: grid;
-  gap: 8px;
-  grid-template-columns: 38px minmax(0, 1fr);
-  min-width: 0;
-  padding: 6px 8px;
-  text-align: left;
-}
-
-.draft-plan-portrait {
-  align-items: center;
-  background: var(--bg-inset);
-  border: 1px solid var(--border-default);
-  border-radius: 7px;
-  display: inline-flex;
-  height: 38px;
-  justify-content: center;
-  overflow: hidden;
-  width: 38px;
-}
-
-.draft-plan-portrait img {
-  height: 100%;
-  object-fit: cover;
-  width: 100%;
-}
-
-.draft-plan-select span:last-child {
-  display: grid;
-  gap: 3px;
-  min-width: 0;
-}
-
-.draft-plan-select strong,
-.draft-plan-select small {
-  overflow: visible;
-  overflow-wrap: anywhere;
-  text-overflow: clip;
-  white-space: normal;
-}
-
-.draft-plan-select strong {
-  color: var(--text-primary);
-  font-size: 12px;
-  line-height: 1.2;
-}
-
-.draft-plan-select small {
-  color: var(--text-secondary);
-  font-size: 10px;
-  line-height: 1.2;
-}
-
-.draft-plan-remove {
-  align-self: start;
-  background: transparent;
-  border: 0;
-  color: var(--text-secondary);
-  cursor: pointer;
-  font: inherit;
-  font-size: 12px;
-  font-weight: 900;
-  line-height: 1;
-  padding: 8px 8px 0 0;
-}
-
-.draft-plan-remove:hover {
-  color: var(--accent-orange);
-}
-
 @media (max-width: 1040px) {
   .uma-planner-layout {
     grid-template-columns: minmax(0, 1fr);
@@ -804,10 +630,6 @@
 
   .uma-planning-summary {
     grid-column: 1 / -1;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .draft-plan-list {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
@@ -824,10 +646,6 @@
 
   .uma-planner-layout,
   .uma-planning-summary {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .draft-plan-list {
     grid-template-columns: minmax(0, 1fr);
   }
 

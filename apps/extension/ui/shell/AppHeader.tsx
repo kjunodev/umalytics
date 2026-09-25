@@ -240,10 +240,6 @@ export function AppHeader({
             >
               {diagnosticsCopied ? 'Copied' : 'Copy diagnostics'}
             </button>
-            <button type="button" className="menuitem" role="menuitem" disabled title="Coming soon">
-              Settings
-              <span className="menuitem-hint">Soon</span>
-            </button>
             <a
               className="menuitem"
               role="menuitem"
