@@ -52,6 +52,18 @@ test('Explorer styling cannot override shared draft tile geometry', () => {
   assert.match(baseCss,/scrollbar-gutter:\s*stable/);
 });
 
+test('draft.css never truncates names: no text-overflow: ellipsis anywhere, so long Uma/player/track names wrap and their rows grow instead of clipping', () => {
+  const draftCss = readModule('uiDraftCss');
+  assert.doesNotMatch(draftCss, /text-overflow:\s*ellipsis/);
+});
+
+test('the races column shares its height between race cards so the column fills the panel instead of leaving a scrollbar, only falling back to internal scroll on very short windows', () => {
+  const draftCss = readModule('uiDraftCss');
+  assert.match(draftCss, /\.draft-race-card\s*\{[^}]*flex:\s*1 1 0/s);
+  assert.match(draftCss, /\.draft-race-card\s*\{[^}]*min-height:\s*\d+px/s);
+  assert.match(draftCss, /\.draft-race-list\s*\{[^}]*overflow-y:\s*auto/s, 'a fallback for very short windows');
+});
+
 test('the played/new chip renders as its own line under the pick name, not layered over the portrait', () => {
   const c = vm.createContext({element:(type,props,...children)=>({type,props,children}),UmaImage:'Image',getUmaPortraitUrl:id=>`portrait/${id}`,isKnownUmaOutfitId:()=>false});
   loadFunction(c, draftSyntax, 'DraftPickTile');

@@ -70,7 +70,6 @@
   color: var(--text-muted);
   display: inline-flex;
   gap: 6px;
-  white-space: nowrap;
 }
 
 .draft-stage.current {
@@ -335,9 +334,9 @@
   display: flex;
   flex-grow: 1;
   gap: 10px;
-  height: 36px;
+  min-height: 36px;
   min-width: 0;
-  padding: 0 10px;
+  padding: 6px 10px;
 }
 
 .draft-ban-veto-slot.empty {
@@ -379,11 +378,9 @@
   color: var(--text-secondary);
   font-size: 13px;
   min-width: 0;
-  overflow: hidden;
+  overflow-wrap: anywhere;
   text-decoration: line-through;
   text-decoration-color: var(--border-emphasis);
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .draft-experience-panel {
@@ -407,9 +404,7 @@
   font-family: var(--font-display);
   font-size: 16px;
   font-weight: 700;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 .draft-experience-row {
@@ -427,9 +422,7 @@
 .draft-experience-row span:first-child {
   color: var(--text-primary);
   font-weight: 500;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 .draft-experience-row span:not(:first-child) {
@@ -528,7 +521,7 @@
   display: flex;
   flex-direction: column;
   flex-grow: 1;
-  gap: 8px;
+  gap: 6px;
   list-style: none;
   margin: 0;
   min-height: 0;
@@ -547,8 +540,8 @@
   display: grid;
   flex: 1 1 0;
   grid-template-columns: 28px minmax(0, 1fr);
-  min-height: 52px;
-  padding: 10px 12px;
+  min-height: 56px;
+  padding: 8px 12px;
   row-gap: 6px;
 }
 
@@ -605,7 +598,7 @@
   color: var(--text-primary);
   font-size: 14px;
   font-weight: 600;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 .draft-race-layout {
@@ -647,7 +640,6 @@
   letter-spacing: 0.05em;
   padding: 0 7px;
   text-transform: uppercase;
-  white-space: nowrap;
 }
 
 .draft-race-number.tiebreaker {
@@ -663,7 +655,8 @@
   font-size: 10px;
   font-weight: 900;
   letter-spacing: 0.08em;
-  padding: 2px 2px 0;
+  line-height: 1;
+  padding: 0 2px;
   text-transform: uppercase;
 }
 
@@ -677,9 +670,9 @@
   display: flex;
   flex-shrink: 0;
   gap: 10px;
-  height: 36px;
+  min-height: 30px;
   min-width: 0;
-  padding: 0 10px;
+  padding: 4px 10px;
 }
 
 .draft-vetoed-map-row.team1 {
@@ -704,11 +697,9 @@
   color: var(--text-secondary);
   font-size: 13px;
   min-width: 0;
-  overflow: hidden;
+  overflow-wrap: anywhere;
   text-decoration: line-through;
   text-decoration-color: var(--border-emphasis);
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 @media (max-width: 1200px) {
