@@ -1,5 +1,6 @@
 import type { PlayerProfileSummary, PlayerRecentMatchSummary, PlayerStatsScope, PrematchPlayer, PrematchTeam } from '@umalytics/shared';
 import { useEffect, useRef, useState } from 'react';
+import './player.css';
 import {
   cancelPlayerHistoryPageRequest,
   cancelPlayerProfileRequest,

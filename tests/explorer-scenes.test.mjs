@@ -44,10 +44,12 @@ test('History details select a real roster member and do not replace Draft or Um
   assert.equal(sceneHarness('unknown')({...props,scene:'lobby'}).type,'section');
 });
 test('Explorer styling cannot override shared draft button geometry', () => {
-  const css = readModule('scoutStyles');
-  assert.doesNotMatch(css,/\.explorer-view\s+button\s*\{/);
-  assert.match(css,/\.draft-pick-slot button\s*\{[^}]*padding:\s*3px/s);
-  assert.match(css,/scrollbar-gutter:\s*stable/);
+  const explorerCss = readModule('uiHistoryCss');
+  const draftCss = readModule('uiDraftCss');
+  const baseCss = readModule('uiCommonBaseCss');
+  assert.doesNotMatch(explorerCss,/\.explorer-view\s+button\s*\{/);
+  assert.match(draftCss,/\.draft-pick-slot button\s*\{[^}]*padding:\s*3px/s);
+  assert.match(baseCss,/scrollbar-gutter:\s*stable/);
 });
 
 test('Live and History pick slots use identical known-outfit portraits regardless of captured image URL', () => {

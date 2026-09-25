@@ -1,0 +1,47 @@
+.team-section {
+  display: grid;
+  gap: 10px;
+}
+
+.team-header {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  min-height: 36px;
+}
+
+.team-header h2 {
+  font-size: 15px;
+  line-height: 1.2;
+  margin: 0;
+  color: var(--text-primary);
+}
+
+.team-header p {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.4;
+  margin: 4px 0 0;
+}
+
+.player-list {
+  display: grid;
+  gap: 12px;
+  grid-auto-rows: minmax(312px, auto);
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+@media (max-width: 1040px) {
+  .player-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 700px) {
+  .player-list {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

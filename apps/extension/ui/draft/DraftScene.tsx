@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import './draft.css';
 import type {
   DraftSnapshot,
   DraftTeamSnapshot,

@@ -35,8 +35,6 @@ import { HistoricalScene, getSelectedPlayerContext, type AppScene } from '../../
 import { TeamSection } from '../../ui/lobby/TeamSection';
 import { PlayerDetailScene } from '../../ui/player/PlayerDetailScene';
 import {
-  APP_VERSION_LABEL,
-  IS_PRIVATE_BUILD,
   formatDiagnosticsForClipboard,
   getDiagnostics,
   getLoadingDiscordIdsForDisplay,
@@ -49,6 +47,7 @@ import {
   normalizeLobbyLockForDisplay,
   normalizeProfileSnapshotForDisplay
 } from '../../ui/scoutData';
+import { AppHeader, type AppMode } from '../../ui/shell/AppHeader';
 import { UmaPlannerScene } from '../../ui/umas/UmaPlannerScene';
 
 const STATS_SCOPE_STORAGE_KEY = 'statsScope';
@@ -275,109 +274,36 @@ export default function App() {
   return (
     <main className="app-shell surface-scout">
 
-      <header className="app-header">
-        <div>
-          <div className="app-title-row">
-            <h1>UmaLytics</h1>
-            <span className={IS_PRIVATE_BUILD ? 'app-version private' : 'app-version'}>
-              v{APP_VERSION_LABEL}{IS_PRIVATE_BUILD ? ' (private)' : ''}
-            </span>
-            <button
-              type="button"
-              className={diagnosticsCopied ? 'diagnostics-copy active' : 'diagnostics-copy'}
-              title="Copy scout diagnostics"
-              aria-label="Copy scout diagnostics"
-              onClick={copyDiagnostics}
-            >
-              <span className="clipboard-glyph" aria-hidden="true" />
-              <span className="diagnostics-copy-label">{diagnosticsCopied ? 'Copied' : 'Copy diagnostics'}</span>
-            </button>
-          </div>
-          <p className="app-credits">
-            UmaLytics by{' '}
-            <a href="https://github.com/kjunodev/umalytics" target="_blank" rel="noreferrer">
-              k.juno
-            </a>
-            {' '} - Uma Drafter by{' '}
-            <a href="https://drafter.uma.guide" target="_blank" rel="noreferrer">
-              Terumi
-            </a>
-          </p>
-          <div className="header-context">
-            <p>{mode === 'live' ? (displayedRoster?.matchCode === undefined ? 'Lobby scouting' : `Match ${displayedRoster.matchCode}`) : mode === 'history' ? 'Completed match scouting' : 'Single player lookup'}</p>
-            <p className="profile-freshness">{mode === 'live' ? (profileStatusLabel ?? 'Waiting for lobby data') : 'Player statistics reflect the selected time window'}</p>
-          </div>
-        </div>
-        <div className="header-actions">
-          <div className="live-header-controls" style={{ visibility: mode === 'live' ? 'visible' : 'hidden' }} aria-hidden={mode !== 'live'} inert={mode !== 'live'}>
-          <div className="header-control-row">
-            {hasRoster ? (
-              <button
-                type="button"
-                className={refreshCooldownMs > 0 ? 'refresh-button cooldown' : 'refresh-button'}
-                disabled={!canRefresh}
-                onClick={refreshProfiles}
-              >
-                {loadingProfiles > 0
-                  ? 'Refreshing'
-                  : refreshCooldownMs > 0
-                    ? `Wait ${Math.ceil(refreshCooldownMs / 1000)}s`
-                    : 'Refresh data'}
-              </button>
-            ) : null}
-            {displayedRoster === undefined ? (
-              <span className="status-pill idle">Waiting</span>
-            ) : null}
-          </div>
-          {hasRoster ? (
-            <div className="header-control-row">
-              <button
-                type="button"
-                className={isLobbyLocked ? 'lock-button active' : 'lock-button'}
-                onClick={toggleLobbyLock}
-                title={
-                  isLobbyLocked
-                    ? 'Unlock live lobby player updates.'
-                    : 'Freeze the current players while draft data keeps updating.'
-                }
-              >
-                {isLobbyLocked ? `Locked ${lobbyPlayerCount}/10` : `Lock ${lobbyPlayerCount}/10`}
-              </button>
-            </div>
-          ) : null}
-          </div>
-          <div className="stats-scope-toggle" aria-label="Stats time window">
-            <button
-              type="button"
-              aria-pressed={visibleScope === 'currentSeason'} className={visibleScope === 'currentSeason' ? 'active' : ''}
-              title="Show current season records, scoring, and Uma stats."
-              onClick={() => {
-                changeScope('currentSeason');
-              }}
-            >
-              Season
-            </button>
-            <button
-              type="button"
-              aria-pressed={visibleScope === 'allTime'} className={visibleScope === 'allTime' ? 'active' : ''}
-              title="Show all-time ranked records, scoring, and Uma stats. Rank still uses the active season leaderboard."
-              onClick={() => {
-                changeScope('allTime');
-              }}
-            >
-              All-time
-            </button>
-          </div>
-        </div>
-        <nav className="app-navigation" aria-label="Scout navigation">
-          <div className="scene-toggle mode-toggle" aria-label="UmaLytics mode">
-            {(['live', 'history', 'profiles'] as const).map(value => <button key={value} type="button" aria-pressed={mode === value} className={mode === value ? 'active' : ''} onClick={() => setMode(value)}>{value === 'live' ? 'Live' : value === 'history' ? 'History' : 'Profiles'}</button>)}
-          </div>
-          <div className="scene-toggle subscene-toggle" aria-label="UmaLytics scene" style={{ visibility: mode === 'profiles' ? 'hidden' : 'visible' }} aria-hidden={mode === 'profiles'} inert={mode === 'profiles'}>
-            {(['lobby', 'draft', 'umas'] as const).map(scene => <button key={scene} type="button" aria-pressed={visibleScene === scene} className={visibleScene === scene ? 'active' : ''} onClick={() => { if (mode === 'history') { setHistoryScene(scene); setHistoryNavigation(value => value + 1); } else { setSelectedPlayerKey(undefined); setActiveScene(scene); } }}>{scene === 'lobby' ? 'Lobby' : scene === 'draft' ? 'Draft' : 'Umas'}</button>)}
-          </div>
-        </nav>
-      </header>
+      <AppHeader
+        mode={mode}
+        onModeChange={setMode}
+        visibleScene={visibleScene}
+        onSceneChange={(scene) => {
+          if (mode === 'history') {
+            setHistoryScene(scene);
+            setHistoryNavigation(value => value + 1);
+          } else {
+            setSelectedPlayerKey(undefined);
+            setActiveScene(scene);
+          }
+        }}
+        sceneDimmed={mode === 'profiles'}
+        visibleScope={visibleScope}
+        onScopeChange={changeScope}
+        matchCode={displayedRoster?.matchCode}
+        hasRoster={hasRoster}
+        isLive={mode === 'live'}
+        profileStatusLabel={profileStatusLabel}
+        isLobbyLocked={isLobbyLocked}
+        lobbyPlayerCount={lobbyPlayerCount}
+        onToggleLobbyLock={toggleLobbyLock}
+        canRefresh={canRefresh}
+        isRefreshing={loadingProfiles > 0}
+        refreshCooldownSeconds={Math.ceil(refreshCooldownMs / 1000)}
+        onRefresh={refreshProfiles}
+        diagnosticsCopied={diagnosticsCopied}
+        onCopyDiagnostics={copyDiagnostics}
+      />
 
       <div hidden={mode !== 'history'}><HistoryView Scene={HistoricalScene} scene={historyScene} scope={historyScope} navigation={historyNavigation} /></div>
       <div hidden={mode !== 'profiles'}><ProfilesView Detail={PlayerDetailScene} scope={lookupScope} /></div>

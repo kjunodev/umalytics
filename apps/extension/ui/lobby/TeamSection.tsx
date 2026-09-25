@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import type { PlayerProfileSummary, PlayerStatsScope, PrematchPlayer, PrematchTeam } from '@umalytics/shared';
+import './lobby.css';
 import { getNotableBadges } from '../common/badges';
 import { formatDecimal, formatNumber, formatPercent, formatRank, formatRecord } from '../common/format';
 import { TEAM_SLOT_COUNT, getPlayerKey } from '../common/roster';

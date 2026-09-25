@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ComponentType } from 'react';
+import './history.css';
 import type { DraftSnapshot, PlayerProfileSummary, PlayerStatsScope, PrematchPlayer, PrematchRoster, PrematchTeam } from '@umalytics/shared';
 import { loadHistoricalMatch, loadExplorerProfiles, searchPlayers } from '../../explorer/explorerClient';
 import type { HistoricalMatch, PlayerSearchResult } from '../../explorer/explorerTypes';

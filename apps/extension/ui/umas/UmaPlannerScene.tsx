@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import './umas.css';
 import type { DraftUmaAction, PlayerProfileSummary, PlayerStatsScope, PrematchPlayer, PrematchRoster, PrematchTeam, TeamId } from '@umalytics/shared';
 import { missingUmaHistoryLabel } from '../../profiles/profileAvailability';
 import { getTeamGroups } from '../../room/rosterDisplay';

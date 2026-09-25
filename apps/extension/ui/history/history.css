@@ -1,0 +1,119 @@
+.explorer-view {
+  display: grid;
+  gap: 16px;
+}
+
+.explorer-search {
+  display: grid;
+  gap: 8px;
+  padding: 18px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-xl);
+  background: var(--bg-surface-1);
+}
+
+.explorer-search label {
+  font-weight: 650;
+}
+
+.explorer-input-row {
+  display: flex;
+  gap: 10px;
+}
+
+.explorer-input-row input {
+  min-width: 0;
+  flex: 1;
+  color: var(--text-primary);
+  background: var(--bg-page);
+  border: 1px solid var(--border-emphasis);
+  border-radius: 7px;
+  padding: 11px 12px;
+  font: inherit;
+}
+
+:is(.explorer-search, .explorer-results, .explorer-pagination, .explorer-error) button {
+  cursor: pointer;
+  color: var(--text-link-hover);
+  background: var(--bg-raised);
+  border: 1px solid var(--border-emphasis);
+  border-radius: 7px;
+  padding: 9px 13px;
+  font: inherit;
+}
+
+.explorer-view button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.explorer-view button:focus-visible,
+.explorer-view input:focus-visible {
+  outline: 2px solid var(--accent-blue-soft);
+  outline-offset: 3px;
+}
+
+.explorer-context {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+}
+
+.explorer-context p {
+  color: var(--text-secondary);
+  margin: 6px 0;
+}
+
+.explorer-context a {
+  color: var(--text-link-hover);
+}
+
+.explorer-error {
+  color: var(--accent-gold);
+}
+
+.explorer-error button {
+  margin-left: 8px;
+}
+
+.explorer-results {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.explorer-results button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+  text-align: left;
+}
+
+.explorer-results span {
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.explorer-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+}
+
+@media (max-width: 600px) {
+  .explorer-input-row,
+  .explorer-context {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .explorer-results button {
+    flex-wrap: wrap;
+  }
+}
