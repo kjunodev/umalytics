@@ -27,6 +27,7 @@ export function AppHeader({
   visibleScope,
   onScopeChange,
   matchCode,
+  historicalMatchCode,
   hasRoster,
   isLive,
   profileStatusLabel,
@@ -48,6 +49,7 @@ export function AppHeader({
   visibleScope: PlayerStatsScope;
   onScopeChange: (scope: PlayerStatsScope) => void;
   matchCode: string | undefined;
+  historicalMatchCode: string | undefined;
   hasRoster: boolean;
   isLive: boolean;
   profileStatusLabel: string | undefined;
@@ -85,7 +87,7 @@ export function AppHeader({
     };
   }, [menuOpen]);
 
-  const statusLabel = isLive ? (hasRoster ? 'Live' : 'Waiting') : mode === 'history' ? 'History' : 'Players';
+  const statusLabel = isLive ? (hasRoster ? 'Live' : 'Waiting') : mode === 'history' && historicalMatchCode ? 'Past match' : mode === 'history' ? 'History' : 'Players';
 
   return (
     <header className="app-header">
@@ -168,6 +170,7 @@ export function AppHeader({
         <span className="status-pill-dot" aria-hidden="true" />
         <span>{statusLabel}</span>
         {isLive && matchCode !== undefined ? <span className="status-pill-code">{matchCode}</span> : null}
+        {mode === 'history' && historicalMatchCode ? <span className="status-pill-code">{historicalMatchCode}</span> : null}
       </div>
 
       <div className="app-menu-wrap" ref={menuRef}>

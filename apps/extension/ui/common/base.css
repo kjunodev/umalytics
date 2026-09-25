@@ -212,9 +212,7 @@ button {
   font-weight: 700;
   line-height: 1.2;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 .identity-tag {
@@ -323,10 +321,9 @@ button {
   font-weight: 800;
   letter-spacing: 0;
   line-height: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow-wrap: anywhere;
   text-transform: uppercase;
-  white-space: nowrap;
+  white-space: normal;
 }
 
 .stat-cell strong {
@@ -385,8 +382,7 @@ button {
 }
 
 /*
- * Uma-list primitives shared by TopUmasList (rendered from both the lobby
- * cards and the player detail scene).
+ * Uma-list primitives for lobby cards.
  */
 .top-umas {
   border-top: 1px solid var(--border-default);
@@ -415,26 +411,14 @@ button {
 }
 
 .top-umas li {
-  align-items: baseline;
+  align-items: start;
   display: grid;
-  gap: 4px;
-  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 1px;
+  grid-template-columns: minmax(0, 1fr);
   min-width: 0;
 }
 
-.top-umas:not(.best-umas) li {
-  align-items: start;
-  gap: 1px;
-  grid-template-columns: minmax(0, 1fr);
-}
-
-.top-umas:not(.best-umas) .uma-name {
-  overflow: visible;
-  text-overflow: clip;
-  white-space: normal;
-}
-
-.top-umas:not(.best-umas) .uma-meta {
+.top-umas .uma-meta {
   justify-self: start;
   text-align: left;
 }
@@ -444,9 +428,7 @@ button {
   font-size: 12px;
   font-weight: 700;
   line-height: 1.2;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 .uma-meta {

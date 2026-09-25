@@ -120,10 +120,10 @@ test('vetoed maps are credited to the team whose own list held them, the team th
 
 test('race modifier chips look up known tones case-insensitively and fall back for unknown values', () => {
   const c = harness();
-  assert.deepEqual({ ...c.getDraftSurfaceChip('Turf') }, { label: 'Turf', bg: '#13301f', fg: '#8fe0b0' });
-  assert.deepEqual({ ...c.getDraftSurfaceChip('turf') }, { label: 'turf', bg: '#13301f', fg: '#8fe0b0' });
+  assert.deepEqual({ ...c.getDraftSurfaceChip('Turf') }, { label: 'Turf', tone: 'surface-turf' });
+  assert.deepEqual({ ...c.getDraftSurfaceChip('turf') }, { label: 'turf', tone: 'surface-turf' });
   assert.equal(c.getDraftSurfaceChip(undefined), undefined);
-  assert.deepEqual({ ...c.getDraftGroundChip('Muddy') }, { label: 'Muddy', bg: '#1f2738', fg: '#9aa4b8' });
+  assert.deepEqual({ ...c.getDraftGroundChip('Muddy') }, { label: 'Muddy', tone: 'default' });
 });
 
 test('weather icon key only recognizes the four known weather labels, case-insensitively', () => {

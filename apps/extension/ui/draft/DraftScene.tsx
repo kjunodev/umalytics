@@ -480,7 +480,7 @@ export function DraftModChipView({
   chip,
   iconKey
 }: {
-  chip: { label: string; bg: string; fg: string } | undefined;
+  chip: { label: string; tone: string } | undefined;
   iconKey?: 'sunny' | 'cloudy' | 'rainy' | 'snowy';
 }) {
   if (chip === undefined) {
@@ -488,7 +488,7 @@ export function DraftModChipView({
   }
 
   return (
-    <span className="draft-mod" style={{ background: chip.bg, color: chip.fg }}>
+    <span className="draft-mod" data-tone={chip.tone}>
       {iconKey === undefined ? null : <DraftWeatherIcon iconKey={iconKey} />}
       {chip.label}
     </span>

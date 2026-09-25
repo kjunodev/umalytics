@@ -1,15 +1,9 @@
-/*
- * The 116px below mirrors the shell chrome around this scene in Live mode
- * (app-shell padding 16+22, header 60, header margin 18) so the scene fills
- * the viewport without a page scrollbar; History mode adds its own search
- * header above the scene, so this is a best-effort fit there, not exact.
- */
 .draft-scene {
   display: flex;
   flex-direction: column;
   gap: 14px;
-  height: calc(100vh - 116px);
-  min-height: 520px;
+  height: 100%;
+  min-height: 0;
 }
 
 .draft-phase-bar {
@@ -630,6 +624,8 @@
 }
 
 .draft-mod {
+  background: var(--border-subtle);
+  color: var(--text-secondary);
   align-items: center;
   border-radius: 10px;
   display: inline-flex;
@@ -641,6 +637,21 @@
   padding: 0 7px;
   text-transform: uppercase;
 }
+
+.draft-mod[data-tone="surface-turf"],
+.draft-mod[data-tone="season-summer"],
+.draft-mod[data-tone="ground-firm"] { background: var(--status-live-bg); color: var(--accent-green-soft); }
+.draft-mod[data-tone="surface-dirt"] { background: #3a2410; color: #e3b078; }
+.draft-mod[data-tone="season-spring"] { background: #3a1830; color: #ff9fd0; }
+.draft-mod[data-tone="season-autumn"],
+.draft-mod[data-tone="ground-soft"] { background: #3a2410; color: #f0b070; }
+.draft-mod[data-tone="season-winter"] { background: #16304a; color: #8fc8ff; }
+.draft-mod[data-tone="weather-sunny"] { background: #33280f; color: var(--accent-gold); }
+.draft-mod[data-tone="weather-cloudy"] { background: var(--tone-sample-bg); color: var(--tone-sample-fg); }
+.draft-mod[data-tone="weather-rainy"] { background: var(--tone-skill-bg); color: var(--accent-blue-soft); }
+.draft-mod[data-tone="weather-snowy"] { background: #12303a; color: #8fe3f0; }
+.draft-mod[data-tone="ground-good"] { background: var(--party-a-bg); color: var(--party-a-fg); }
+.draft-mod[data-tone="ground-heavy"] { background: #3a1818; color: #ff9f9f; }
 
 .draft-race-number.tiebreaker {
   background: #3a2a10;

@@ -8,7 +8,7 @@ import {
   normalizeUmaOutfitId
 } from '../../umas/umaPortraits';
 import { normalizeSearchText, normalizeUmaNameForLookup } from '../common/format';
-import { getDisplayedProfileStats } from '../player/PlayerDetailScene';
+import { getDisplayedProfileStats } from '../player/playerProfileDisplay';
 
 export type UmaCatalogSortMode = 'releaseOrder' | 'lobbyHits' | 'alphabetical';
 

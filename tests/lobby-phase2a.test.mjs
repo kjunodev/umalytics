@@ -6,9 +6,9 @@ import { loadFunction, parseTsxModule, readModule } from './support/harness.mjs'
 const teamSectionSyntax = parseTsxModule('uiLobbyTeamSection');
 const badgeChipSyntax = parseTsxModule('uiLobbyBadgeChip');
 const playerDrawerSyntax = parseTsxModule('uiPlayerDrawer');
-const playerDetailSyntax = parseTsxModule('uiPlayerDetailScene');
+const playerDetailSyntax = parseTsxModule('uiPlayerProfileDisplay');
 const badgesSyntax = parseTsxModule('uiCommonBadges');
-const recentMatchesSyntax = parseTsxModule('uiPlayerRecentMatchesList');
+const recentMatchesSyntax = parseTsxModule('uiPlayerRecentMatchFormat');
 const topUmasListSyntax = parseTsxModule('uiPlayerTopUmasList');
 
 function cardStateHarness() {
@@ -265,7 +265,7 @@ function renderableDrawer(profile) {
   return { c, render, effects: () => effects };
 }
 
-test('history page one enriches badges with the real recentForm, so Consistent can appear in the drawer, matching PlayerDetailScene', async () => {
+test('public drawer displays history without deriving a Consistent badge from its matches', async () => {
   const profile = {
     discordId: '123456789012345678', displayName: 'Fixture', fetchedAt: Date.now(), profileUrl: '',
     matches: 30, wins: 15, losses: 15, winRate: 0.5, pointsPerGame: 4, mvpMatches: 2, rank: 400,
@@ -291,7 +291,7 @@ test('history page one enriches badges with the real recentForm, so Consistent c
 
   const after = render();
   const badgesAfter = findAll(after, (n) => n.props?.className?.includes?.('notable-tag')).map((n) => n.children[0]);
-  assert(badgesAfter.includes('Consistent'), 'Consistent should appear once page-1 history resolves with a high scoring rate, same as the old detail scene');
+  assert(!badgesAfter.includes('Consistent'), 'displayed history must not create derived public stats');
 });
 
 test('the last-5 dots beside Match history show real confirmed results once loaded, and neutral placeholders before that', async () => {

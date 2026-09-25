@@ -39,7 +39,7 @@ function useProfiles(players: PrematchPlayer[], scope: PlayerStatsScope) {
 
 const EMPTY_PLAYERS: PrematchPlayer[] = [];
 
-export function HistoryView({ Scene, scene, scope, navigation }: { Scene: HistoryScene; scene: 'lobby' | 'draft' | 'umas'; scope: PlayerStatsScope; navigation: number }) {
+export function HistoryView({ Scene, scene, scope, navigation, onMatchCodeChange }: { Scene: HistoryScene; scene: 'lobby' | 'draft' | 'umas'; scope: PlayerStatsScope; navigation: number; onMatchCodeChange: (code: string | undefined) => void }) {
   const [input, setInput] = useState('');
   const [match, setMatch] = useState<HistoricalMatch>();
   const [error, setError] = useState('');
@@ -50,32 +50,28 @@ export function HistoryView({ Scene, scene, scope, navigation }: { Scene: Histor
   const load = async () => {
     request.current?.abort();
     const controller = new AbortController(); request.current = controller;
-    setLoading(true); setError(''); setMatch(undefined);
+    setLoading(true); setError(''); setMatch(undefined); onMatchCodeChange(undefined);
     try {
       const result = await loadHistoricalMatch(input, controller.signal);
-      if (!controller.signal.aborted) setMatch(result);
+      if (!controller.signal.aborted) { setMatch(result); onMatchCodeChange(result.matchCode); }
     } catch (caught) {
       if (!controller.signal.aborted) setError(caught instanceof Error ? caught.message : 'Unable to load match.');
     } finally { if (!controller.signal.aborted) setLoading(false); }
   };
   return <section className="explorer-view" aria-label="Match history">
-    <form className="explorer-search" onSubmit={event => { event.preventDefault(); void load(); }}>
-      <label htmlFor="history-match">Match code or match URL</label>
+    <form className="history-search" onSubmit={event => { event.preventDefault(); void load(); }}>
+      <label htmlFor="history-match">Match code</label>
       <div className="explorer-input-row"><input id="history-match" value={input} onChange={event => setInput(event.target.value)} placeholder="TG7YT2 or https://drafter.uma.guide/matches/TG7YT2" maxLength={300} required spellCheck={false} />
-        <button type="submit" disabled={!input.trim()}>Load draft</button></div>
+        <button type="submit" disabled={!input.trim() || loading}>Load</button></div>
     </form>
-    {loading && <p role="status">Loading completed draft…</p>}
+    {loading && <p className="history-message" role="status">Loading completed draft…</p>}
     {error && <p className="explorer-error" role="alert">{error}</p>}
     {!match && !loading && !error && <section className="empty-state"><h2>Review a completed draft</h2><p>Enter a match code to see its saved maps, picks, and bans in the live draft layout.</p></section>}
     {match && <>
-      <div className="explorer-context"><div><h2>Historical match · {match.matchCode}</h2>
-        <p>Completed draft · <a href={`https://drafter.uma.guide/matches/${match.matchCode}`} target="_blank" rel="noreferrer">Open match on Uma Drafter</a></p>
-        <p>Player statistics are current, not snapshots from the date of this match.</p></div>
-        </div>
-      {match.warnings.map(warning => <p role="status" key={warning}>{warning}</p>)}
-      {profilesLoading && <p role="status">Loading current player stats… The completed draft is ready.</p>}
+      {match.warnings.map(warning => <p className="history-message" role="status" key={warning}>{warning}</p>)}
+      {profilesLoading && <p className="history-message" role="status">Loading current player stats… The completed draft is ready.</p>}
       {profileError && <p className="explorer-error" role="status">{profileError} <button type="button" disabled={profilesLoading} onClick={retry}>Retry stats</button></p>}
-      <Scene key={match.matchCode} snapshot={match.draft} roster={match.roster} profiles={profiles} statsScope={scope} scene={scene} loading={profilesLoading} navigation={navigation} />
+      <div className="history-scene"><Scene key={match.matchCode} snapshot={match.draft} roster={match.roster} profiles={profiles} statsScope={scope} scene={scene} loading={profilesLoading} navigation={navigation} /></div>
     </>}
   </section>;
 }

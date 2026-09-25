@@ -60,6 +60,7 @@ export default function App() {
   const [historyScene, setHistoryScene] = useState<AppScene>('draft');
   const [historyNavigation, setHistoryNavigation] = useState(0);
   const [historyScope, setHistoryScope] = useState<PlayerStatsScope>('currentSeason');
+  const [historicalMatchCode, setHistoricalMatchCode] = useState<string>();
   const [lookupScope, setLookupScope] = useState<PlayerStatsScope>('currentSeason');
   const [roster, setRoster] = useState<PrematchRoster | undefined>();
   const [draftSnapshot, setDraftSnapshot] = useState<DraftSnapshot | undefined>();
@@ -292,6 +293,7 @@ export default function App() {
         visibleScope={visibleScope}
         onScopeChange={changeScope}
         matchCode={displayedRoster?.matchCode}
+        historicalMatchCode={historicalMatchCode}
         hasRoster={hasRoster}
         isLive={mode === 'live'}
         profileStatusLabel={profileStatusLabel}
@@ -306,9 +308,9 @@ export default function App() {
         onCopyDiagnostics={copyDiagnostics}
       />
 
-      <div hidden={mode !== 'history'}><HistoryView Scene={HistoricalScene} scene={historyScene} scope={historyScope} navigation={historyNavigation} /></div>
-      <div hidden={mode !== 'profiles'}><PlayersView roster={displayedRoster} statsScope={lookupScope} active={mode === 'profiles'} /></div>
-      <div hidden={mode !== 'live'}>
+      <div className="app-scene-area" hidden={mode !== 'history'}><HistoryView Scene={HistoricalScene} scene={historyScene} scope={historyScope} navigation={historyNavigation} onMatchCodeChange={setHistoricalMatchCode} /></div>
+      <div className="app-scene-area" hidden={mode !== 'profiles'}><PlayersView roster={displayedRoster} statsScope={lookupScope} active={mode === 'profiles'} /></div>
+      <div className="app-scene-area" hidden={mode !== 'live'}>
       {retryAt > 0 && (
         <p className="api-retry-notice" role="status">
           {retrySeconds > 0 ? `Stats API paused. Automatic retry in approximately ${retrySeconds}s.` : 'Waiting for the browser to resume profile requests.'}

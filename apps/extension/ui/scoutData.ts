@@ -7,7 +7,7 @@ import { filterSnapshotForBuild } from '../storage/profileStorage';
 import type { PlayerProfileLoadState, PlayerProfileSummariesSnapshot } from '../profiles/profileTypes';
 import type { LobbyLockState } from '../storage/lobbyLockStorage';
 import { formatRelativeAge, formatStatsScopeShortLabel } from './common/format';
-import { getDisplayedProfileStats } from './player/PlayerDetailScene';
+import { getDisplayedProfileStats } from './player/playerProfileDisplay';
 
 export const APP_MANIFEST = browser.runtime.getManifest();
 export const APP_VERSION_LABEL = formatAppVersionLabel(APP_MANIFEST);

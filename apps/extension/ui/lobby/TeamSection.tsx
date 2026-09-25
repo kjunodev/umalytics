@@ -7,7 +7,7 @@ import { formatDecimal, formatNumber, formatPercent, formatRank, formatRecord } 
 import { TEAM_SLOT_COUNT, getPlayerKey } from '../common/roster';
 import type { PartyVisual } from '../common/partyVisuals';
 import { getPlayerPartyVisual, getTeamPartyVisuals } from '../common/partyVisuals';
-import { StatCell, getDisplayedProfileStats, getLookupDiscordId, getPlayerNote, getStatsMessage } from '../player/PlayerDetailScene';
+import { StatCell, getDisplayedProfileStats, getLookupDiscordId, getPlayerNote, getStatsMessage } from '../player/playerProfileDisplay';
 import { TopUmasList, UmaResolutionNote } from '../player/TopUmasList';
 import { IS_PRIVATE_BUILD } from '../scoutData';
 

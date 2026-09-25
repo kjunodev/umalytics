@@ -201,62 +201,40 @@ export function formatDraftMapDetails(map: DraftRaceMapFields): string | undefin
 
 export interface DraftModChip {
   label: string;
-  bg: string;
-  fg: string;
+  tone: string;
 }
 
-const DEFAULT_MOD_TONE: readonly [string, string] = ['#1f2738', '#9aa4b8'];
+const MOD_TONES = {
+  surface: ['turf', 'dirt'],
+  season: ['spring', 'summer', 'autumn', 'winter'],
+  weather: ['sunny', 'cloudy', 'rainy', 'snowy'],
+  ground: ['good', 'firm', 'soft', 'heavy']
+} as const;
 
-const SURFACE_TONE: Record<string, readonly [string, string]> = {
-  turf: ['#13301f', '#8fe0b0'],
-  dirt: ['#3a2410', '#e3b078']
-};
-
-const SEASON_TONE: Record<string, readonly [string, string]> = {
-  spring: ['#3a1830', '#ff9fd0'],
-  summer: ['#13301f', '#8fe0b0'],
-  autumn: ['#3a2410', '#f0b070'],
-  winter: ['#16304a', '#8fc8ff']
-};
-
-const WEATHER_TONE: Record<string, readonly [string, string]> = {
-  sunny: ['#33280f', '#f0cd74'],
-  cloudy: ['#232b3c', '#c6cdda'],
-  rainy: ['#16243f', '#9cc2ff'],
-  snowy: ['#12303a', '#8fe3f0']
-};
-
-const GROUND_TONE: Record<string, readonly [string, string]> = {
-  good: ['#251f3d', '#c9b6ff'],
-  firm: ['#13301f', '#8fe0b0'],
-  soft: ['#3a2410', '#f0b070'],
-  heavy: ['#3a1818', '#ff9f9f']
-};
-
-function buildModChip(tone: Record<string, readonly [string, string]>, value: string | undefined): DraftModChip | undefined {
+function buildModChip(kind: keyof typeof MOD_TONES, value: string | undefined): DraftModChip | undefined {
   if (value === undefined) {
     return undefined;
   }
 
-  const [bg, fg] = tone[value.toLowerCase()] ?? DEFAULT_MOD_TONE;
-
-  return { label: value, bg, fg };
+  const normalized = value.toLowerCase();
+  const known = (MOD_TONES[kind] as readonly string[]).includes(normalized);
+  return { label: value, tone: known ? `${kind}-${normalized}` : 'default' };
 }
 
 export function getDraftSurfaceChip(value: string | undefined): DraftModChip | undefined {
-  return buildModChip(SURFACE_TONE, value);
+  return buildModChip('surface', value);
 }
 
 export function getDraftSeasonChip(value: string | undefined): DraftModChip | undefined {
-  return buildModChip(SEASON_TONE, value);
+  return buildModChip('season', value);
 }
 
 export function getDraftWeatherChip(value: string | undefined): DraftModChip | undefined {
-  return buildModChip(WEATHER_TONE, value);
+  return buildModChip('weather', value);
 }
 
 export function getDraftGroundChip(value: string | undefined): DraftModChip | undefined {
-  return buildModChip(GROUND_TONE, value);
+  return buildModChip('ground', value);
 }
 
 export type DraftWeatherIconKey = 'sunny' | 'cloudy' | 'rainy' | 'snowy';
