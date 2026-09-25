@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import './draft.css';
 import type {
   DraftSnapshot,
@@ -8,22 +8,31 @@ import type {
   PlayerStatsScope,
   PlayerTopUmaSummary,
   PrematchPlayer,
-  PrematchRoster,
-  TeamId
+  PrematchRoster
 } from '@umalytics/shared';
-import { missingUmaHistoryLabel } from '../../profiles/profileAvailability';
 import { getUmaPortraitUrl, isKnownUmaOutfitId } from '../../umas/umaPortraits';
 import { UmaImage } from '../common/UmaImage';
-import { formatDecimal, formatStatsScopeShortLabel } from '../common/format';
+import { formatDecimal, formatPercent } from '../common/format';
 import { TEAM_IDS, TEAM_SLOT_COUNT, getDraftRosterPlayersForTeam, getDraftSlots } from '../common/roster';
 import { findScopedUmaEntry, getUmaExperience } from '../umas/umaCatalog';
 import {
+  buildDraftRaceCards,
   formatDraftMapDetails,
-  formatDraftMapTitle,
-  formatDraftPhase,
-  formatDraftUmaKind,
+  formatDraftStatusText,
+  formatRaceDistance,
+  formatRaceTrackName,
   formatTeamName,
-  formatTiebreakerMap
+  getDraftGroundChip,
+  getDraftInitialPickCount,
+  getDraftSeasonChip,
+  getDraftStageIndex,
+  getDraftStages,
+  getDraftSurfaceChip,
+  getDraftWeatherChip,
+  getDraftWeatherIconKey,
+  hasStructuredRaceModifiers,
+  type DraftRaceCard,
+  type DraftRaceMapFields
 } from './draftFormat';
 
 export const DRAFT_MAP_SLOT_COUNT = 4;
@@ -47,8 +56,6 @@ export function DraftScene({
   profiles: Record<string, PlayerProfileSummary>;
   statsScope: PlayerStatsScope;
 }) {
-  const scopeLabel = statsScope === 'currentSeason' ? 'current season' : 'all-time';
-
   if (snapshot === undefined) {
     return (
       <section className="empty-state">
@@ -58,39 +65,91 @@ export function DraftScene({
     );
   }
 
+  const initialPickCount = getDraftInitialPickCount(snapshot.rules, DRAFT_PICK_SLOT_COUNT);
+  const stageIndex = getDraftStageIndex(snapshot, initialPickCount);
+  const perTeamMapSlots = snapshot.rules?.maps ?? DRAFT_MAP_SLOT_COUNT;
+  const races = buildDraftRaceCards(snapshot.teams, snapshot.tiebreakerMap, perTeamMapSlots * 2);
+
   return (
     <section className="draft-scene" aria-label={historical ? 'Completed draft view' : 'Live draft view'}>
-      <header className="draft-scene-header">
-        <div>
-          <h2>{historical ? 'Completed Draft' : 'Live Draft'}</h2>
-          <p>
-            {snapshot.phase === undefined ? 'Draft phase unknown' : formatDraftPhase(snapshot.phase)}
-            {snapshot.currentTeam === undefined ? '' : ` - ${formatTeamName(snapshot.teams[snapshot.currentTeam])} turn`}
-          </p>
-          {snapshot.tiebreakerMap === undefined ? null : (
-            <p className="draft-tiebreaker">
-              Tiebreaker: <strong>{formatTiebreakerMap(snapshot.tiebreakerMap)}</strong>
-            </p>
-          )}
-        </div>
-        <span title={`Uma experience checks each team's loaded ${scopeLabel} ranked Uma history.`}>
-          {historical ? 'Current team' : 'Using team'} {formatStatsScopeShortLabel(statsScope)} history
-        </span>
-      </header>
+      <DraftPhaseBar snapshot={snapshot} historical={historical} initialPickCount={initialPickCount} stageIndex={stageIndex} />
 
-      <div className="draft-team-grid">
-        {TEAM_IDS.map((teamId) => (
-          <DraftTeamPanel
-            key={teamId}
-            team={snapshot.teams[teamId]}
-            rules={snapshot.rules}
-            rosterPlayers={getDraftRosterPlayersForTeam(roster, teamId)}
-            profiles={profiles}
-            statsScope={statsScope}
-          />
-        ))}
+      <div className="draft-columns">
+        <DraftTeamPanel
+          team={snapshot.teams.team1}
+          rules={snapshot.rules}
+          rosterPlayers={getDraftRosterPlayersForTeam(roster, 'team1')}
+          profiles={profiles}
+          statsScope={statsScope}
+          historical={historical}
+          isCurrentTeam={!historical && snapshot.currentTeam === 'team1'}
+        />
+        <DraftRacesPanel teams={snapshot.teams} races={races} />
+        <DraftTeamPanel
+          team={snapshot.teams.team2}
+          rules={snapshot.rules}
+          rosterPlayers={getDraftRosterPlayersForTeam(roster, 'team2')}
+          profiles={profiles}
+          statsScope={statsScope}
+          historical={historical}
+          isCurrentTeam={!historical && snapshot.currentTeam === 'team2'}
+        />
       </div>
     </section>
+  );
+}
+
+export function DraftPhaseBar({
+  snapshot,
+  historical,
+  initialPickCount,
+  stageIndex
+}: {
+  snapshot: DraftSnapshot;
+  historical: boolean;
+  initialPickCount: number;
+  stageIndex: number;
+}) {
+  const statusText = historical ? undefined : formatDraftStatusText(snapshot, stageIndex, DRAFT_PICK_SLOT_COUNT);
+  const stages = getDraftStages(initialPickCount);
+
+  return (
+    <div className="draft-phase-bar">
+      <span className="draft-phase-dot" aria-hidden="true" />
+      <strong className="draft-phase-title">{stages[stageIndex]?.label ?? 'Draft'}</strong>
+      {statusText === undefined ? null : <span className="draft-phase-status">{statusText}</span>}
+      <div className="draft-phase-bar-spacer" />
+      <DraftStageTrack stages={stages} stageIndex={stageIndex} />
+    </div>
+  );
+}
+
+export function DraftStageTrack({ stages, stageIndex }: { stages: { key: string; label: string }[]; stageIndex: number }) {
+  const items: ReactNode[] = [];
+
+  stages.forEach((stage, index) => {
+    if (index > 0) {
+      items.push(<li key={`sep:${stage.key}`} className="draft-stage-sep" aria-hidden="true" />);
+    }
+
+    const status = index < stageIndex ? 'done' : index === stageIndex ? 'current' : 'pending';
+
+    items.push(
+      <li
+        key={stage.key}
+        className={`draft-stage ${status}`}
+        aria-current={index === stageIndex ? 'step' : undefined}
+      >
+        <span className="draft-stage-marker">{status === 'done' ? '✓' : index + 1}</span>
+        {stage.label}
+      </li>
+    );
+  });
+
+  return (
+    <ol className="draft-stage-track" aria-label="Draft stages">
+      {items}
+    </ol>
   );
 }
 
@@ -99,13 +158,17 @@ export function DraftTeamPanel({
   rules,
   rosterPlayers,
   profiles,
-  statsScope
+  statsScope,
+  historical,
+  isCurrentTeam
 }: {
   team: DraftTeamSnapshot;
   rules?: DraftSnapshot['rules'];
   rosterPlayers: PrematchPlayer[];
   profiles: Record<string, PlayerProfileSummary>;
   statsScope: PlayerStatsScope;
+  historical: boolean;
+  isCurrentTeam: boolean;
 }) {
   const picks = team.umas.filter((uma) => uma.kind === 'pick');
   const bans = team.umas.filter((uma) => uma.kind === 'ban');
@@ -117,162 +180,59 @@ export function DraftTeamPanel({
     const latestPick = picks.at(-1);
 
     setSelectedPickKey(latestPick === undefined ? undefined : getDraftActionKey(latestPick));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pickSignature]);
 
-  return (
-    <article className={`draft-team-panel ${team.id}`}>
-      <header>
-        <h3>{formatTeamName(team)}</h3>
-        <p>{team.maps.length} maps - {picks.length} picks</p>
-      </header>
-
-      <DraftMapList teamId={team.id} maps={team.maps} count={rules?.maps} />
-      <DraftPickBoard
-        picks={picks}
-        count={rules?.picks}
-        selectedPickKey={selectedPickKey}
-        onSelectPick={setSelectedPickKey}
-        rosterPlayers={rosterPlayers}
-        profiles={profiles}
-        statsScope={statsScope}
-      />
-      <DraftBanRow bans={bans} vetoes={vetoes} rules={rules} />
-    </article>
-  );
-}
-
-export function DraftMapList({ maps, count, teamId }: { maps: DraftTeamSnapshot['maps']; count?: number; teamId: TeamId }) {
-  const slots = getDraftSlots(maps, count ?? DRAFT_MAP_SLOT_COUNT);
-
-  return (
-    <section className="draft-card-section draft-map-section">
-      <p>Maps</p>
-      <ol className="draft-map-list">
-        {slots.map((map, index) => (
-          map === undefined ? (
-            <li key={`map-placeholder:${index}`} className="placeholder">
-              <span className="draft-map-order">{index * 2 + (teamId === 'team1' ? 1 : 2)}</span>
-              <strong>Pending map</strong>
-              <small>Waiting for draft update</small>
-            </li>
-          ) : (
-            <li
-              key={`${map.team}:${map.mapId ?? map.order ?? map.details ?? index}:${map.name}`}
-              className={map.status === 'vetoed' ? 'vetoed' : ''}
-            >
-              <span className="draft-map-order">{map.order ?? '-'}</span>
-              <strong title={formatDraftMapTitle(map)}>
-                {map.name}
-              </strong>
-              {formatDraftMapDetails(map) === undefined ? null : <small>{formatDraftMapDetails(map)}</small>}
-              {map.status === 'vetoed' ? <span className="draft-map-status">Vetoed</span> : null}
-            </li>
-          )
-        ))}
-      </ol>
-    </section>
-  );
-}
-
-export function DraftBanRow({
-  rules,
-  bans,
-  vetoes
-}: {
-  rules?: DraftSnapshot['rules'];
-  bans: DraftUmaAction[];
-  vetoes: DraftUmaAction[];
-}) {
-  const slots = [
-    ...getDraftSlots(bans, rules?.bans ?? DRAFT_BAN_SLOT_COUNT).map((action) => ({
-      action,
-      kind: 'ban' as const,
-      label: 'Pending ban'
-    })),
-    ...getDraftSlots(vetoes, rules?.vetoes ?? DRAFT_VETO_SLOT_COUNT).map((action) => ({
-      action,
-      kind: 'veto' as const,
-      label: 'Pending veto'
-    }))
-  ];
-
-  return (
-    <section className="draft-card-section draft-ban-section">
-      <p>Banned</p>
-      <ol className="draft-uma-list">
-        {slots.map(({ action, kind, label }, index) => (
-          action === undefined ? (
-            <DraftUmaPlaceholderRow
-              key={`${kind}:placeholder:${index}`}
-              kind={kind}
-              label={label}
-            />
-          ) : (
-            <DraftUmaActionRow
-              key={`${action.kind}:${action.team}:${action.order ?? action.umaId ?? action.name}`}
-              action={action}
-            />
-          )
-        ))}
-      </ol>
-    </section>
-  );
-}
-
-export function DraftPickBoard({
-  count,
-  picks,
-  selectedPickKey,
-  onSelectPick,
-  rosterPlayers,
-  profiles,
-  statsScope
-}: {
-  count?: number;
-  picks: DraftUmaAction[];
-  selectedPickKey: string | undefined;
-  onSelectPick: (key: string) => void;
-  rosterPlayers: PrematchPlayer[];
-  profiles: Record<string, PlayerProfileSummary>;
-  statsScope: PlayerStatsScope;
-}) {
-  const slots = getDraftSlots(picks, count ?? DRAFT_PICK_SLOT_COUNT);
   const selectedPick = picks.find((pick) => getDraftActionKey(pick) === selectedPickKey);
 
   return (
-    <section className="draft-card-section draft-pick-section">
-      <p>Picked Umas</p>
-      <ol className="draft-pick-slots">
-        {slots.map((action, index) => (
+    <article className={`draft-team-panel ${team.id}`}>
+      <header className="draft-team-header">
+        <h2>{formatTeamName(team)}</h2>
+        {isCurrentTeam ? <span className="draft-picking-badge">Picking</span> : null}
+        <div className="draft-team-header-spacer" />
+        <span className="draft-team-pick-count">{picks.length}/{DRAFT_PICK_SLOT_COUNT} picks</span>
+      </header>
+
+      <ol className="draft-pick-grid">
+        {getDraftSlots(picks, DRAFT_PICK_SLOT_COUNT).map((action, index) =>
           action === undefined ? (
-            <li key={`pick-placeholder:${index}`} className="draft-pick-slot placeholder">
-              <span className="draft-pick-icon">
-                <span>?</span>
-              </span>
-              <small>Pending</small>
-            </li>
+            <DraftPickPlaceholder
+              key={`pick-placeholder:${index}`}
+              isNext={isCurrentTeam && index === picks.length}
+            />
           ) : (
-            <DraftPickSlot
+            <DraftPickTile
               key={getDraftActionKey(action)}
               action={action}
               experienceCount={getUmaExperience(action, rosterPlayers, profiles, statsScope).length}
               isSelected={getDraftActionKey(action) === selectedPickKey}
-              onSelect={() => onSelectPick(getDraftActionKey(action))}
+              onSelect={() => setSelectedPickKey(getDraftActionKey(action))}
             />
           )
-        ))}
+        )}
       </ol>
+
+      <div className="draft-ban-veto-rows">
+        {getDraftSlots(bans, rules?.bans ?? DRAFT_BAN_SLOT_COUNT).map((action, index) => (
+          <DraftBanVetoRow key={`ban:${index}`} kind="ban" action={action} />
+        ))}
+        {getDraftSlots(vetoes, rules?.vetoes ?? DRAFT_VETO_SLOT_COUNT).map((action, index) => (
+          <DraftBanVetoRow key={`veto:${index}`} kind="veto" action={action} />
+        ))}
+      </div>
+
       <DraftPickExperiencePanel
         action={selectedPick}
         rosterPlayers={rosterPlayers}
         profiles={profiles}
         statsScope={statsScope}
       />
-    </section>
+    </article>
   );
 }
 
-export function DraftPickSlot({
+export function DraftPickTile({
   action,
   experienceCount,
   isSelected,
@@ -287,20 +247,53 @@ export function DraftPickSlot({
     ? getUmaPortraitUrl(action.umaId) : undefined) ?? action.imageUrl;
 
   return (
-    <li className="draft-pick-slot">
-      <button
-        type="button"
-        className={isSelected ? 'selected' : ''}
-        onClick={onSelect}
-        title={action.name}
-      >
-        <span className="draft-pick-icon">
+    <li className={`draft-pick-tile ${isSelected ? 'selected' : ''}`}>
+      <button type="button" onClick={onSelect} aria-pressed={isSelected} title={action.name}>
+        <span className={`draft-pick-exp ${experienceCount > 0 ? 'some' : 'none'}`}>
+          {experienceCount > 0 ? `${experienceCount} played` : 'New'}
+        </span>
+        <span className="draft-pick-portrait">
           <UmaImage imageUrl={imageUrl} name={action.name} />
         </span>
-        {experienceCount > 0 ? <span className="draft-pick-count">{experienceCount}</span> : null}
+        <span className="draft-pick-name">{action.name}</span>
       </button>
-      <small>{action.name}</small>
     </li>
+  );
+}
+
+export function DraftPickPlaceholder({ isNext }: { isNext: boolean }) {
+  return (
+    <li className={`draft-pick-tile placeholder ${isNext ? 'next' : ''}`}>
+      <span className="draft-pick-portrait empty" aria-hidden="true" />
+      <small>{isNext ? 'Picking now' : 'Open pick'}</small>
+    </li>
+  );
+}
+
+export function DraftBanVetoRow({ kind, action }: { kind: 'ban' | 'veto'; action: DraftUmaAction | undefined }) {
+  const label = kind === 'ban' ? 'Ban' : 'Veto';
+
+  if (action === undefined) {
+    return (
+      <div className="draft-ban-veto-row">
+        <span className="draft-ban-veto-label">{label}</span>
+        <span className="draft-ban-veto-slot empty">Pending</span>
+      </div>
+    );
+  }
+
+  const imageUrl = action.imageUrl ?? (action.umaId === undefined ? undefined : getUmaPortraitUrl(action.umaId));
+
+  return (
+    <div className="draft-ban-veto-row">
+      <span className="draft-ban-veto-label">{label}</span>
+      <span className="draft-ban-veto-slot" aria-label={`${kind === 'ban' ? 'Banned' : 'Vetoed'}: ${action.name}`}>
+        <span className="draft-ban-veto-avatar">
+          <UmaImage imageUrl={imageUrl} name={action.name} />
+        </span>
+        <span className="draft-ban-veto-name">{action.name}</span>
+      </span>
+    </div>
   );
 }
 
@@ -316,49 +309,40 @@ export function DraftPickExperiencePanel({
   statsScope: PlayerStatsScope;
 }) {
   const playerSlots = getDraftSlots(rosterPlayers, TEAM_SLOT_COUNT);
-  const experienceCount = action === undefined
-    ? 0
-    : playerSlots.filter((player) =>
-      player !== undefined && getUmaExperienceForPlayer(action, player, profiles, statsScope) !== undefined
-    ).length;
+  const rows = playerSlots.map((player, index) => {
+    if (player === undefined) {
+      return { key: `experience-slot:${index}`, displayName: '', experience: undefined };
+    }
+
+    return {
+      key: `${player.discordId}:${player.userId}`,
+      displayName: profiles[player.discordId]?.displayName ?? player.displayName,
+      experience: action === undefined ? undefined : getUmaExperienceForPlayer(action, player, profiles, statsScope)
+    };
+  }).sort((left, right) => (right.experience?.matches ?? -1) - (left.experience?.matches ?? -1));
 
   return (
-    <div className="draft-pick-experience-panel">
-      <div className="draft-pick-experience-heading">
-        <strong>{action?.name ?? 'Select a picked Uma'}</strong>
-        <span>
-          {action === undefined
-            ? 'Waiting for picks'
-            : `${experienceCount} players with ${formatStatsScopeShortLabel(statsScope)} history`}
-        </span>
+    <div className="draft-experience-panel">
+      <div className="draft-experience-heading">
+        <strong>{action?.name ?? 'Experience'}</strong>
+      </div>
+      <div className="draft-experience-row draft-experience-header">
+        <span>Player</span>
+        <span>GP</span>
+        <span>WR</span>
+        <span>PPG</span>
       </div>
       {action === undefined ? (
-        <small className="draft-empty-history">Pick history appears here after an Uma is selected.</small>
+        <small className="draft-empty-history">Select a pick to see who on this team has played it.</small>
       ) : (
-        <ol className="draft-pick-experience-list">
-          {playerSlots.map((player, index) => {
-            const experience = player === undefined
-              ? undefined
-              : getUmaExperienceForPlayer(action, player, profiles, statsScope);
-            const displayName = player === undefined
-              ? ''
-              : profiles[player.discordId]?.displayName ?? player.displayName;
-
-            return (
-              <li
-                key={player === undefined ? `experience-slot:${index}` : `${player.discordId}:${player.userId}`}
-                className={experience === undefined ? 'no-history' : ''}
-              >
-                <strong title={displayName}>{displayName}</strong>
-                {experience === undefined ? (
-                  <span className="draft-no-history-text">{player === undefined ? 'Open slot' : missingUmaHistoryLabel(profiles[player.discordId], statsScope)}</span>
-                ) : (
-                  <span>{experience.matches} GP - {formatDecimal(experience.pointsPerGame)} PPG</span>
-                )}
-              </li>
-            );
-          })}
-        </ol>
+        rows.map((row) => (
+          <div key={row.key} className={`draft-experience-row ${row.experience === undefined ? 'no-history' : ''}`}>
+            <span title={row.displayName}>{row.displayName}</span>
+            <span>{row.experience === undefined ? '—' : row.experience.matches}</span>
+            <span>{row.experience === undefined ? '—' : formatPercent(row.experience.winRate)}</span>
+            <span>{row.experience === undefined ? '—' : formatDecimal(row.experience.pointsPerGame)}</span>
+          </div>
+        ))
       )}
     </div>
   );
@@ -373,48 +357,130 @@ export function getUmaExperienceForPlayer(
   return findScopedUmaEntry(action, profiles[player.discordId], statsScope);
 }
 
-export function DraftUmaPlaceholderRow({
-  kind,
-  label
+export function DraftRacesPanel({
+  teams,
+  races
 }: {
-  kind?: DraftUmaAction['kind'];
-  label: string;
+  teams: DraftSnapshot['teams'];
+  races: Array<DraftRaceCard | undefined>;
 }) {
   return (
-    <li className={`draft-uma-row placeholder ${kind ?? ''} no-history`}>
-      <span className="draft-uma-main">
-        <span className="draft-uma-portrait">
-          <span>?</span>
-        </span>
-        <span className="draft-uma-copy">
-          <strong>{label}</strong>
-          <small>Waiting for draft update</small>
-        </span>
-      </span>
+    <section className="draft-races-panel" aria-label="Races">
+      <div className="draft-races-header">
+        <h2>Races</h2>
+        <div className="draft-races-header-spacer" />
+        {TEAM_IDS.map((teamId) => (
+          <span key={teamId} className={`draft-team-legend ${teamId}`}>
+            <span className="draft-team-legend-dot" aria-hidden="true" />
+            {formatTeamName(teams[teamId])}
+          </span>
+        ))}
+      </div>
+      <ol className="draft-race-list">
+        {races.map((race, index) => (
+          <DraftRaceCardItem
+            key={race === undefined ? `race-placeholder:${index}` : `race:${race.n}`}
+            race={race}
+            n={index + 1}
+            teamName={race === undefined || race.team === 'tiebreaker' ? undefined : formatTeamName(teams[race.team])}
+          />
+        ))}
+      </ol>
+    </section>
+  );
+}
+
+export function DraftRaceCardItem({ race, n, teamName }: { race: DraftRaceCard | undefined; n: number; teamName: string | undefined }) {
+  if (race === undefined) {
+    return (
+      <li className="draft-race-card placeholder">
+        <span className="draft-race-number">{n}</span>
+        <span className="draft-race-pending">Pending race</span>
+      </li>
+    );
+  }
+
+  const map: DraftRaceMapFields = race.map;
+  const distance = formatRaceDistance(map.distance);
+  const structured = hasStructuredRaceModifiers(map);
+  const weatherIconKey = getDraftWeatherIconKey(map.weather);
+
+  return (
+    <li
+      className={`draft-race-card ${race.team}`}
+      aria-label={`Race ${n}${race.tiebreaker ? ', tiebreaker' : `, ${teamName} pick`}: ${formatRaceTrackName(map)}`}
+    >
+      <span className="draft-race-number">{n}</span>
+      <div className="draft-race-title">
+        <span className="draft-race-track">{formatRaceTrackName(map)}</span>
+        {map.variant === undefined ? null : <span className="draft-race-layout">({map.variant})</span>}
+        {distance === undefined ? null : <span className="draft-race-distance">{distance}</span>}
+        <div className="draft-race-title-spacer" />
+        {race.tiebreaker ? <span className="draft-mod tiebreaker">Tiebreaker</span> : null}
+      </div>
+      {structured ? (
+        <div className="draft-race-mods">
+          <DraftModChipView chip={getDraftSurfaceChip(map.surface)} />
+          <DraftModChipView chip={getDraftSeasonChip(map.season)} />
+          <DraftModChipView chip={getDraftWeatherChip(map.weather)} iconKey={weatherIconKey} />
+          <DraftModChipView chip={getDraftGroundChip(map.ground)} />
+        </div>
+      ) : formatDraftMapDetails(map) === undefined ? null : (
+        <p className="draft-race-details">{formatDraftMapDetails(map)}</p>
+      )}
     </li>
   );
 }
 
-export function DraftUmaActionRow({
-  action
+export function DraftModChipView({
+  chip,
+  iconKey
 }: {
-  action: DraftUmaAction;
+  chip: { label: string; bg: string; fg: string } | undefined;
+  iconKey?: 'sunny' | 'cloudy' | 'rainy' | 'snowy';
 }) {
-  const imageUrl = action.imageUrl ?? (action.umaId === undefined ? undefined : getUmaPortraitUrl(action.umaId));
+  if (chip === undefined) {
+    return null;
+  }
 
   return (
-    <li className={`draft-uma-row ${action.kind} no-history`}>
-      <span className="draft-uma-main">
-        <span className="draft-uma-portrait">
-          <UmaImage imageUrl={imageUrl} name={action.name} />
-        </span>
-        <span className="draft-uma-copy">
-          <strong>{action.name}</strong>
-          <small>{formatDraftUmaKind(action.kind)}</small>
-        </span>
-      </span>
-    </li>
+    <span className="draft-mod" style={{ background: chip.bg, color: chip.fg }}>
+      {iconKey === undefined ? null : <DraftWeatherIcon iconKey={iconKey} />}
+      {chip.label}
+    </span>
   );
+}
+
+export function DraftWeatherIcon({ iconKey }: { iconKey: 'sunny' | 'cloudy' | 'rainy' | 'snowy' }) {
+  switch (iconKey) {
+    case 'sunny':
+      return (
+        <svg width="11" height="11" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+          <circle cx="6" cy="6" r="2.2" stroke="currentColor" strokeWidth="1.2" />
+          <path d="M6 .8v1.5M6 9.7v1.5M.8 6h1.5M9.7 6h1.5M2.3 2.3l1 1M8.7 8.7l1 1M9.7 2.3l-1 1M3.3 8.7l-1 1" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+        </svg>
+      );
+    case 'cloudy':
+      return (
+        <svg width="12" height="11" viewBox="0 0 13 12" fill="none" aria-hidden="true">
+          <path d="M3.5 9.5h6a2.5 2.5 0 00.2-5A3.3 3.3 0 003.4 5 2.3 2.3 0 003.5 9.5z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
+        </svg>
+      );
+    case 'snowy':
+      return (
+        <svg width="11" height="11" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+          <path d="M6 1v10M1.7 3.5l8.6 5M1.7 8.5l8.6-5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+        </svg>
+      );
+    case 'rainy':
+      return (
+        <svg width="12" height="11" viewBox="0 0 13 12" fill="none" aria-hidden="true">
+          <path d="M3.5 7h6a2.5 2.5 0 00.2-5A3.3 3.3 0 003.4 2.5 2.3 2.3 0 003.5 7zM4 9l-.6 1.5M7 9l-.6 1.5M10 9l-.6 1.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      );
+    default:
+      return null;
+  }
 }
 
 export function getDraftActionKey(action: DraftUmaAction): string {

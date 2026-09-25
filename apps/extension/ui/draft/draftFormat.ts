@@ -1,30 +1,175 @@
-import type { DraftSnapshot, DraftTeamSnapshot, DraftUmaAction } from '@umalytics/shared';
+import type {
+  DraftMapSelection,
+  DraftSnapshot,
+  DraftTeamSnapshot,
+  DraftTiebreakerMap,
+  DraftUmaAction,
+  DraftUmaActionKind,
+  TeamId
+} from '@umalytics/shared';
+import { TEAM_IDS, getDraftSlots } from '../common/roster';
 
-export const DRAFT_DETAIL_SEPARATOR = ' \u2022 ';
+export const DRAFT_DETAIL_SEPARATOR = ' • ';
 
-export function formatDraftPhase(phase: string): string {
-  return phase
-    .split(/[-_\s]+/)
-    .filter((part) => part.length > 0)
-    .map((part) => `${part[0]?.toUpperCase() ?? ''}${part.slice(1)}`)
-    .join(' ');
+export type DraftStageKey = 'picks' | 'vetoes' | 'final-picks';
+
+export interface DraftStage {
+  key: DraftStageKey;
+  label: string;
 }
 
-export function formatDraftMapTitle(map: DraftTeamSnapshot['maps'][number]): string {
-  const details = formatDraftMapDetails(map);
-
-  return details === undefined ? map.name : `${map.name}${DRAFT_DETAIL_SEPARATOR}${details}`;
+export function countDraftUmaKind(team: DraftTeamSnapshot | undefined, kind: DraftUmaActionKind): number {
+  return team?.umas.filter((uma) => uma.kind === kind).length ?? 0;
 }
 
-export function formatDraftMapDetails(map: DraftTeamSnapshot['maps'][number]): string | undefined {
+export function getDraftInitialPickCount(rules: DraftSnapshot['rules'], totalPickSlots: number): number {
+  return rules?.picks ?? Math.max(totalPickSlots - 1, 0);
+}
+
+export function isDraftStageComplete(
+  teams: DraftSnapshot['teams'],
+  kind: DraftUmaActionKind,
+  requiredCount: number
+): boolean {
+  return TEAM_IDS.every((teamId) => countDraftUmaKind(teams[teamId], kind) >= requiredCount);
+}
+
+export function getDraftStages(initialPickCount: number): DraftStage[] {
+  return [
+    { key: 'picks', label: `Picks 1–${initialPickCount}` },
+    { key: 'vetoes', label: 'Vetoes' },
+    { key: 'final-picks', label: 'Final picks' }
+  ];
+}
+
+export function getDraftStageIndex(snapshot: DraftSnapshot, initialPickCount: number): number {
+  const vetoCount = snapshot.rules?.vetoes ?? 1;
+
+  if (!isDraftStageComplete(snapshot.teams, 'pick', initialPickCount)) {
+    return 0;
+  }
+
+  if (!isDraftStageComplete(snapshot.teams, 'veto', vetoCount)) {
+    return 1;
+  }
+
+  return 2;
+}
+
+export function isDraftComplete(snapshot: DraftSnapshot, totalPickSlots: number): boolean {
+  return isDraftStageComplete(snapshot.teams, 'pick', totalPickSlots);
+}
+
+export function formatDraftStatusText(
+  snapshot: DraftSnapshot,
+  stageIndex: number,
+  totalPickSlots: number
+): string | undefined {
+  if (isDraftComplete(snapshot, totalPickSlots)) {
+    return 'Draft complete';
+  }
+
+  if (snapshot.currentTeam === undefined) {
+    return undefined;
+  }
+
+  const currentTeam = snapshot.teams[snapshot.currentTeam];
+  const teamName = formatTeamName(currentTeam);
+
+  if (stageIndex === 1) {
+    return `${teamName} is vetoing an opponent's pick`;
+  }
+
+  const pickCount = countDraftUmaKind(currentTeam, 'pick');
+
+  return `${teamName} is picking their ${formatOrdinal(pickCount + 1)} Uma`;
+}
+
+export function formatOrdinal(value: number): string {
+  const remainder100 = value % 100;
+
+  if (remainder100 >= 11 && remainder100 <= 13) {
+    return `${value}th`;
+  }
+
+  switch (value % 10) {
+    case 1:
+      return `${value}st`;
+    case 2:
+      return `${value}nd`;
+    case 3:
+      return `${value}rd`;
+    default:
+      return `${value}th`;
+  }
+}
+
+export function formatTeamName(team: DraftTeamSnapshot | undefined): string {
+  return team?.name ?? team?.id ?? 'Unknown team';
+}
+
+export interface DraftRaceMapFields {
+  name: string;
+  details?: string;
+  track?: string;
+  distance?: number;
+  surface?: string;
+  variant?: string;
+  season?: string;
+  weather?: string;
+  ground?: string;
+}
+
+export interface DraftRaceCard {
+  n: number;
+  team: TeamId | 'tiebreaker';
+  tiebreaker: boolean;
+  map: DraftRaceMapFields;
+}
+
+export function buildDraftRaceCards(
+  teams: DraftSnapshot['teams'],
+  tiebreakerMap: DraftTiebreakerMap | undefined,
+  totalMapSlots: number
+): Array<DraftRaceCard | undefined> {
+  const picked = TEAM_IDS.flatMap((teamId) =>
+    teams[teamId].maps
+      .filter((map): map is DraftMapSelection & { order: number } => map.status === 'selected' && map.order !== undefined)
+      .map((map) => ({ map, team: teamId }))
+  ).sort((left, right) => left.map.order - right.map.order);
+
+  const slots: Array<DraftRaceCard | undefined> = getDraftSlots(picked, totalMapSlots).map((entry, index) =>
+    entry === undefined ? undefined : { n: index + 1, team: entry.team, tiebreaker: false, map: entry.map }
+  );
+
+  if (tiebreakerMap !== undefined) {
+    slots.push({ n: totalMapSlots + 1, team: 'tiebreaker', tiebreaker: true, map: tiebreakerMap });
+  }
+
+  return slots;
+}
+
+export function formatRaceTrackName(map: DraftRaceMapFields): string {
+  return map.track ?? map.name;
+}
+
+export function formatRaceDistance(distance: number | undefined): string | undefined {
+  return distance === undefined ? undefined : `${distance}m`;
+}
+
+export function hasStructuredRaceModifiers(map: DraftRaceMapFields): boolean {
+  return map.surface !== undefined || map.season !== undefined || map.weather !== undefined || map.ground !== undefined;
+}
+
+export function formatDraftMapDetails(map: DraftRaceMapFields): string | undefined {
   if (map.details === undefined) {
     return undefined;
   }
 
   const details = map.details
-    .replace(/\s*[-\u2013\u2014]\s*[xX\u00d7\u2715\u2716]\s*$/u, '')
-    .replace(/\s*[xX\u00d7\u2715\u2716]\s*$/u, '')
-    .split(/\s*(?:[-\u2013\u2014]|\u2022)\s*/u)
+    .replace(/\s*[-–—]\s*[xX×✕✖]\s*$/u, '')
+    .replace(/\s*[xX×✕✖]\s*$/u, '')
+    .split(/\s*(?:[-–—]|•)\s*/u)
     .map((part) => part.trim())
     .filter((part) => part.length > 0)
     .join(DRAFT_DETAIL_SEPARATOR);
@@ -32,85 +177,83 @@ export function formatDraftMapDetails(map: DraftTeamSnapshot['maps'][number]): s
   return details.length === 0 ? undefined : details;
 }
 
-export function formatTiebreakerMap(map: NonNullable<DraftSnapshot['tiebreakerMap']>): string {
-  const parsed = parseTiebreakerMapParts(map);
-
-  if (parsed === undefined) {
-    return map.details === undefined ? map.name : `${map.name} (${map.details})`;
-  }
-
-  const details = parsed.details
-    .map(formatTiebreakerDetailToken)
-    .filter((part): part is string => part !== undefined && part.length > 0)
-    .join(DRAFT_DETAIL_SEPARATOR);
-
-  if (details.length === 0) {
-    return parsed.name;
-  }
-
-  return `${parsed.name}${DRAFT_DETAIL_SEPARATOR}${details}`;
+export interface DraftModChip {
+  label: string;
+  bg: string;
+  fg: string;
 }
 
-export function parseTiebreakerMapParts(
-  map: NonNullable<DraftSnapshot['tiebreakerMap']>
-): { name: string; details: string[] } | undefined {
-  const combinedText = (map.details === undefined ? map.name : `${map.name} - ${map.details}`)
-    .replace(/\u00a0/g, ' ')
-    .trim();
-  const compactTextMatch = /^(.+?)\s*\((\d{3,4})m?\s+([^)]+)\)\s*([A-Za-z\s]+)$/.exec(combinedText);
+const DEFAULT_MOD_TONE: readonly [string, string] = ['#1f2738', '#9aa4b8'];
 
-  if (compactTextMatch !== null) {
-    const [, name, distance, surface, trailingDetails] = compactTextMatch;
+const SURFACE_TONE: Record<string, readonly [string, string]> = {
+  turf: ['#13301f', '#8fe0b0'],
+  dirt: ['#3a2410', '#e3b078']
+};
 
-    if (name !== undefined && distance !== undefined && surface !== undefined) {
-      return {
-        name: name.trim(),
-        details: [
-          distance,
-          surface.trim(),
-          ...splitCompactTiebreakerDetails(trailingDetails ?? '')
-        ]
-      };
-    }
-  }
+const SEASON_TONE: Record<string, readonly [string, string]> = {
+  spring: ['#3a1830', '#ff9fd0'],
+  summer: ['#13301f', '#8fe0b0'],
+  autumn: ['#3a2410', '#f0b070'],
+  winter: ['#16304a', '#8fc8ff']
+};
 
-  const [rawName, ...rawDetails] = combinedText
-    .split(/\s*(?:[-\u2013\u2014]|\u2022)\s*/u)
-    .map((part) => part.trim())
-    .filter((part) => part.length > 0);
+const WEATHER_TONE: Record<string, readonly [string, string]> = {
+  sunny: ['#33280f', '#f0cd74'],
+  cloudy: ['#232b3c', '#c6cdda'],
+  rainy: ['#16243f', '#9cc2ff'],
+  snowy: ['#12303a', '#8fe3f0']
+};
 
-  if (rawName === undefined || rawDetails.length === 0) {
+const GROUND_TONE: Record<string, readonly [string, string]> = {
+  good: ['#251f3d', '#c9b6ff'],
+  firm: ['#13301f', '#8fe0b0'],
+  soft: ['#3a2410', '#f0b070'],
+  heavy: ['#3a1818', '#ff9f9f']
+};
+
+function buildModChip(tone: Record<string, readonly [string, string]>, value: string | undefined): DraftModChip | undefined {
+  if (value === undefined) {
     return undefined;
   }
 
-  return {
-    name: rawName,
-    details: rawDetails
-  };
+  const [bg, fg] = tone[value.toLowerCase()] ?? DEFAULT_MOD_TONE;
+
+  return { label: value, bg, fg };
 }
 
-export function formatTiebreakerDetailToken(value: string): string {
-  return value.replace(/^(\d{3,4})m?$/i, '$1m');
+export function getDraftSurfaceChip(value: string | undefined): DraftModChip | undefined {
+  return buildModChip(SURFACE_TONE, value);
 }
 
-export function splitCompactTiebreakerDetails(value: string): string[] {
-  return Array.from(
-    value.matchAll(/Right|Left|Straight|Inner|Outer|Spring|Summer|Fall|Winter|Firm|Good|Soft|Heavy|Sunny|Cloudy|Rainy|Snowy/gi),
-    ([token]) => token
-  );
+export function getDraftSeasonChip(value: string | undefined): DraftModChip | undefined {
+  return buildModChip(SEASON_TONE, value);
+}
+
+export function getDraftWeatherChip(value: string | undefined): DraftModChip | undefined {
+  return buildModChip(WEATHER_TONE, value);
+}
+
+export function getDraftGroundChip(value: string | undefined): DraftModChip | undefined {
+  return buildModChip(GROUND_TONE, value);
+}
+
+export type DraftWeatherIconKey = 'sunny' | 'cloudy' | 'rainy' | 'snowy';
+
+const WEATHER_ICON_KEYS: readonly DraftWeatherIconKey[] = ['sunny', 'cloudy', 'rainy', 'snowy'];
+
+export function getDraftWeatherIconKey(value: string | undefined): DraftWeatherIconKey | undefined {
+  const normalized = value?.toLowerCase();
+
+  return WEATHER_ICON_KEYS.find((key) => key === normalized);
 }
 
 export function formatDraftUmaKind(kind: DraftUmaAction['kind']): string {
   switch (kind) {
     case 'ban':
-      return 'Banned';
+      return 'Ban';
     case 'veto':
-      return 'Vetoed';
+      return 'Veto';
     case 'pick':
-      return 'Picked';
+      return 'Pick';
   }
-}
-
-export function formatTeamName(team: DraftTeamSnapshot | undefined): string {
-  return team?.name ?? team?.id ?? 'Unknown team';
 }

@@ -43,20 +43,20 @@ test('History details select a real roster member and do not replace Draft or Um
   assert.equal(render({...props,scene:'umas'}).type,'Umas');
   assert.equal(sceneHarness('unknown')({...props,scene:'lobby'}).type,'section');
 });
-test('Explorer styling cannot override shared draft button geometry', () => {
+test('Explorer styling cannot override shared draft tile geometry', () => {
   const explorerCss = readModule('uiHistoryCss');
   const draftCss = readModule('uiDraftCss');
   const baseCss = readModule('uiCommonBaseCss');
   assert.doesNotMatch(explorerCss,/\.explorer-view\s+button\s*\{/);
-  assert.match(draftCss,/\.draft-pick-slot button\s*\{[^}]*padding:\s*3px/s);
+  assert.match(draftCss,/\.draft-pick-tile button,\n\.draft-pick-tile\.placeholder\s*\{[^}]*height:\s*118px/s);
   assert.match(baseCss,/scrollbar-gutter:\s*stable/);
 });
 
-test('Live and History pick slots use identical known-outfit portraits regardless of captured image URL', () => {
+test('Live and History pick tiles use identical known-outfit portraits regardless of captured image URL', () => {
   const c = vm.createContext({element:(type,props,...children)=>({type,props,children}),UmaImage:'Image',getUmaPortraitUrl:id=>`portrait/${id}`,isKnownUmaOutfitId:id=>id==='100601'});
-  loadFunction(c, draftSyntax, 'DraftPickSlot');
+  loadFunction(c, draftSyntax, 'DraftPickTile');
   const image = result => result.children.flatMap(child=>child?.children ?? []).flatMap(child=>child?.children ?? []).find(child=>child?.type==='Image').props.imageUrl;
-  const render = action => c.DraftPickSlot({action,experienceCount:0,isSelected:false,onSelect(){}});
+  const render = action => c.DraftPickTile({action,experienceCount:0,isSelected:false,onSelect(){}});
   assert.equal(image(render({umaId:'100601',name:'Oguri',imageUrl:'captured/other.png'})), 'portrait/100601');
   assert.equal(image(render({umaId:'100601',name:'Oguri',imageUrl:'portrait/100601'})), 'portrait/100601');
   assert.equal(image(render({umaId:'unknown',name:'Future Uma',imageUrl:'future.png'})), 'future.png');
