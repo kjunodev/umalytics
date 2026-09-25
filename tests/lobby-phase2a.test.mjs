@@ -138,17 +138,19 @@ test('the Umas panel no longer prints the long history-derived paragraph; it ren
   assert.equal(c.UmaResolutionNote({ profile: undefined }), null);
 });
 
-test('EstimatedChip labels itself "Estimated" and its tooltip explains history-derived stats, adding the match count only when known', () => {
+test('EstimatedChip labels itself "Estimated" and its tooltip explains history-derived stats, adding the match count only from historyDerivedMatchCount, never historyTotal or matches', () => {
   const c = drawerHarness();
-  const withCount = c.EstimatedChip({ profile: { historyDerived: true, historyTotal: 87 } });
+  const withCount = c.EstimatedChip({ profile: { historyDerived: true, historyDerivedMatchCount: 87, historyTotal: 999, matches: 999 } });
   const label = withCount.children[0];
   const tooltip = withCount.children.find((child) => child?.props?.role === 'tooltip');
   assert.equal(label, 'Estimated');
-  assert.deepEqual(tooltip.children, ['Stats worked out from match history (up to 100 matches per scope)', ' · 87 matches']);
+  assert.deepEqual(tooltip.children, ['Stats worked out from match history (up to 100 matches per scope)', ' · 87 matches'],
+    'historyDerivedMatchCount wins even when historyTotal/matches are also present');
 
-  const fallsBackToMatches = c.EstimatedChip({ profile: { historyDerived: true, matches: 42 } });
-  assert.deepEqual(fallsBackToMatches.children.find((child) => child?.props?.role === 'tooltip').children,
-    ['Stats worked out from match history (up to 100 matches per scope)', ' · 42 matches']);
+  const ignoresHistoryTotalAndMatches = c.EstimatedChip({ profile: { historyDerived: true, historyTotal: 87, matches: 42 } });
+  assert.deepEqual(ignoresHistoryTotalAndMatches.children.find((child) => child?.props?.role === 'tooltip').children,
+    ['Stats worked out from match history (up to 100 matches per scope)', ''],
+    'historyTotal and matches must never be used as the count, only historyDerivedMatchCount');
 
   const withoutCount = c.EstimatedChip({ profile: { historyDerived: true } });
   assert.deepEqual(withoutCount.children.find((child) => child?.props?.role === 'tooltip').children,

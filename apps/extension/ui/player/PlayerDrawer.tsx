@@ -392,13 +392,14 @@ export function PlayerDrawer({
 }
 
 export function EstimatedChip({ profile }: { profile: PlayerProfileSummary | undefined }) {
-  const matches = profile?.historyTotal ?? profile?.matches ?? undefined;
+  // Not a public field: the same structural read the private card indicator uses.
+  const matches = (profile as (PlayerProfileSummary & { historyDerivedMatchCount?: number }) | undefined)?.historyDerivedMatchCount;
 
   return (
     <span className="drawer-estimated-chip" tabIndex={0}>
       Estimated
       <span className="drawer-estimated-tooltip" role="tooltip">
-        Stats worked out from match history (up to 100 matches per scope){matches === undefined ? '' : ` · ${matches} matches`}
+        Stats worked out from match history (up to 100 matches per scope){typeof matches === 'number' ? ` · ${matches} matches` : ''}
       </span>
     </span>
   );
