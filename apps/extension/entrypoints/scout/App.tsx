@@ -30,11 +30,11 @@ import {
 import { sendLobbyReconnectRequest, sendProfileRefreshRequest } from '../../runtime/messaging';
 import { formatRelativeAge } from '../../ui/common/format';
 import { DraftScene } from '../../ui/draft/DraftScene';
-import { HistoryView, ProfilesView } from '../../ui/history/ExplorerViews';
+import { HistoryView } from '../../ui/history/ExplorerViews';
 import { HistoricalScene, getSelectedPlayerContext, type AppScene } from '../../ui/history/HistoricalScene';
 import { TeamSection } from '../../ui/lobby/TeamSection';
-import { PlayerDetailScene } from '../../ui/player/PlayerDetailScene';
 import { PlayerDrawer } from '../../ui/player/PlayerDrawer';
+import { PlayersView } from '../../ui/players/PlayersView';
 import {
   formatDiagnosticsForClipboard,
   getDiagnostics,
@@ -307,7 +307,7 @@ export default function App() {
       />
 
       <div hidden={mode !== 'history'}><HistoryView Scene={HistoricalScene} scene={historyScene} scope={historyScope} navigation={historyNavigation} /></div>
-      <div hidden={mode !== 'profiles'}><ProfilesView Detail={PlayerDetailScene} scope={lookupScope} /></div>
+      <div hidden={mode !== 'profiles'}><PlayersView roster={displayedRoster} statsScope={lookupScope} active={mode === 'profiles'} /></div>
       <div hidden={mode !== 'live'}>
       {retryAt > 0 && (
         <p className="api-retry-notice" role="status">

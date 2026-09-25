@@ -32,7 +32,7 @@
   font: inherit;
 }
 
-:is(.explorer-search, .explorer-results, .explorer-pagination, .explorer-error) button {
+:is(.explorer-search, .explorer-error) button {
   cursor: pointer;
   color: var(--text-link-hover);
   background: var(--bg-raised);
@@ -77,43 +77,10 @@
   margin-left: 8px;
 }
 
-.explorer-results {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  display: grid;
-  gap: 8px;
-}
-
-.explorer-results button {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  width: 100%;
-  text-align: left;
-}
-
-.explorer-results span {
-  color: var(--text-secondary);
-  overflow-wrap: anywhere;
-}
-
-.explorer-pagination {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 16px;
-}
-
 @media (max-width: 600px) {
   .explorer-input-row,
   .explorer-context {
     flex-direction: column;
     align-items: stretch;
-  }
-
-  .explorer-results button {
-    flex-wrap: wrap;
   }
 }

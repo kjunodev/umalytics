@@ -75,6 +75,10 @@ export const MODULES = {
   uiUmasPlannerScene: 'ui/umas/UmaPlannerScene.tsx',
   uiHistoryScene: 'ui/history/HistoricalScene.tsx',
   uiHistoryExplorerViews: 'ui/history/ExplorerViews.tsx',
+  uiPlayersData: 'ui/players/playersData.ts',
+  uiPlayersView: 'ui/players/PlayersView.tsx',
+  uiPlayersCss: 'ui/players/players.css',
+  storagePlayersRecent: 'storage/playersRecentStorage.ts',
 
   // background (phase 3)
   profileStates: 'background/profileStates.ts',
