@@ -48,7 +48,7 @@ export function TopUmasList({
 }
 
 export function UmaResolutionNote({ profile }: { profile: PlayerProfileSummary | undefined }) {
-  if (profile?.historyDerived) return <p className="profile-status-note">History-derived stats; limited to the available history sample (up to 100 matches per scope).</p>;
+  if (profile?.historyDerived) return null;
   const unresolvedUmaMatches = profile?.unresolvedUmaMatches ?? 0;
   const disqualifiedMatches = profile?.disqualifiedMatches ?? 0;
   const notes = [

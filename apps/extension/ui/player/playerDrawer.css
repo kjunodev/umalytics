@@ -78,13 +78,78 @@
   width: 8px;
 }
 
+.drawer-stat-row {
+  align-items: center;
+  display: flex;
+  flex-shrink: 0;
+  gap: 8px;
+}
+
 .drawer-stat-panel {
   background: var(--bg-surface-2);
   border: 1px solid var(--border-default);
   border-radius: var(--radius-lg);
   display: grid;
-  flex-shrink: 0;
+  flex-grow: 1;
   grid-template-columns: repeat(4, minmax(0, 1fr));
+  min-width: 0;
+}
+
+/* Sits beside the stat strip, not inside it, so the strip's four columns
+   keep their width whether or not a profile is history-derived. */
+.drawer-estimated-chip {
+  align-items: center;
+  background: var(--tone-estimated-bg);
+  border-radius: var(--radius-sm);
+  color: var(--accent-gold);
+  cursor: help;
+  display: inline-flex;
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 600;
+  height: 22px;
+  padding: 0 8px;
+  position: relative;
+  white-space: nowrap;
+}
+
+.drawer-estimated-chip:focus-visible {
+  outline: 2px solid var(--accent-blue);
+  outline-offset: 2px;
+}
+
+/* Opens downward, not upward like the lobby card chips: .player-drawer is
+   overflow:hidden (it never scrolls as a whole), and this chip sits right
+   under the header with little headroom above it, so an upward tooltip
+   would get clipped. */
+.drawer-estimated-tooltip {
+  background: var(--bg-page);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  top: calc(100% + 8px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.45;
+  max-width: 220px;
+  opacity: 0;
+  padding: 8px 10px;
+  pointer-events: none;
+  position: absolute;
+  right: 0;
+  text-align: left;
+  transition: opacity 0.12s;
+  visibility: hidden;
+  white-space: normal;
+  width: max-content;
+  z-index: 50;
+}
+
+.drawer-estimated-chip:hover .drawer-estimated-tooltip,
+.drawer-estimated-chip:focus-visible .drawer-estimated-tooltip {
+  opacity: 1;
+  visibility: visible;
 }
 
 .drawer-stat-panel .stat-cell {

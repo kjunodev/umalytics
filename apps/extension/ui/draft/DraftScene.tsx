@@ -393,9 +393,6 @@ export function DraftRacesPanel({
         ))}
       </div>
       <ol className="draft-race-list">
-        {tiebreakerMap === undefined ? null : (
-          <DraftRaceCardItem race={{ n: 0, team: 'tiebreaker', tiebreaker: true, map: tiebreakerMap }} teamName={undefined} />
-        )}
         {races.map((race, index) => (
           <DraftRaceCardItem
             key={race === undefined ? `race-placeholder:${index}` : `race:${race.n}`}
@@ -404,6 +401,9 @@ export function DraftRacesPanel({
             teamName={race === undefined || race.team === 'tiebreaker' ? undefined : formatTeamName(teams[race.team])}
           />
         ))}
+        {tiebreakerMap === undefined ? null : (
+          <DraftRaceCardItem race={{ n: 0, team: 'tiebreaker', tiebreaker: true, map: tiebreakerMap }} teamName={undefined} />
+        )}
         {vetoedMaps.length === 0 ? null : (
           <>
             <li className="draft-vetoed-heading">Vetoed</li>

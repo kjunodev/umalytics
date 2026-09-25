@@ -9,6 +9,7 @@ const playerDrawerSyntax = parseTsxModule('uiPlayerDrawer');
 const playerDetailSyntax = parseTsxModule('uiPlayerDetailScene');
 const badgesSyntax = parseTsxModule('uiCommonBadges');
 const recentMatchesSyntax = parseTsxModule('uiPlayerRecentMatchesList');
+const topUmasListSyntax = parseTsxModule('uiPlayerTopUmasList');
 
 function cardStateHarness() {
   const c = vm.createContext({
@@ -127,6 +128,61 @@ test('the details drawer is a fixed 600px overlay, not a page it never scrolls a
   assert.match(css, /\.player-drawer\s*\{[^}]*overflow:\s*hidden/s);
 });
 
+test('the Umas panel no longer prints the long history-derived paragraph; it renders nothing for that case', () => {
+  const c = vm.createContext({
+    element: (type, props, ...children) => ({ type, props, children })
+  });
+  loadFunction(c, topUmasListSyntax, 'UmaResolutionNote');
+  assert.equal(c.UmaResolutionNote({ profile: { historyDerived: true, unresolvedUmaMatches: 3, disqualifiedMatches: 1 } }), null,
+    'history-derived profiles render nothing here now, even if they also have unresolved/disqualified matches');
+  assert.equal(c.UmaResolutionNote({ profile: undefined }), null);
+});
+
+test('EstimatedChip labels itself "Estimated" and its tooltip explains history-derived stats, adding the match count only when known', () => {
+  const c = drawerHarness();
+  const withCount = c.EstimatedChip({ profile: { historyDerived: true, historyTotal: 87 } });
+  const label = withCount.children[0];
+  const tooltip = withCount.children.find((child) => child?.props?.role === 'tooltip');
+  assert.equal(label, 'Estimated');
+  assert.deepEqual(tooltip.children, ['Stats worked out from match history (up to 100 matches per scope)', ' · 87 matches']);
+
+  const fallsBackToMatches = c.EstimatedChip({ profile: { historyDerived: true, matches: 42 } });
+  assert.deepEqual(fallsBackToMatches.children.find((child) => child?.props?.role === 'tooltip').children,
+    ['Stats worked out from match history (up to 100 matches per scope)', ' · 42 matches']);
+
+  const withoutCount = c.EstimatedChip({ profile: { historyDerived: true } });
+  assert.deepEqual(withoutCount.children.find((child) => child?.props?.role === 'tooltip').children,
+    ['Stats worked out from match history (up to 100 matches per scope)', '']);
+});
+
+test('the drawer stat row places the Estimated chip beside (not inside) the four-cell stat panel, only for history-derived profiles', () => {
+  const notDerived = renderableDrawer({ discordId: '1' }).render();
+  const derived = renderableDrawer({ discordId: '1', historyDerived: true, historyTotal: 60 }).render();
+
+  const statRow = find(derived, (node) => node.props?.className === 'drawer-stat-row');
+  assert(statRow !== undefined, 'the stat panel and chip share a row wrapper');
+  const rowChildren = statRow.children.flat(Infinity).filter(Boolean);
+  const statPanel = rowChildren.find((node) => node?.props?.className === 'drawer-stat-panel');
+  assert(statPanel !== undefined, 'the four-cell stat panel is still rendered inside the row');
+  assert.equal(rowChildren.length, 2, 'a history-derived profile adds exactly one sibling (the chip) beside the panel');
+
+  const notDerivedRow = find(notDerived, (node) => node.props?.className === 'drawer-stat-row');
+  assert.equal(notDerivedRow.children.flat(Infinity).filter(Boolean).length, 1,
+    'without historyDerived, only the stat panel sits in the row, no chip');
+});
+
+test('the Estimated chip tooltip appears on hover/focus only, and is not clipped by the drawer\'s own overflow:hidden', () => {
+  const css = readModule('uiPlayerDrawerCss');
+  assert.match(css, /\.drawer-estimated-chip\s*\{[^}]*color:\s*var\(--accent-gold\)/s, 'the chip is gold');
+  assert.match(
+    css,
+    /\.drawer-estimated-chip:hover \.drawer-estimated-tooltip,\s*\n?\s*\.drawer-estimated-chip:focus-visible \.drawer-estimated-tooltip/,
+    'tooltip only reveals on hover or focus, never a bare click'
+  );
+  assert.match(css, /\.drawer-estimated-tooltip\s*\{[^}]*top:\s*calc\(100% \+ 8px\)/s,
+    'opens downward, away from the header, so overflow:hidden on .player-drawer cannot clip it');
+});
+
 function find(node, predicate) {
   if (!node || typeof node !== 'object') return undefined;
   if (predicate(node)) return node;
@@ -166,6 +222,7 @@ function drawerHarness() {
   loadFunction(c, playerDrawerSyntax, 'formatUmaColumnValue');
   loadFunction(c, playerDrawerSyntax, 'getPagerSlots');
   loadFunction(c, playerDrawerSyntax, 'PlayerDrawer');
+  loadFunction(c, playerDrawerSyntax, 'EstimatedChip');
   return c;
 }
 

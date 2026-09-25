@@ -228,11 +228,14 @@ export function PlayerDrawer({
           </button>
         </div>
 
-        <div className="drawer-stat-panel">
-          <StatCell label="W-L" value={formatRecord(displayedProfile)} title="Ranked win-loss record for the selected stat scope." variant="record" />
-          <StatCell label="Win rate" value={formatPercent(displayedProfile?.winRate)} title="Ranked win rate for the selected stat scope." />
-          <StatCell label="Pts / game" value={formatDecimal(displayedProfile?.pointsPerGame)} title="Average ranked points per game for the selected stat scope." />
-          <StatCell label="MVP" value={formatNumber(displayedProfile?.mvpMatches)} title="Total ranked MVP games for the selected stat scope." />
+        <div className="drawer-stat-row">
+          <div className="drawer-stat-panel">
+            <StatCell label="W-L" value={formatRecord(displayedProfile)} title="Ranked win-loss record for the selected stat scope." variant="record" />
+            <StatCell label="Win rate" value={formatPercent(displayedProfile?.winRate)} title="Ranked win rate for the selected stat scope." />
+            <StatCell label="Pts / game" value={formatDecimal(displayedProfile?.pointsPerGame)} title="Average ranked points per game for the selected stat scope." />
+            <StatCell label="MVP" value={formatNumber(displayedProfile?.mvpMatches)} title="Total ranked MVP games for the selected stat scope." />
+          </div>
+          {displayedProfile?.historyDerived ? <EstimatedChip profile={displayedProfile} /> : null}
         </div>
 
         <section className="drawer-section drawer-umas" aria-label="Umas">
@@ -385,6 +388,19 @@ export function PlayerDrawer({
         {note === undefined ? null : <p className="player-note">{note}</p>}
       </aside>
     </>
+  );
+}
+
+export function EstimatedChip({ profile }: { profile: PlayerProfileSummary | undefined }) {
+  const matches = profile?.historyTotal ?? profile?.matches ?? undefined;
+
+  return (
+    <span className="drawer-estimated-chip" tabIndex={0}>
+      Estimated
+      <span className="drawer-estimated-tooltip" role="tooltip">
+        Stats worked out from match history (up to 100 matches per scope){matches === undefined ? '' : ` · ${matches} matches`}
+      </span>
+    </span>
   );
 }
 

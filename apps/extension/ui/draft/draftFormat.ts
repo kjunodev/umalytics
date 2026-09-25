@@ -139,7 +139,7 @@ export interface DraftRaceCard {
 }
 
 /** The picked-map race cards only, in draft order, numbered 1..totalMapSlots.
- * The tiebreaker and vetoed maps render separately: TB first, then these,
+ * The tiebreaker and vetoed maps render separately: these first, then TB,
  * then a compact Vetoed section (see getDraftVetoedMaps). */
 export function buildDraftRaceCards(
   teams: DraftSnapshot['teams'],

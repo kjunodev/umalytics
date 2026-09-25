@@ -64,6 +64,50 @@ test('the races column shares its height between race cards so the column fills 
   assert.match(draftCss, /\.draft-race-list\s*\{[^}]*overflow-y:\s*auto/s, 'a fallback for very short windows');
 });
 
+test('the races column orders races 1..N first, then the tiebreaker card, then the Vetoed section', () => {
+  const c = vm.createContext({
+    element: (type, props, ...children) =>
+      typeof type === 'function' ? type(props ?? {}) : { type, props, children },
+    React: { Fragment: 'Fragment' },
+    TEAM_IDS: ['team1', 'team2'],
+    formatTeamName: (team) => team?.name ?? team?.id ?? 'Unknown team',
+    formatRaceTrackName: (map) => map.track ?? map.name,
+    formatRaceDistance: (distance) => (distance === undefined ? undefined : `${distance}m`),
+    hasStructuredRaceModifiers: () => false,
+    getDraftWeatherIconKey: () => undefined,
+    formatDraftMapDetails: () => undefined
+  });
+  loadFunction(c, draftSyntax, 'DraftRacesPanel');
+  loadFunction(c, draftSyntax, 'DraftRaceCardItem');
+  loadFunction(c, draftSyntax, 'DraftVetoedMapRow');
+
+  const teams = { team1: { id: 'team1', name: 'Rose Tempest' }, team2: { id: 'team2', name: 'literally 1984' } };
+  const races = [
+    { n: 1, team: 'team1', tiebreaker: false, map: { name: 'Nakayama' } },
+    { n: 2, team: 'team2', tiebreaker: false, map: { name: 'Hanshin' } }
+  ];
+  const tiebreakerMap = { name: 'Hakodate' };
+  const vetoedMaps = [{ team: 'team1', map: { name: 'Kyoto' } }, { team: 'team2', map: { name: 'Chukyo' } }];
+
+  function findAll(node, predicate, results = []) {
+    if (!node || typeof node !== 'object') return results;
+    if (predicate(node)) results.push(node);
+    for (const child of (node.children ?? []).flat(Infinity)) findAll(child, predicate, results);
+    return results;
+  }
+
+  const result = c.DraftRacesPanel({ teams, races, tiebreakerMap, vetoedMaps });
+  const list = result.children.find((child) => child?.type === 'ol');
+  const items = findAll(list, (node) => node.type === 'li');
+  const classNames = items.map((item) => item.props?.className);
+
+  assert.deepEqual(classNames, [
+    'draft-race-card team1', 'draft-race-card team2',
+    'draft-race-card tiebreaker',
+    'draft-vetoed-heading', 'draft-vetoed-map-row team1', 'draft-vetoed-map-row team2'
+  ], 'races 1..N first, then the gold TB tiebreaker card, then the Vetoed heading and rows');
+});
+
 test('the played/new chip renders as its own line under the pick name, not layered over the portrait', () => {
   const c = vm.createContext({element:(type,props,...children)=>({type,props,children}),UmaImage:'Image',getUmaPortraitUrl:id=>`portrait/${id}`,isKnownUmaOutfitId:()=>false});
   loadFunction(c, draftSyntax, 'DraftPickTile');
