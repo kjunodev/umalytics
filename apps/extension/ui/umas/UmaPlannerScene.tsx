@@ -64,14 +64,22 @@ export function UmaPlannerScene({
   useLayoutEffect(() => {
     const scene = sceneRef.current;
     if (scene === null) return;
+    let pendingFrame: number | undefined;
     const fitScene = () => {
       if (scene.getClientRects().length === 0) return;
       const shell = scene.closest('.app-shell');
       const bottomPadding = shell === null ? 0 : parseFloat(getComputedStyle(shell).paddingBottom);
       const top = scene.getBoundingClientRect().top + window.scrollY;
-      scene.style.height = `${Math.max(0, window.innerHeight - top - bottomPadding)}px`;
+      const height = `${Math.max(0, window.innerHeight - top - bottomPadding)}px`;
+      if (scene.style.height !== height) scene.style.height = height;
     };
-    const observer = new ResizeObserver(fitScene);
+    const observer = new ResizeObserver(() => {
+      if (pendingFrame !== undefined) return;
+      pendingFrame = window.requestAnimationFrame(() => {
+        pendingFrame = undefined;
+        fitScene();
+      });
+    });
     for (let parent = scene.parentElement; parent !== null; parent = parent.parentElement) {
       observer.observe(parent);
       for (const sibling of parent.children) observer.observe(sibling);
@@ -80,6 +88,7 @@ export function UmaPlannerScene({
     fitScene();
     return () => {
       observer.disconnect();
+      if (pendingFrame !== undefined) window.cancelAnimationFrame(pendingFrame);
       window.removeEventListener('resize', fitScene);
     };
   }, []);
