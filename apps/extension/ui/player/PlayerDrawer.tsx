@@ -28,6 +28,7 @@ import {
   withDetailHistory
 } from './playerProfileDisplay';
 import { formatRecentResult, getRecentResultTone } from './recentMatchFormat';
+declare const __UMALYTICS_PRIVATE_PROFILE_DATA__: boolean;
 
 const HISTORY_PAGE_SIZE = 5;
 const HISTORY_API_PAGE_SIZE = 20;
@@ -108,8 +109,12 @@ export function PlayerDrawer({
   const detailProfile = historyLoaded && historyFirstApiPage !== undefined
     ? withDetailHistory(displayedProfile, historyFirstApiPage.matches, historyFirstApiPage.total, historyFirstApiPage.summary)
     : displayedProfile;
+  const isPrivateBuild = typeof __UMALYTICS_PRIVATE_PROFILE_DATA__ !== 'undefined' && __UMALYTICS_PRIVATE_PROFILE_DATA__;
+  // detailProfile.recentForm already prefers the card's batch-derived value (same
+  // window as the card) over a history-derived fallback; only the build gate is
+  // re-checked here so public never renders a badge from any history-based value.
   const notableBadges = getNotableBadges(
-    detailProfile === undefined ? undefined : historyLoaded ? detailProfile : { ...detailProfile, recentForm: undefined }
+    detailProfile === undefined ? undefined : isPrivateBuild ? detailProfile : { ...detailProfile, recentForm: undefined }
   );
   const last5 = historyLoaded ? (detailProfile?.recentMatches ?? []).slice(0, 5) : [];
   const knownTitle = typeof profile?.title === 'string' && profile.title.length > 0 ? profile.title : undefined;

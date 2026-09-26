@@ -11,22 +11,6 @@
   z-index: 10;
 }
 
-.best-uma-portrait {
-  align-items: center;
-  aspect-ratio: 1;
-  background: var(--bg-inset);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-sm);
-  color: var(--text-secondary);
-  display: flex;
-  flex-shrink: 0;
-  justify-content: center;
-  overflow: hidden;
-  width: 38px;
-}
-
-.best-uma-portrait img { display: block; height: 100%; object-fit: cover; width: 100%; }
-
 .recent-result {
   align-items: center;
   border-radius: var(--radius-pill);

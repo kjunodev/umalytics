@@ -62,9 +62,9 @@
 }
 
 .player-list {
+  align-items: start;
   display: grid;
   gap: 12px;
-  grid-auto-rows: minmax(312px, auto);
   grid-template-columns: repeat(5, minmax(0, 1fr));
   list-style: none;
   margin: 0;
@@ -131,7 +131,8 @@
 .card-name {
   color: var(--text-primary);
   display: block;
-  font-size: 14px;
+  /* Base at 720px viewport height, ~1.2x at 1440px. */
+  font-size: clamp(14px, calc(11.2px + 0.39vh), 16.8px);
   font-weight: 700;
   line-height: 1.2;
   min-width: 0;
