@@ -19,6 +19,12 @@ const ICON_KIND_STYLE: Partial<Record<NotableBadgeKind, { background: string; co
 
 const MAX_CARD_BADGES = 7;
 
+// How many of the trailing chips (out of up to MAX_CARD_BADGES + 1, the "+N"
+// overflow chip included) anchor their tooltip to the right instead of the
+// left. A fixed trailing count is reliable regardless of how many chips
+// actually render or how the row wraps, unlike a "right half" split.
+const RIGHT_ANCHORED_TRAILING_CHIPS = 3;
+
 export function sortBadgesForCard(badges: NotableBadge[]): NotableBadge[] {
   return [...badges].sort((a, b) => (CARD_BADGE_PRIORITY[a.kind] ?? 9) - (CARD_BADGE_PRIORITY[b.kind] ?? 9));
 }
@@ -31,11 +37,13 @@ export function BadgeChipRow({ badges }: { badges: NotableBadge[] }) {
   const ordered = sortBadgesForCard(badges);
   const shown = ordered.slice(0, MAX_CARD_BADGES);
   const overflow = ordered.slice(MAX_CARD_BADGES);
+  const totalChips = shown.length + (overflow.length > 0 ? 1 : 0);
+  const isAnchoredRight = (index: number) => index >= totalChips - RIGHT_ANCHORED_TRAILING_CHIPS;
 
   return (
     <div className="card-badges">
-      {shown.map((badge) => (
-        <BadgeChip key={badge.kind} badge={badge} />
+      {shown.map((badge, index) => (
+        <BadgeChip key={badge.kind} badge={badge} anchorRight={isAnchoredRight(index)} />
       ))}
       {overflow.length > 0 ? (
         <span
@@ -44,7 +52,7 @@ export function BadgeChipRow({ badges }: { badges: NotableBadge[] }) {
           aria-label={`${overflow.length} more badges: ${overflow.map((badge) => badge.label).join(', ')}`}
         >
           <span>{`+${overflow.length}`}</span>
-          <span className="chip-tooltip" role="tooltip">
+          <span className={tooltipClassName(isAnchoredRight(shown.length))} role="tooltip">
             <b>{`${overflow.length} more`}</b>
             {`${overflow.map((badge) => badge.label).join(', ')}. All badges are listed in details.`}
           </span>
@@ -54,12 +62,16 @@ export function BadgeChipRow({ badges }: { badges: NotableBadge[] }) {
   );
 }
 
-function BadgeChip({ badge }: { badge: NotableBadge }) {
+function tooltipClassName(anchorRight: boolean): string {
+  return anchorRight ? 'chip-tooltip chip-tooltip-right' : 'chip-tooltip';
+}
+
+function BadgeChip({ badge, anchorRight }: { badge: NotableBadge; anchorRight: boolean }) {
   if (RANK_KINDS.has(badge.kind)) {
     return (
       <span className="chip chip-rank" tabIndex={0} aria-label={`${badge.label}: ${badge.title}`}>
         <span>{badge.label}</span>
-        <span className="chip-tooltip" role="tooltip">
+        <span className={tooltipClassName(anchorRight)} role="tooltip">
           <b>{badge.label}</b>
           {badge.title}
         </span>
@@ -72,7 +84,7 @@ function BadgeChip({ badge }: { badge: NotableBadge }) {
   return (
     <span className="chip chip-icon" style={style} tabIndex={0} aria-label={`${badge.label}: ${badge.title}`}>
       <BadgeIcon kind={badge.kind} />
-      <span className="chip-tooltip" role="tooltip">
+      <span className={tooltipClassName(anchorRight)} role="tooltip">
         <b>{badge.label}</b>
         {badge.title}
       </span>

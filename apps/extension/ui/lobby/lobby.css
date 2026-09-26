@@ -243,6 +243,14 @@
   z-index: 50;
 }
 
+/* The trailing chips in a row anchor their tooltip to the right instead of
+   the left, so it never extends past the card (and the lobby's page edge)
+   on the rightmost cards in a row. */
+.chip-tooltip-right {
+  left: auto;
+  right: 0;
+}
+
 .chip-tooltip b {
   color: var(--text-primary);
   display: block;

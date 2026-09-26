@@ -170,6 +170,73 @@ test('the Most Played list reveals whole Uma rows only: it hides all rows by def
   }
 });
 
+test('the last 3 badge chips (including a trailing "+N" overflow chip) anchor their tooltip to the right, so it never extends past the card', () => {
+  const c = vm.createContext({
+    element: (type, props, ...children) => ({ type, props, children }),
+    RANK_KINDS: new Set(['top10', 'top25']),
+    ICON_KIND_STYLE: {},
+    CARD_BADGE_PRIORITY: { top10: 0, top25: 1, mvpMenace: 2, eliteScoring: 3, highScoring: 3, consistent: 4, established: 5 },
+    MAX_CARD_BADGES: 7,
+    RIGHT_ANCHORED_TRAILING_CHIPS: 3,
+    BadgeIcon: () => null
+  });
+  loadFunction(c, badgeChipSyntax, 'sortBadgesForCard');
+  loadFunction(c, badgeChipSyntax, 'tooltipClassName');
+  loadFunction(c, badgeChipSyntax, 'BadgeChip');
+  loadFunction(c, badgeChipSyntax, 'BadgeChipRow');
+
+  // BadgeChipRow builds one un-invoked BadgeChip descriptor per badge (plus the
+  // "+N" overflow chip); its `anchorRight` prop is the indexing logic under
+  // test, so read it straight off each descriptor.
+  const anchorFlagsOf = (badgeCount, extra = 0) => {
+    const badges = Array.from({ length: badgeCount }, (_, i) => ({ kind: 'established', label: `B${i}`, title: `T${i}` }));
+    for (let i = 0; i < extra; i += 1) badges.push({ kind: 'consistent', label: `E${i}`, title: `ET${i}` });
+    const tree = c.BadgeChipRow({ badges });
+    const [shownDescriptors, overflowDescriptor] = tree.children;
+    const flags = Array.from(shownDescriptors, (descriptor) => Boolean(descriptor.props.anchorRight));
+    if (overflowDescriptor !== null) {
+      flags.push(find(overflowDescriptor, (n) => n.props?.role === 'tooltip').props.className.includes('chip-tooltip-right'));
+    }
+    return Array.from(flags);
+  };
+
+  // 5 badges, no overflow: the last 3 (indices 2,3,4) anchor right.
+  assert.deepEqual(anchorFlagsOf(5), [false, false, true, true, true]);
+
+  // 7 shown + a "+N" overflow chip = 8 total chips; the last 3 (the last 2
+  // shown badges plus the overflow chip itself) anchor right.
+  const withOverflow = anchorFlagsOf(7, 2);
+  assert.equal(withOverflow.length, 8);
+  assert.deepEqual(withOverflow, [false, false, false, false, false, true, true, true]);
+
+  // The tooltip markup itself picks up the class from that flag.
+  assert.equal(c.BadgeChip({ badge: { kind: 'established', label: 'X', title: 'Y' }, anchorRight: false })
+    .children.find((n) => n.props?.role === 'tooltip').props.className, 'chip-tooltip');
+  assert.equal(c.BadgeChip({ badge: { kind: 'established', label: 'X', title: 'Y' }, anchorRight: true })
+    .children.find((n) => n.props?.role === 'tooltip').props.className, 'chip-tooltip chip-tooltip-right');
+});
+
+test('the lobby team list clips horizontal overflow instead of becoming its own auto-scroll container, so a hidden tooltip never produces a page scrollbar', () => {
+  const css = readModule('uiShellCss');
+  assert.match(
+    css,
+    /\.app-scene-area > \.team-list,\s*\n?\s*\.history-scene > \.team-list\s*\{[^}]*overflow-x:\s*clip/s,
+    'overflow-x must be explicit clip, not left to default to auto because of overflow-y: auto'
+  );
+});
+
+test('the right-anchored tooltip rule flips left:0 to right:0 without changing the tooltip\'s other positioning', () => {
+  const css = readModule('uiLobbyCss');
+  assert.match(css, /\.chip-tooltip-right\s*\{[^}]*left:\s*auto/s);
+  assert.match(css, /\.chip-tooltip-right\s*\{[^}]*right:\s*0/s);
+});
+
+test('the drawer\'s MVP star and Estimated chip tooltips are already right-anchored, so they cannot extend past the fixed-width drawer', () => {
+  const css = readModule('uiPlayerDrawerCss');
+  assert.match(css, /\.mvp-star-tooltip\s*\{[^}]*right:\s*0/s);
+  assert.match(css, /\.drawer-estimated-tooltip\s*\{[^}]*right:\s*0/s);
+});
+
 test('the details drawer is a fixed 600px overlay, not a page it never scrolls as a whole', () => {
   const css = readModule('uiPlayerDrawerCss');
   assert.match(css, /\.player-drawer\s*\{[^}]*width:\s*min\(var\(--drawer-width\), 100vw\)/s);
