@@ -45,6 +45,8 @@
   --tone-sample-fg: #c6cdda;
   --tone-mvp-bg: #351d2a;
   --tone-mvp-fg: var(--accent-pink);
+  --tone-style-bg: #1c2e28;
+  --tone-style-fg: var(--accent-green-soft);
   --tone-more-fg: var(--text-muted);
   --tone-estimated-bg: #3a2a10;
   --tone-estimated-ring: #4a3a18;

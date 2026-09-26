@@ -90,7 +90,7 @@ const pathByName = new Map(Object.entries(MODULES));
 // Dependencies each module needs evaluated into the same vm context first,
 // matching the preload order the original per-test-file loaders hard coded.
 const PRELOADS = {
-  background: ['profileStates', 'scoutWindow', 'drafterTabs', 'profileEstimates'],
+  background: ['profileStates', 'scoutWindow', 'drafterTabs', 'profileEstimates', 'profileConstants'],
   profileCache: ['profileMerge'],
   explorerState: ['profileMerge'],
   explorerService: ['profileMerge', 'profileEstimates'],
@@ -102,6 +102,7 @@ const PRELOADS = {
   recordReaders: ['teams'],
   rosterDisplay: ['teams'],
   uiCommonRoster: ['teams'],
+  uiCommonBadges: ['uiCommonFormat', 'profileConstants'],
 };
 
 function resolvePath(name) {

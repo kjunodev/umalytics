@@ -1,13 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
-import { loadFunction, parseTsxModule, readModule } from './support/harness.mjs';
+import { loadFunction, loadModule, parseTsxModule, readModule } from './support/harness.mjs';
 
 const teamSectionSyntax = parseTsxModule('uiLobbyTeamSection');
 const badgeChipSyntax = parseTsxModule('uiLobbyBadgeChip');
 const playerDrawerSyntax = parseTsxModule('uiPlayerDrawer');
 const playerDetailSyntax = parseTsxModule('uiPlayerProfileDisplay');
-const badgesSyntax = parseTsxModule('uiCommonBadges');
 const recentMatchesSyntax = parseTsxModule('uiPlayerRecentMatchFormat');
 const topUmasListSyntax = parseTsxModule('uiPlayerTopUmasList');
 
@@ -73,10 +72,17 @@ test('a failed fetch with nothing displayable is an error card; a failed fetch w
   assert.equal(c.getCardState({ discordId: 'd1', error: 'HTTP 503' }, withUmas, false, 'd1'), 'loaded');
 });
 
+const cardBadgePriority = {
+  top10: 0, top25: 1,
+  oneTrick: 2, deepPool: 2,
+  eliteScoring: 3, highScoring: 3, mvpMenace: 3, podiumRegular: 3, underrated: 3,
+  newcomer: 4,
+  consistent: 5,
+  established: 6
+};
+
 test('badge chip ordering puts rank first, then playstyle, then sample size, regardless of input order', () => {
-  const c = vm.createContext({
-    CARD_BADGE_PRIORITY: { top10: 0, top25: 1, mvpMenace: 2, eliteScoring: 3, highScoring: 3, consistent: 4, established: 5 }
-  });
+  const c = vm.createContext({ CARD_BADGE_PRIORITY: cardBadgePriority });
   loadFunction(c, badgeChipSyntax, 'sortBadgesForCard');
   const badges = [
     { kind: 'established', label: 'Established' },
@@ -87,6 +93,26 @@ test('badge chip ordering puts rank first, then playstyle, then sample size, reg
   const ordered = Array.from(c.sortBadgesForCard(badges), (badge) => badge.kind);
   assert.deepEqual(ordered, ['top25', 'mvpMenace', 'consistent', 'established']);
   assert.notDeepEqual(ordered, Array.from(badges, (badge) => badge.kind), 'input array order is unchanged');
+});
+
+test('badge chip ordering places rank first, then oneTrick/deepPool, then the scoring-rate tier, then newcomer, before consistent and established', () => {
+  const c = vm.createContext({ CARD_BADGE_PRIORITY: cardBadgePriority });
+  loadFunction(c, badgeChipSyntax, 'sortBadgesForCard');
+  const badges = [
+    { kind: 'established', label: 'Established' },
+    { kind: 'consistent', label: 'Consistent' },
+    { kind: 'newcomer', label: 'Newcomer' },
+    { kind: 'underrated', label: 'Underrated' },
+    { kind: 'podiumRegular', label: 'Podium regular' },
+    { kind: 'mvpMenace', label: 'MVP Menace' },
+    { kind: 'deepPool', label: 'Deep pool' },
+    { kind: 'top10', label: 'Top 10' }
+  ];
+  const ordered = Array.from(c.sortBadgesForCard(badges), (badge) => badge.kind);
+  // eliteScoring/highScoring/mvpMenace/podiumRegular/underrated are a tied
+  // tier; the stable sort keeps their original relative order (underrated,
+  // podiumRegular, mvpMenace, matching the input array above).
+  assert.deepEqual(ordered, ['top10', 'deepPool', 'underrated', 'podiumRegular', 'mvpMenace', 'newcomer', 'consistent', 'established']);
 });
 
 test('the match history pager always resolves to at most 7 slots, with the current page centered once truncated', () => {
@@ -170,50 +196,73 @@ test('the Most Played list reveals whole Uma rows only: it hides all rows by def
   }
 });
 
-test('the last 3 badge chips (including a trailing "+N" overflow chip) anchor their tooltip to the right, so it never extends past the card', () => {
+test('every chip tooltip (first, last, and the "+N" overflow chip) uses the same single tooltip class, anchored to the row rather than to any one chip', () => {
   const c = vm.createContext({
     element: (type, props, ...children) => ({ type, props, children }),
     RANK_KINDS: new Set(['top10', 'top25']),
     ICON_KIND_STYLE: {},
-    CARD_BADGE_PRIORITY: { top10: 0, top25: 1, mvpMenace: 2, eliteScoring: 3, highScoring: 3, consistent: 4, established: 5 },
+    CARD_BADGE_PRIORITY: cardBadgePriority,
     MAX_CARD_BADGES: 7,
-    RIGHT_ANCHORED_TRAILING_CHIPS: 3,
     BadgeIcon: () => null
   });
   loadFunction(c, badgeChipSyntax, 'sortBadgesForCard');
-  loadFunction(c, badgeChipSyntax, 'tooltipClassName');
   loadFunction(c, badgeChipSyntax, 'BadgeChip');
   loadFunction(c, badgeChipSyntax, 'BadgeChipRow');
 
-  // BadgeChipRow builds one un-invoked BadgeChip descriptor per badge (plus the
-  // "+N" overflow chip); its `anchorRight` prop is the indexing logic under
-  // test, so read it straight off each descriptor.
-  const anchorFlagsOf = (badgeCount, extra = 0) => {
+  const tooltipClassesOf = (badgeCount, extra = 0) => {
     const badges = Array.from({ length: badgeCount }, (_, i) => ({ kind: 'established', label: `B${i}`, title: `T${i}` }));
     for (let i = 0; i < extra; i += 1) badges.push({ kind: 'consistent', label: `E${i}`, title: `ET${i}` });
     const tree = c.BadgeChipRow({ badges });
     const [shownDescriptors, overflowDescriptor] = tree.children;
-    const flags = Array.from(shownDescriptors, (descriptor) => Boolean(descriptor.props.anchorRight));
+    // BadgeChipRow builds one un-invoked <BadgeChip> descriptor per badge;
+    // invoke it to get the real rendered tooltip markup underneath.
+    const classes = Array.from(shownDescriptors, (descriptor) =>
+      find(c.BadgeChip(descriptor.props), (n) => n.props?.role === 'tooltip').props.className);
     if (overflowDescriptor !== null) {
-      flags.push(find(overflowDescriptor, (n) => n.props?.role === 'tooltip').props.className.includes('chip-tooltip-right'));
+      classes.push(find(overflowDescriptor, (n) => n.props?.role === 'tooltip').props.className);
     }
-    return Array.from(flags);
+    return classes;
   };
 
-  // 5 badges, no overflow: the last 3 (indices 2,3,4) anchor right.
-  assert.deepEqual(anchorFlagsOf(5), [false, false, true, true, true]);
+  // No badge or chip position (first, last, or the trailing "+N" overflow
+  // chip) gets a different tooltip class any more; there is nothing left to
+  // anchor per-chip since the row itself bounds every tooltip.
+  assert.deepEqual(tooltipClassesOf(5), Array(5).fill('chip-tooltip'));
+  assert.deepEqual(tooltipClassesOf(7, 2), Array(8).fill('chip-tooltip'));
 
-  // 7 shown + a "+N" overflow chip = 8 total chips; the last 3 (the last 2
-  // shown badges plus the overflow chip itself) anchor right.
-  const withOverflow = anchorFlagsOf(7, 2);
-  assert.equal(withOverflow.length, 8);
-  assert.deepEqual(withOverflow, [false, false, false, false, false, true, true, true]);
-
-  // The tooltip markup itself picks up the class from that flag.
-  assert.equal(c.BadgeChip({ badge: { kind: 'established', label: 'X', title: 'Y' }, anchorRight: false })
+  assert.equal(c.BadgeChip({ badge: { kind: 'established', label: 'X', title: 'Y' } })
     .children.find((n) => n.props?.role === 'tooltip').props.className, 'chip-tooltip');
-  assert.equal(c.BadgeChip({ badge: { kind: 'established', label: 'X', title: 'Y' }, anchorRight: true })
-    .children.find((n) => n.props?.role === 'tooltip').props.className, 'chip-tooltip chip-tooltip-right');
+});
+
+function tooltipBoundsWithinRow(rowLeft, rowWidth) {
+  // .chip-tooltip is `left: 0; right: 0;` against .card-badges (position:
+  // relative), so its box is defined to exactly match the row's own box,
+  // regardless of the row's position on screen or which chip inside it
+  // triggered the tooltip.
+  return { left: rowLeft, right: rowLeft + rowWidth };
+}
+
+test('tooltips stay inside the card for the first and last chip, on both the leftmost and rightmost cards in a row', () => {
+  const css = readModule('uiLobbyCss');
+  assert.match(css, /\.card-badges\s*\{[^}]*position:\s*relative/s, '.card-badges is the positioning context for every chip tooltip in it');
+  assert.doesNotMatch(
+    css,
+    /\.chip\s*\{[^}]*position:\s*relative/s,
+    '.chip must not create its own positioning context, or a tooltip would anchor to the chip instead of the row'
+  );
+  assert.match(css, /\.chip-tooltip\s*\{[^}]*left:\s*0/s);
+  assert.match(css, /\.chip-tooltip\s*\{[^}]*right:\s*0/s);
+  assert.doesNotMatch(css, /\.chip-tooltip-right/, 'the old right-anchored variant is gone: one rule now fits every chip, on every card');
+
+  // A card near the left edge of the lobby grid and one near the right edge,
+  // both at a plausible card content width; first-chip and last-chip tooltips
+  // are identical (the row bounds them, not the chip), so both are checked
+  // via the same row geometry.
+  for (const [rowLeft, rowWidth, cardLabel] of [[0, 280, 'leftmost card'], [960, 280, 'rightmost card']]) {
+    const bounds = tooltipBoundsWithinRow(rowLeft, rowWidth);
+    assert(bounds.left >= rowLeft, `${cardLabel}: tooltip must not start left of the card`);
+    assert(bounds.right <= rowLeft + rowWidth, `${cardLabel}: tooltip must not extend right of the card`);
+  }
 });
 
 test('the lobby team list clips horizontal overflow instead of becoming its own auto-scroll container, so a hidden tooltip never produces a page scrollbar', () => {
@@ -223,12 +272,6 @@ test('the lobby team list clips horizontal overflow instead of becoming its own 
     /\.app-scene-area > \.team-list,\s*\n?\s*\.history-scene > \.team-list\s*\{[^}]*overflow-x:\s*clip/s,
     'overflow-x must be explicit clip, not left to default to auto because of overflow-y: auto'
   );
-});
-
-test('the right-anchored tooltip rule flips left:0 to right:0 without changing the tooltip\'s other positioning', () => {
-  const css = readModule('uiLobbyCss');
-  assert.match(css, /\.chip-tooltip-right\s*\{[^}]*left:\s*auto/s);
-  assert.match(css, /\.chip-tooltip-right\s*\{[^}]*right:\s*0/s);
 });
 
 test('the drawer\'s MVP star and Estimated chip tooltips are already right-anchored, so they cannot extend past the fixed-width drawer', () => {
@@ -410,8 +453,7 @@ function drawerHarness() {
       { key: 'pointsPerGame', label: 'PPG' }, { key: 'performanceScore', label: 'Score' }
     ]
   });
-  loadFunction(c, badgesSyntax, 'hasDisplayableProfileLists');
-  loadFunction(c, badgesSyntax, 'getNotableBadges');
+  loadModule(c, 'uiCommonBadges');
   loadFunction(c, playerDetailSyntax, 'withDetailHistory');
   loadFunction(c, recentMatchesSyntax, 'getRecentResultTone');
   loadFunction(c, recentMatchesSyntax, 'formatRecentResult');

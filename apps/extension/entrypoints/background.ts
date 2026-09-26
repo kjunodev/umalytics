@@ -4,13 +4,14 @@ import { applyPrivateEstimates } from '../profiles/profileEstimates';
 import { registerExplorerService } from '../explorer/explorerService';
 import { normalizeRosterForDisplay } from '../room/rosterDisplay';
 import { browser } from 'wxt/browser';
-import type { PlayerProfileSummary, PrematchRoster } from '@umalytics/shared';
+import type { PlayerProfileSummary, PrematchPlayer, PrematchRoster } from '@umalytics/shared';
 import {
   isUmaLyticsMessage,
   type LobbyReconnectResult
 } from '../runtime/messaging';
 import {
   buildUnavailablePlayerSummary,
+  fetchPlayerAllTimeStats,
   fetchPlayerHistoryPage,
   fetchPlayerProfileSummaries,
   fetchPlayerProfileTitle,
@@ -27,6 +28,7 @@ import type { PlayerProfileLoadState } from '../profiles/profileTypes';
 import {
   BEST_UMA_SCORE_VERSION,
   MANUAL_PROFILE_REFRESH_COOLDOWN_MS,
+  NEWCOMER_MAX_ALL_TIME_MATCHES,
   PROFILE_CACHE_TTL_MS,
   RECENT_HISTORY_VERSION
 } from '../profiles/profileConstants';
@@ -488,6 +490,13 @@ async function performRosterEnrichment(
       Object.assign(profilesByDiscordId, estimatedProfiles);
       await rememberCachedPlayerProfiles(estimatedProfiles);
     }
+
+    if (scope === 'currentSeason') {
+      await fetchNewcomerAllTimeStats(roster.players, profilesByDiscordId, signal);
+      if (signal.aborted || runId !== enrichmentRunId) return;
+      await publish();
+      await rememberCachedPlayerProfiles(profilesByDiscordId);
+    }
   } catch (caught) {
     if (signal.aborted || runId !== enrichmentRunId) {
       return;
@@ -526,6 +535,36 @@ async function performRosterEnrichment(
   } else pendingRecovery = undefined;
   await persistProfileRecovery();
   await publish();
+}
+
+// Newcomer badge support: when showing current-season stats, a player under
+// the all-time newcomer threshold in-season needs their real all-time match
+// count too. Runs once cards have already published their season stats, at
+// the lowest request priority, and only for players who still need it.
+async function fetchNewcomerAllTimeStats(
+  players: PrematchPlayer[],
+  profilesByDiscordId: Record<string, PlayerProfileSummary>,
+  signal: AbortSignal
+): Promise<void> {
+  const candidates = players.filter((player) => {
+    const profile = profilesByDiscordId[player.discordId];
+    if (profile === undefined || profile.matches === null || profile.matches === undefined) return false;
+    if (profile.matches >= NEWCOMER_MAX_ALL_TIME_MATCHES) return false;
+    const allTimeMatches = profile.allTimeStats?.matches;
+    return allTimeMatches === null || allTimeMatches === undefined;
+  });
+  if (candidates.length === 0) return;
+
+  await Promise.all(candidates.map(async (player) => {
+    try {
+      const allTimeStats = await fetchPlayerAllTimeStats(player.discordId, signal);
+      if (signal.aborted) return;
+      const current = profilesByDiscordId[player.discordId];
+      if (current !== undefined) profilesByDiscordId[player.discordId] = { ...current, allTimeStats };
+    } catch {
+      // Leave allTimeStats unresolved; the newcomer badge just stays hidden until a later attempt succeeds.
+    }
+  }));
 }
 
 function getEnrichmentKey(roster: PrematchRoster): string {

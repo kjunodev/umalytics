@@ -244,7 +244,8 @@ test('rate limits fail explicitly without sleeping or issuing a retry storm',asy
 });
 
 function backgroundHarness({stored = {}} = {}) {
-  const snapshots=[],fetches=[],alarms=new Map();let cached;let windowCount=0;let clock=Date.now();let latest=roster();let archive={};
+  const snapshots=[],fetches=[],alarms=new Map(),allTimeFetches=[];let cached;let windowCount=0;let clock=Date.now();let latest=roster();let archive={};
+  let allTimeStatsResponses={};
   class Clock extends Date { static now(){return clock;} }
   const c=context({Date:Clock, getApiCooldown:()=>undefined,restoreApiCooldown:()=>{},
     browser:{storage:{local:{get:async key=>({[key]:stored[key]}),set:async value=>Object.assign(stored,structuredClone(value)),remove:async key=>{delete stored[key];}}},
@@ -255,10 +256,15 @@ function backgroundHarness({stored = {}} = {}) {
     setPlayerProfileSummaries:async s=>{cached=structuredClone(s);snapshots.push(cached);},
     isHashedUmaAssetUrl:()=>false,
     fetchPlayerProfileSummaries:async (p,options)=>{const gate=deferred();fetches.push({players:p,options,gate});return await gate.promise ?? {};},
+    fetchPlayerAllTimeStats:async discordId=>{allTimeFetches.push(discordId);return allTimeStatsResponses[discordId] ?? {
+      wins:null,losses:null,winRate:null,matches:null,points:null,pointsPerGame:null,podiums:null,mvpMatches:null,
+      topUmas:[],bestUmas:[],allUmas:[],recentMatches:[]
+    };},
     sendRoomDomScanRequest:async()=>{await c.handlePrematchRosterDetected(roster());return{activeLobby:true,matchCode:'ROOM01'};}
   });
   evaluate(c,'profileConstants');evaluate(c,'rosterDisplay');evaluate(c,'profileCache');evaluate(c,'background');
-  return {c,snapshots,fetches,alarms,stored,advance(ms){clock+=ms;},get now(){return clock;},get windowCount(){return windowCount;},set cached(s){cached=s;},set latest(r){latest=r;}};
+  return {c,snapshots,fetches,alarms,stored,allTimeFetches,advance(ms){clock+=ms;},get now(){return clock;},get windowCount(){return windowCount;},
+    set cached(s){cached=s;},set latest(r){latest=r;},set allTimeStatsResponses(v){allTimeStatsResponses=v;}};
 }
 
 test('scout window opens before profiles resolve and rapid clicks create one window',async()=>{
@@ -282,6 +288,45 @@ test('background skips batch settling only when both team rosters have five slot
     assert.equal(h.fetches[0].options.rosterComplete,expected);
     h.fetches[0].gate.resolve();await pending;
   }
+});
+
+function summaryFor(player,overrides={}) {
+  return {discordId:player.discordId,displayName:player.displayName,fetchedAt:Date.now(),profileUrl:'',statsScope:'currentSeason',
+    rank:null,rating:null,ratingDeviation:null,conservativeRating:null,wins:null,losses:null,winRate:null,
+    matches:null,points:null,pointsPerGame:null,podiums:null,mvpMatches:null,
+    topUmas:[],bestUmas:[],allUmas:[],recentMatches:[],statsPrivate:false,
+    currentSeasonStats:{matches:null},allTimeStats:{matches:null},...overrides};
+}
+
+test('newcomer badge support: no all-time request when season matches already meet the threshold',async()=>{
+  const h=backgroundHarness();const r=roster();const pending=h.c.enrichRosterProfiles(r);
+  await waitUntil(()=>h.fetches.length===1);
+  h.fetches[0].gate.resolve(Object.fromEntries(r.players.map(p=>[p.discordId,summaryFor(p,{matches:10})])));
+  await pending;
+  assert.equal(h.allTimeFetches.length,0,'season matches >=10 needs no all-time lookup');
+});
+
+test('newcomer badge support: fetches all-time stats in the background for players under 10 season games',async()=>{
+  const h=backgroundHarness();const r=roster();
+  h.allTimeStatsResponses=Object.fromEntries(r.players.map(p=>[p.discordId,
+    {wins:2,losses:2,winRate:0.5,matches:4,points:8,pointsPerGame:2,podiums:1,mvpMatches:0,topUmas:[],bestUmas:[],allUmas:[],recentMatches:[]}]));
+  const pending=h.c.enrichRosterProfiles(r);
+  await waitUntil(()=>h.fetches.length===1);
+  h.fetches[0].gate.resolve(Object.fromEntries(r.players.map(p=>[p.discordId,summaryFor(p,{matches:5})])));
+  await pending;
+  assert.equal(h.allTimeFetches.length,r.players.length,'every under-threshold player gets exactly one background lookup');
+  const finalSnapshot=h.snapshots[h.snapshots.length-1];
+  for(const p of r.players) assert.equal(finalSnapshot.profiles[p.discordId].allTimeStats.matches,4);
+});
+
+test('newcomer badge support: no all-time request when the lobby itself is already showing all-time stats',async()=>{
+  const h=backgroundHarness();vm.runInContext("selectedStatsScope = 'allTime';",h.c);
+  const r=roster();const pending=h.c.enrichRosterProfiles(r);
+  await waitUntil(()=>h.fetches.length===1);
+  assert.equal(h.fetches[0].options.scope,'allTime');
+  h.fetches[0].gate.resolve(Object.fromEntries(r.players.map(p=>[p.discordId,summaryFor(p,{matches:3,statsScope:'allTime'})])));
+  await pending;
+  assert.equal(h.allTimeFetches.length,0,'all-time scope already has the real numbers, no extra request needed');
 });
 
 test('a roster missing team2 loads with the settling wait',async()=>{
