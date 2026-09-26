@@ -138,6 +138,38 @@ test('card content sits above .card-hit for stacking only, not for clicks: it is
   );
 });
 
+test('the team header shows a 4px team-accent bar, a 20px/700 team name in the display font, and a flexible divider before the average rating', () => {
+  const css = readModule('uiLobbyCss');
+  assert.match(css, /\.team-header-accent\s*\{[^}]*width:\s*4px[^}]*\}/s);
+  assert.match(css, /\.team-header-accent\s*\{[^}]*height:\s*20px/s);
+  assert.match(css, /\.team-header h2\s*\{[^}]*font-size:\s*20px/s);
+  assert.match(css, /\.team-header h2\s*\{[^}]*font-weight:\s*700/s);
+  assert.match(css, /\.team-header h2\s*\{[^}]*font-family:\s*var\(--font-display\)/s);
+  assert.match(css, /\.team-header-divider\s*\{[^}]*flex-grow:\s*1/s, 'the divider between the name and the average must stretch to fill the row');
+  assert.match(css, /\.team-header-avg strong\s*\{[^}]*font-weight:\s*700/s);
+});
+
+test('lobby spacing matches the mockup: 12px from a team header to its cards, 22px between teams', () => {
+  const lobbyCss = readModule('uiLobbyCss');
+  assert.match(lobbyCss, /\.team-section\s*\{[^}]*gap:\s*12px/s);
+
+  const baseCss = readModule('uiCommonBaseCss');
+  assert.match(baseCss, /\.team-list\s*\{[^}]*gap:\s*22px/s);
+});
+
+test('the Most Played list reveals whole Uma rows only: it hides all rows by default and a container query reveals one more full row at a time, never a partial one', () => {
+  const css = readModule('uiCommonBaseCss');
+  assert.match(css, /\.top-umas-rows li\s*\{[^}]*display:\s*none/s, 'rows are hidden until the container has room for them');
+  assert.match(css, /\.top-umas-rows\s*\{[^}]*overflow:\s*hidden/s);
+  const revealedCounts = Array.from(css.matchAll(/@container top-umas-rows \(min-height:\s*(\d+)px\)\s*\{\s*\.top-umas-rows li:nth-child\(-n\+(\d+)\)\s*\{\s*display:\s*grid/g))
+    .map((match) => [Number(match[1]), Number(match[2])]);
+  assert.equal(revealedCounts.length, 5, 'one threshold per row, up to the 5-row maximum');
+  assert.deepEqual(revealedCounts.map(([, rowCount]) => rowCount), [1, 2, 3, 4, 5]);
+  for (let i = 1; i < revealedCounts.length; i += 1) {
+    assert(revealedCounts[i][0] > revealedCounts[i - 1][0], 'each extra row requires strictly more height than the last');
+  }
+});
+
 test('the details drawer is a fixed 600px overlay, not a page it never scrolls as a whole', () => {
   const css = readModule('uiPlayerDrawerCss');
   assert.match(css, /\.player-drawer\s*\{[^}]*width:\s*min\(var\(--drawer-width\), 100vw\)/s);
@@ -150,6 +182,13 @@ test('the history region can shrink and the pager stays pinned, so short viewpor
     'the history section must be allowed to shrink below its content size in a flex column');
   assert.match(css, /\.drawer-pager\s*\{[^}]*flex-shrink:\s*0/s,
     'the pager must never be squeezed out when the drawer runs short on vertical space');
+});
+
+test('match history rows flex to fill the space above the pager, bounded between 46px and 64px, so the pager stays pinned at the bottom without a trailing gap', () => {
+  const css = readModule('uiPlayerDrawerCss');
+  assert.match(css, /\.drawer-history-row,\s*\n?\s*\.drawer-history-row-skel\s*\{[^}]*flex:\s*1 1 0/s);
+  assert.match(css, /\.drawer-history-row,\s*\n?\s*\.drawer-history-row-skel\s*\{[^}]*min-height:\s*46px/s);
+  assert.match(css, /\.drawer-history-row,\s*\n?\s*\.drawer-history-row-skel\s*\{[^}]*max-height:\s*64px/s);
 });
 
 test('the Umas panel no longer prints the long history-derived paragraph; it renders nothing for that case', () => {
@@ -209,6 +248,71 @@ test('the Estimated chip tooltip appears on hover/focus only, and is not clipped
     'opens downward, away from the header, so overflow:hidden on .player-drawer cannot clip it');
 });
 
+test('the team average rating uses each player\'s displayed rating (profile conservative/rating, then snapshot fallbacks) and shows an em dash with no ratings', () => {
+  const c = vm.createContext({});
+  loadFunction(c, teamSectionSyntax, 'getPlayerDisplayRating');
+  loadFunction(c, teamSectionSyntax, 'getTeamAverageRating');
+
+  const team = {
+    id: 'team1',
+    players: [
+      { discordId: 'a', ratingSnapshot: 1000 },
+      { discordId: 'b', displayRatingSnapshot: 1200 },
+      { discordId: 'c' }
+    ]
+  };
+  const profiles = { b: { rating: 1400 }, c: { conservativeRating: 1600, rating: 1800 } };
+
+  assert.equal(c.getTeamAverageRating(team, profiles), Math.round((1000 + 1400 + 1600) / 3));
+  assert.equal(c.getTeamAverageRating({ id: 'team2', players: [{ discordId: 'z' }] }, {}), undefined,
+    'no player has any resolvable rating, so the average is undefined (rendered as an em dash)');
+});
+
+test('the Umas table excludes players with fewer than MIN_UMA_GAMES by default, paginates 5 per page, and resets to page 1 when the sort or the low-games filter changes', () => {
+  const uma = (name, matches, ppg) => ({
+    umaId: name, name, matches, wins: 0, losses: 0, winRate: 0.5, points: 0, pointsPerGame: ppg, podiums: 0, mvpMatches: 0
+  });
+  const profile = {
+    discordId: '123456789012345678', displayName: 'Fixture',
+    allUmas: [
+      uma('A', 10, 9), uma('B', 9, 8), uma('C', 8, 7), uma('D', 7, 6), uma('E', 6, 5), uma('F', 5, 4),
+      uma('G', 2, 1), uma('H', 1, 0.5)
+    ]
+  };
+  const { render } = renderableDrawer(profile);
+
+  const rowNames = (tree) => findAll(tree, (n) => n.props?.className === 'uma-table-row')
+    .map((row) => find(row, (n) => n.props?.className === 'uma-name').children[0]);
+  const pagerRange = (tree) => find(tree, (n) => n.props?.className === 'uma-pager-range')?.children?.join('');
+  const lowGamesToggle = (tree) => find(tree, (n) => n.props?.className === 'drawer-toggle-button');
+
+  const first = render();
+  assert.deepEqual(rowNames(first), ['A', 'B', 'C', 'D', 'E'], 'the 6 Umas with >=3 games fill page 1, sorted by PPG desc');
+  assert.equal(pagerRange(first), '1–5 of 6');
+  assert.equal(lowGamesToggle(first).children[0], '+2 with <3 games');
+
+  const nextButton = find(first, (n) => n.props?.['aria-label'] === 'Next Umas');
+  nextButton.props.onClick();
+  const secondPage = render();
+  assert.deepEqual(rowNames(secondPage), ['F'], 'page 2 holds the remaining filtered Uma');
+  assert.equal(pagerRange(secondPage), '6–6 of 6');
+
+  lowGamesToggle(secondPage).props.onClick();
+  const revealed = render();
+  assert.deepEqual(rowNames(revealed), ['A', 'B', 'C', 'D', 'E'], 'toggling the low-games filter resets to page 1');
+  assert.equal(pagerRange(revealed), '1–5 of 8', 'all 8 Umas now count, including the 2 with <3 games');
+  assert.equal(lowGamesToggle(revealed).children[0], 'Hide <3 games');
+
+  nextButton.props.onClick();
+  const revealedPage2 = render();
+  assert.deepEqual(rowNames(revealedPage2), ['F', 'G', 'H'], 'page 2 of all 8 Umas holds the remaining 3 after the top 5');
+
+  const gpSortButton = find(revealedPage2, (n) => n.props?.className?.startsWith?.('th') && n.children[0] === 'GP');
+  gpSortButton.props.onClick();
+  const afterSortChange = render();
+  assert.equal(pagerRange(afterSortChange), '1–5 of 8', 'changing the sort column resets paging back to page 1');
+});
+
 function find(node, predicate) {
   if (!node || typeof node !== 'object') return undefined;
   if (predicate(node)) return node;
@@ -233,7 +337,7 @@ function drawerHarness() {
     getLookupDiscordId: (p) => p.discordId, getPlayerNote: () => undefined,
     getDisplayedProfileStats: (profile) => profile,
     formatRank: () => '#1', formatRecord: () => '-', formatPercent: () => '-', formatDecimal: () => '-', formatNumber: () => '-',
-    HISTORY_PAGE_SIZE: 5, HISTORY_API_PAGE_SIZE: 20, UMA_TABLE_ROWS: 5, PAGER_SLOT_COUNT: 7,
+    HISTORY_PAGE_SIZE: 5, HISTORY_API_PAGE_SIZE: 20, UMA_TABLE_ROWS: 5, PAGER_SLOT_COUNT: 7, MIN_UMA_GAMES: 3,
     UMA_SORT_COLUMNS: [
       { key: 'matches', label: 'GP' }, { key: 'winRate', label: 'Win' },
       { key: 'pointsPerGame', label: 'PPG' }, { key: 'performanceScore', label: 'Score' }

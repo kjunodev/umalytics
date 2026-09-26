@@ -41,7 +41,7 @@ button {
 /* Shared across scenes: a plain wrapper for a list of team sections. */
 .team-list {
   display: grid;
-  gap: 20px;
+  gap: 22px;
 }
 
 .empty-state {
@@ -386,7 +386,9 @@ button {
  */
 .top-umas {
   border-top: 1px solid var(--border-default);
-  display: grid;
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
   gap: 5px;
   min-height: 86px;
   padding-top: 6px;
@@ -394,6 +396,7 @@ button {
 
 .top-umas p {
   color: var(--text-secondary);
+  flex-shrink: 0;
   font-size: 10px;
   font-weight: 800;
   letter-spacing: 0;
@@ -402,20 +405,52 @@ button {
   text-transform: uppercase;
 }
 
-.top-umas ol {
+/*
+ * Renders up to MAX_TOP_UMAS (5) rows, but this element's own rendered
+ * height is whatever's left of the card (flex: 1 1 0, so it may be less
+ * than 5 rows' worth), and container queries below reveal only as many
+ * whole rows as actually fit that height, never a clipped partial row.
+ * Row heights below (28.6px content + 4px gap) are measured, not estimated;
+ * update the thresholds if the row's typography or gap ever changes.
+ */
+.top-umas-rows {
+  container: top-umas-rows / size;
   display: grid;
+  flex: 1 1 0;
   gap: 4px;
   list-style: none;
   margin: 0;
+  min-height: 0;
+  overflow: hidden;
   padding: 0;
 }
 
-.top-umas li {
+.top-umas-rows li {
   align-items: start;
-  display: grid;
+  display: none;
   gap: 1px;
   grid-template-columns: minmax(0, 1fr);
   min-width: 0;
+}
+
+@container top-umas-rows (min-height: 29px) {
+  .top-umas-rows li:nth-child(-n+1) { display: grid; }
+}
+
+@container top-umas-rows (min-height: 62px) {
+  .top-umas-rows li:nth-child(-n+2) { display: grid; }
+}
+
+@container top-umas-rows (min-height: 94px) {
+  .top-umas-rows li:nth-child(-n+3) { display: grid; }
+}
+
+@container top-umas-rows (min-height: 127px) {
+  .top-umas-rows li:nth-child(-n+4) { display: grid; }
+}
+
+@container top-umas-rows (min-height: 159px) {
+  .top-umas-rows li:nth-child(-n+5) { display: grid; }
 }
 
 .top-umas .uma-meta {

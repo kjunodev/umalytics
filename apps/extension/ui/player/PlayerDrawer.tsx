@@ -33,6 +33,7 @@ const HISTORY_PAGE_SIZE = 5;
 const HISTORY_API_PAGE_SIZE = 20;
 const UMA_TABLE_ROWS = 5;
 const PAGER_SLOT_COUNT = 7;
+const MIN_UMA_GAMES = 3;
 
 type UmaSortKey = 'matches' | 'winRate' | 'pointsPerGame' | 'performanceScore';
 
@@ -115,7 +116,13 @@ export function PlayerDrawer({
   const [fetchedTitle, setFetchedTitle] = useState<{ discordId: string; title: string | null } | undefined>(undefined);
   const displayedTitle = knownTitle ?? (fetchedTitle !== undefined && fetchedTitle.discordId === discordId ? fetchedTitle.title : undefined);
   const [sortKey, setSortKey] = useState<UmaSortKey>('pointsPerGame');
-  const [showAllUmas, setShowAllUmas] = useState(false);
+  const [umaPage, setUmaPage] = useState(1);
+  const [includeLowGameUmas, setIncludeLowGameUmas] = useState(false);
+
+  function selectUmaSort(key: UmaSortKey): void {
+    setSortKey(key);
+    setUmaPage(1);
+  }
 
   async function loadHistoryPage(pagerPage: number): Promise<void> {
     if (discordId === undefined) return;
@@ -149,7 +156,8 @@ export function PlayerDrawer({
 
   useEffect(() => {
     setHistoryState({ key: historyKey, pagerPage: 0, apiPages: {}, loading: true });
-    setShowAllUmas(false);
+    setUmaPage(1);
+    setIncludeLowGameUmas(false);
     if (discordId !== undefined) void loadHistoryPage(1);
     return () => {
       for (const requestId of pendingHistoryRequests.current) void cancelPlayerHistoryPageRequest(requestId).catch(() => {});
@@ -182,11 +190,15 @@ export function PlayerDrawer({
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [onClose]);
 
-  const umaSource = displayedProfile?.allUmas ?? displayedProfile?.topUmas ?? [];
+  const umaSourceAll = displayedProfile?.allUmas ?? displayedProfile?.topUmas ?? [];
+  const lowGameUmaCount = umaSourceAll.filter((uma) => (uma.matches ?? 0) < MIN_UMA_GAMES).length;
+  const umaSource = includeLowGameUmas ? umaSourceAll : umaSourceAll.filter((uma) => (uma.matches ?? 0) >= MIN_UMA_GAMES);
   const hasScoreColumn = umaSource.some((uma) => uma.performanceScore !== undefined);
   const effectiveSortKey = sortKey === 'performanceScore' && !hasScoreColumn ? 'pointsPerGame' : sortKey;
   const sortedUmas = [...umaSource].sort((a, b) => umaSortValue(b, effectiveSortKey) - umaSortValue(a, effectiveSortKey));
-  const umaRows = showAllUmas ? sortedUmas : sortedUmas.slice(0, UMA_TABLE_ROWS);
+  const umaTotalPages = Math.max(1, Math.ceil(sortedUmas.length / UMA_TABLE_ROWS));
+  const umaCurrentPage = Math.min(umaPage, umaTotalPages);
+  const umaRows = sortedUmas.slice((umaCurrentPage - 1) * UMA_TABLE_ROWS, umaCurrentPage * UMA_TABLE_ROWS);
   const umaColumns = UMA_SORT_COLUMNS.filter((column) => column.key !== 'performanceScore' || hasScoreColumn);
   const umaGridStyle = { gridTemplateColumns: `minmax(0, 1fr) ${umaColumns.map(() => '52px').join(' ')}` };
 
@@ -266,9 +278,29 @@ export function PlayerDrawer({
             <span className="drawer-section-hint">Sorted by {umaColumns.find((column) => column.key === effectiveSortKey)?.label.toLowerCase() ?? 'ppg'}</span>
             <div className="drawer-section-spacer" />
             {sortedUmas.length > UMA_TABLE_ROWS ? (
-              <button type="button" className="drawer-toggle-button" onClick={() => setShowAllUmas((value) => !value)}>
-                {showAllUmas ? 'Top 5' : `Show all (${sortedUmas.length})`}
-              </button>
+              <div className="uma-pager" aria-label="Uma pages">
+                <span className="uma-pager-range">
+                  {(umaCurrentPage - 1) * UMA_TABLE_ROWS + 1}–{Math.min(umaCurrentPage * UMA_TABLE_ROWS, sortedUmas.length)} of {sortedUmas.length}
+                </span>
+                <button
+                  type="button"
+                  className="uma-pager-btn"
+                  aria-label="Previous Umas"
+                  disabled={umaCurrentPage <= 1}
+                  onClick={() => setUmaPage((page) => Math.max(1, page - 1))}
+                >
+                  &lsaquo;
+                </button>
+                <button
+                  type="button"
+                  className="uma-pager-btn"
+                  aria-label="Next Umas"
+                  disabled={umaCurrentPage >= umaTotalPages}
+                  onClick={() => setUmaPage((page) => Math.min(umaTotalPages, page + 1))}
+                >
+                  &rsaquo;
+                </button>
+              </div>
             ) : null}
           </div>
           {sortedUmas.length === 0 ? (
@@ -282,14 +314,14 @@ export function PlayerDrawer({
                     key={column.key}
                     type="button"
                     className={effectiveSortKey === column.key ? 'th on' : 'th'}
-                    onClick={() => setSortKey(column.key)}
+                    onClick={() => selectUmaSort(column.key)}
                   >
                     {column.label}
                     {effectiveSortKey === column.key ? ' ▾' : ''}
                   </button>
                 ))}
               </div>
-              <div className={showAllUmas ? 'uma-table-rows expanded' : 'uma-table-rows'}>
+              <div className="uma-table-rows">
                 {umaRows.map((uma) => (
                   <div key={uma.umaId} className="uma-table-row" style={umaGridStyle}>
                     <span className="uma-table-name">
@@ -304,6 +336,20 @@ export function PlayerDrawer({
               </div>
             </>
           )}
+          {lowGameUmaCount > 0 ? (
+            <div className="uma-table-footer">
+              <button
+                type="button"
+                className="drawer-toggle-button"
+                onClick={() => {
+                  setIncludeLowGameUmas((value) => !value);
+                  setUmaPage(1);
+                }}
+              >
+                {includeLowGameUmas ? `Hide <${MIN_UMA_GAMES} games` : `+${lowGameUmaCount} with <${MIN_UMA_GAMES} games`}
+              </button>
+            </div>
+          ) : null}
         </section>
 
         <section className="drawer-section drawer-history" aria-label="Match history">
