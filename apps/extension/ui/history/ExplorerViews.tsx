@@ -26,7 +26,7 @@ function useProfiles(players: PrematchPlayer[], scope: PlayerStatsScope, openedP
     setReadyContext('');
     setError(''); setLoading(players.length > 0);
     if (players.length) {
-      void loadExplorerProfiles(players, scope, next => { if (!controller.signal.aborted) setProfiles(previous => mergeExplorerProfiles(previous, next)); }, controller.signal, false)
+      void loadExplorerProfiles(players, scope, next => { if (!controller.signal.aborted) setProfiles(previous => mergeExplorerProfiles(previous, next)); }, controller.signal, true)
         .then(next => {
           if (controller.signal.aborted) return;
           setProfiles(previous => mergeExplorerProfiles(previous, next));
@@ -49,7 +49,7 @@ function useProfiles(players: PrematchPlayer[], scope: PlayerStatsScope, openedP
       .then(next => { if (!controller.signal.aborted) setProfiles(previous => mergeExplorerProfiles(previous, next)); })
       .catch(() => {});
     return () => controller.abort();
-    // Only a newly opened player, scope, or completed roster lookup starts this request.
+    // Wait for roster estimates to finish so opening a drawer reuses their cached result.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openedId, scope, key, readyContext]);
   return { profiles, loading, error, retry: () => setAttempt(value => value + 1) };
