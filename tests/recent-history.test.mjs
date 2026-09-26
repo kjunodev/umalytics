@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
+import fs from 'node:fs';
 import { loadModuleTS, loadFunction, parseTsxModule } from './support/harness.mjs';
 
 const playerDisplaySyntax = parseTsxModule('uiPlayerProfileDisplay');
@@ -219,13 +220,13 @@ test('opening drawer requests page one, pager pages 2-4 reuse it, page 5 request
   assert.equal(requests[0].page,1);
   assert.equal(findAll(rendered,node=>node.props?.className==='drawer-history-row').length,5);
   assert(find(rendered,node=>node.type==='a' && node.props.href.endsWith('/P1-1')));
-  assert.equal(badgeProfiles.at(-1).recentForm.matches,5);
+  assert.equal(badgeProfiles.at(-1).recentForm.matches,20,'derived recentForm uses the same RECENT_HISTORY_ANALYSIS_MATCHES window as the batch fetch, not just the 5 displayed rows');
   assert.equal(badgeProfiles.at(-1).historySummary.wins,1);
   assert.equal(profileRequests.length,1,'opening drawer requests the profile once, alongside the first history page');
   assert.equal(profileRequests[0].id,p.discordId);
   const detail=c.withDetailHistory(p,page1Matches,21,{wins:1});
   assert.equal(detail.recentMatches[0].matchId,'P1-1');
-  assert.equal(detail.recentForm.matches,5);
+  assert.equal(detail.recentForm.matches,20);
   assert.equal(detail.historySummary.wins,1);
   assert.equal(detail.matches,p.matches);
 
@@ -356,6 +357,31 @@ test('privacy denial invalidates cached history in both scopes', () => {
   const result = c.mergeProfileScopes(old, denied);
   assert.equal(result.recentMatches.length, 0);
   assert.equal(c.getDisplayedProfileStats(result, 'currentSeason').recentMatches.length, 0);
+});
+
+test('the card batch fetch and the drawer derivation share the same RECENT_HISTORY_ANALYSIS_MATCHES window constant', () => {
+  const apiSource = fs.readFileSync(new URL('../apps/extension/profiles/playerProfileApi.ts', import.meta.url), 'utf8');
+  const displaySource = fs.readFileSync(new URL('../apps/extension/ui/player/playerProfileDisplay.tsx', import.meta.url), 'utf8');
+  const constantsSource = fs.readFileSync(new URL('../apps/extension/profiles/profileConstants.ts', import.meta.url), 'utf8');
+  assert.match(constantsSource, /export const RECENT_HISTORY_ANALYSIS_MATCHES = \d+;/, 'the window lives in one shared, plain-number constant');
+  assert.match(apiSource, /import\s*\{[^}]*RECENT_HISTORY_ANALYSIS_MATCHES[^}]*\}\s*from\s*'\.\/profileConstants'/, 'the batch fetch imports the shared constant');
+  assert.match(displaySource, /import\s*\{[^}]*RECENT_HISTORY_ANALYSIS_MATCHES[^}]*\}\s*from\s*'\.\.\/\.\.\/profiles\/profileConstants'/, 'the drawer derivation imports the same shared constant');
+});
+
+test('a batch-derived recentForm already on the profile always wins over the drawer\'s own derivation, so the card and drawer badge agree', () => {
+  const c = harness(true);
+  const batchForm = { matches: 20, scoredMatches: 18, scoringRate: 0.9, wins: 15, winRate: 0.75, points: 80, pointsPerGame: 4, podiums: 10, mvpMatches: 3 };
+  const p = { ...profile(), recentForm: batchForm };
+  const detail = c.withDetailHistory(p, [entry], 1);
+  assert.deepEqual(detail.recentForm, batchForm, 'the drawer must reuse the card\'s batch recentForm rather than recompute one from a shorter history window');
+});
+
+test('without a batch recentForm, the drawer derives one from the same 20-match window the batch fetch uses, not just the 5 displayed rows', () => {
+  const c = harness(true);
+  const manyMatches = Array.from({ length: 20 }, (_, i) => ({ ...entry, matchId: `W${i}`, isWinner: i < 10 }));
+  const detail = c.withDetailHistory(profile(), manyMatches, 20);
+  assert.equal(detail.recentForm.matches, 20);
+  assert.equal(detail.recentForm.wins, 10);
 });
 
 test('unfetched drawer uses the top status line without repeating the message in its footer', () => {

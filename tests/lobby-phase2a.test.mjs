@@ -183,17 +183,56 @@ test('lobby spacing matches the mockup: 12px from a team header to its cards, 22
   assert.match(baseCss, /\.team-list\s*\{[^}]*gap:\s*22px/s);
 });
 
-test('the Most Played list reveals whole Uma rows only: it hides all rows by default and a container query reveals one more full row at a time, never a partial one', () => {
-  const css = readModule('uiCommonBaseCss');
-  assert.match(css, /\.top-umas-rows li\s*\{[^}]*display:\s*none/s, 'rows are hidden until the container has room for them');
-  assert.match(css, /\.top-umas-rows\s*\{[^}]*overflow:\s*hidden/s);
-  const revealedCounts = Array.from(css.matchAll(/@container top-umas-rows \(min-height:\s*(\d+)px\)\s*\{\s*\.top-umas-rows li:nth-child\(-n\+(\d+)\)\s*\{\s*display:\s*grid/g))
-    .map((match) => [Number(match[1]), Number(match[2])]);
-  assert.equal(revealedCounts.length, 5, 'one threshold per row, up to the 5-row maximum');
-  assert.deepEqual(revealedCounts.map(([, rowCount]) => rowCount), [1, 2, 3, 4, 5]);
-  for (let i = 1; i < revealedCounts.length; i += 1) {
-    assert(revealedCounts[i][0] > revealedCounts[i - 1][0], 'each extra row requires strictly more height than the last');
-  }
+test('the Most Played list shows exactly the top 3 Umas by matches played (ties by name), sourced from allUmas and falling back to topUmas, with no placeholder rows', () => {
+  const c = vm.createContext({
+    element: (type, props, ...children) => ({ type, props, children }),
+    React: { Fragment: 'Fragment' }, BestUmaPortrait: 'Portrait', MAX_TOP_UMAS: 3,
+    formatPercent: () => 'PCT', formatDecimal: () => 'DEC'
+  });
+  loadFunction(c, topUmasListSyntax, 'sortTopUmasForCard');
+  loadFunction(c, topUmasListSyntax, 'TopUmasList');
+  const uma = (name, matches) => ({
+    umaId: name, name, matches, wins: 0, losses: 0, winRate: 0.5, points: 0, pointsPerGame: 1, podiums: 0, mvpMatches: 0
+  });
+  const allUmas = [uma('Low', 2), uma('High', 9), uma('Tie', 5), uma('Also Tie', 5)];
+
+  const sortedNames = Array.from(c.sortTopUmasForCard(allUmas), (entry) => entry.name);
+  assert.deepEqual(sortedNames, ['High', 'Also Tie', 'Tie'], 'sorted by matches descending, ties broken by name');
+
+  const tree = c.TopUmasList({ topUmas: [uma('Fallback', 1)], allUmas, playerName: 'Fixture' });
+  const rows = findAll(tree, (n) => n.type === 'li');
+  assert.equal(rows.length, 3, 'exactly 3 rows render, one per real entry, never a placeholder');
+  assert(!findAll(tree, (n) => n.props?.className === 'uma-name').some((n) => n.children[0] === '-'),
+    'no dash placeholder row is rendered');
+
+  const fallback = c.TopUmasList({ topUmas: [uma('OnlyOne', 4)], playerName: 'Fixture' });
+  assert.equal(findAll(fallback, (n) => n.type === 'li').length, 1,
+    'falls back to topUmas and renders only the real entries when allUmas is absent');
+});
+
+test('each Most Played row shows a small portrait before the Uma name', () => {
+  const c = vm.createContext({
+    element: (type, props, ...children) => ({ type, props, children }),
+    React: { Fragment: 'Fragment' }, BestUmaPortrait: 'Portrait', MAX_TOP_UMAS: 3,
+    formatPercent: () => '-', formatDecimal: () => '-'
+  });
+  loadFunction(c, topUmasListSyntax, 'sortTopUmasForCard');
+  loadFunction(c, topUmasListSyntax, 'TopUmasList');
+  const uma = { umaId: 'a', name: 'A', matches: 5, wins: 0, losses: 0, winRate: 0.5, points: 0, pointsPerGame: 1, podiums: 0, mvpMatches: 0 };
+  const tree = c.TopUmasList({ allUmas: [uma], playerName: 'Fixture' });
+  const row = find(tree, (n) => n.type === 'li');
+  assert.equal(row.children[0].type, 'Portrait', 'the portrait renders ahead of the name inside the row');
+});
+
+test('cards no longer stretch to a fixed row height, and the lobby distributes spare height evenly around the team sections', () => {
+  const lobbyCss = readModule('uiLobbyCss');
+  assert.doesNotMatch(lobbyCss, /grid-auto-rows/, 'cards size to their own content instead of a fixed row height');
+
+  const baseCss = readModule('uiCommonBaseCss');
+  assert.doesNotMatch(baseCss, /@container top-umas-rows/, 'the whole-row reveal hack is gone now that at most 3 real rows ever render');
+  assert.doesNotMatch(baseCss, /min-height:\s*312px/, 'the card no longer reserves a fixed height for 5 Uma rows');
+  assert.match(baseCss, /\.team-list\s*\{[^}]*justify-content:\s*space-evenly/s,
+    'spare vertical space is distributed around the header, Team 1 and Team 2 instead of collecting at the bottom');
 });
 
 test('every chip tooltip (first, last, and the "+N" overflow chip) uses the same single tooltip class, anchored to the row rather than to any one chip', () => {

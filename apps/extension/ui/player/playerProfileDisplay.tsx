@@ -1,6 +1,7 @@
 import type { PlayerProfileSummary, PlayerRecentMatchSummary, PlayerStatsScope, PrematchPlayer } from '@umalytics/shared';
 import { hasDisplayableProfileLists } from '../common/badges';
 import { formatRelativeAge } from '../common/format';
+import { RECENT_HISTORY_ANALYSIS_MATCHES, RECENT_HISTORY_DISPLAY_MATCHES } from '../../profiles/profileConstants';
 declare const __UMALYTICS_PRIVATE_PROFILE_DATA__: boolean;
 
 export function withDetailHistory(
@@ -9,23 +10,32 @@ export function withDetailHistory(
 ): PlayerProfileSummary | undefined {
   if (profile === undefined) return undefined;
   const recentMatches = firstPageMatches.filter(match =>
-    ['confirmed', 'corrected', 'reported'].includes(match.verificationState)).slice(0, 5);
+    ['confirmed', 'corrected', 'reported'].includes(match.verificationState)).slice(0, RECENT_HISTORY_DISPLAY_MATCHES);
   const privateBuild = typeof __UMALYTICS_PRIVATE_PROFILE_DATA__ !== 'undefined' && __UMALYTICS_PRIVATE_PROFILE_DATA__;
-  const confirmed = privateBuild ? recentMatches.filter(match => match.verificationState === 'confirmed') : [];
+  const shouldDeriveForm = privateBuild && profile.recentForm === undefined;
+  // The card's recentForm (from the batch fetch, same RECENT_HISTORY_ANALYSIS_MATCHES
+  // window) wins when present, so the card and drawer badge always agree; only derive
+  // it here, from that same window of loaded history, when absent - e.g. a player
+  // opened from the Players page with no batch profile yet.
+  const confirmed = shouldDeriveForm
+    ? firstPageMatches.filter(match => match.verificationState === 'confirmed').slice(0, RECENT_HISTORY_ANALYSIS_MATCHES)
+    : [];
   const matches = confirmed.length;
   const scoredMatches = confirmed.filter(match => match.pointsScored > 0).length;
   const wins = confirmed.filter(match => match.isWinner === true).length;
   const points = confirmed.reduce((sum, match) => sum + match.pointsScored, 0);
+  const derivedForm = shouldDeriveForm ? {
+    matches, scoredMatches, scoringRate: matches > 0 ? scoredMatches / matches : null,
+    wins, winRate: matches > 0 ? wins / matches : null, points,
+    pointsPerGame: matches > 0 ? points / matches : null,
+    podiums: confirmed.reduce((sum, match) => sum + match.podiums, 0),
+    mvpMatches: confirmed.filter(match => match.isMvp).length
+  } : undefined;
+  const recentForm = privateBuild ? profile.recentForm ?? derivedForm : undefined;
   return {
     ...profile, recentMatches, historyTotal: total, historySummary: privateBuild ? summary : undefined,
     recentHistoryStatus: 'loaded',
-    recentForm: privateBuild ? {
-      matches, scoredMatches, scoringRate: matches > 0 ? scoredMatches / matches : null,
-      wins, winRate: matches > 0 ? wins / matches : null, points,
-      pointsPerGame: matches > 0 ? points / matches : null,
-      podiums: confirmed.reduce((sum, match) => sum + match.podiums, 0),
-      mvpMatches: confirmed.filter(match => match.isMvp).length
-    } : undefined
+    recentForm
   };
 }
 

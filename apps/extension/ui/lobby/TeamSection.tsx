@@ -235,7 +235,12 @@ function CardBody({
             <div className="card-message-box"><span className="card-message-title">{statsMessage}</span></div>
           ) : (
             <>
-              <TopUmasList topUmas={displayedProfile?.topUmas} playerName={player.displayName} emptyMessage={statsMessage} />
+              <TopUmasList
+                topUmas={displayedProfile?.topUmas}
+                allUmas={displayedProfile?.allUmas}
+                playerName={player.displayName}
+                emptyMessage={statsMessage}
+              />
               <UmaResolutionNote profile={displayedProfile} />
             </>
           )}
