@@ -488,6 +488,20 @@ export async function fetchPlayerProfileTitle(discordId: string, signal?: AbortS
   return { title: profile.title ?? null };
 }
 
+/**
+ * Used only to check the newcomer badge's all-time match count when the
+ * lobby is showing current-season stats. Hits the same all-time stats
+ * endpoint (and shares the same request cache/dedup) as the per-scope fetch
+ * in fetchPlayerProfileSummary, but at the lowest ('background') priority so
+ * it never competes with the cards' own foreground requests.
+ */
+export async function fetchPlayerAllTimeStats(discordId: string, signal?: AbortSignal): Promise<PlayerProfileStatsSummary> {
+  if (!isDiscordSnowflake(discordId)) throw new Error('Invalid profile request.');
+  const umaMetadata = bundledUmaMetadata ??= buildReleaseOrderUmaMetadata();
+  const stats = await fetchJson<ApiPlayerStats>(`/api/stats/players/${encodeURIComponent(discordId)}/stats?mode=ranked`, signal, 'background');
+  return buildProfileStatsSummary(stats, umaMetadata);
+}
+
 async function fetchPlayerProfileSummary(
   player: PrematchPlayer,
   seasonPromise: Promise<SeasonLookup>,

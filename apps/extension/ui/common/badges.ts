@@ -1,8 +1,22 @@
-import type { PlayerProfileSummary } from '@umalytics/shared';
+import type { PlayerProfileSummary, PlayerTopUmaSummary } from '@umalytics/shared';
 import { formatDecimal, formatPercent } from './format';
+import { NEWCOMER_MAX_ALL_TIME_MATCHES } from '../../profiles/profileConstants';
 
-export type NotableBadgeTone = 'rank' | 'scoring' | 'sample' | 'private';
-export type NotableBadgeKind = 'private' | 'top10' | 'top25' | 'eliteScoring' | 'highScoring' | 'established' | 'consistent' | 'mvpMenace';
+export type NotableBadgeTone = 'rank' | 'scoring' | 'sample' | 'style' | 'private';
+export type NotableBadgeKind =
+  | 'private'
+  | 'top10'
+  | 'top25'
+  | 'eliteScoring'
+  | 'highScoring'
+  | 'established'
+  | 'consistent'
+  | 'mvpMenace'
+  | 'oneTrick'
+  | 'deepPool'
+  | 'podiumRegular'
+  | 'underrated'
+  | 'newcomer';
 
 export interface NotableBadge {
   kind: NotableBadgeKind;
@@ -10,6 +24,16 @@ export interface NotableBadge {
   tone: NotableBadgeTone;
   title: string;
 }
+
+const ONE_TRICK_MIN_SHARE = 0.4;
+const ONE_TRICK_MIN_GAMES = 20;
+const DEEP_POOL_MIN_UMAS = 8;
+const DEEP_POOL_MIN_GAMES_PER_UMA = 3;
+const PODIUM_REGULAR_MIN_RATE = 0.6;
+const PODIUM_REGULAR_MIN_GAMES = 15;
+const UNDERRATED_MIN_PPG = 5.5;
+const UNDERRATED_MIN_GAMES = 15;
+const UNDERRATED_MAX_RANK = 100;
 
 export function getNotableBadges(profile: PlayerProfileSummary | undefined): NotableBadge[] {
   if (profile === undefined) {
@@ -118,7 +142,132 @@ export function getNotableBadges(profile: PlayerProfileSummary | undefined): Not
     });
   }
 
+  if (
+    profile.podiums !== undefined &&
+    profile.podiums !== null &&
+    profile.matches !== undefined &&
+    profile.matches !== null &&
+    profile.matches >= PODIUM_REGULAR_MIN_GAMES &&
+    profile.podiums / profile.matches >= PODIUM_REGULAR_MIN_RATE
+  ) {
+    const rate = profile.podiums / profile.matches;
+    badges.push({
+      kind: 'podiumRegular',
+      label: 'Podium regular',
+      tone: 'scoring',
+      title: `Podiums in ${formatPercent(rate)} of ranked games (${profile.podiums} of ${profile.matches}), with ${PODIUM_REGULAR_MIN_GAMES}+ games in the selected stat scope.`
+    });
+  }
+
+  if (
+    profile.pointsPerGame !== undefined &&
+    profile.pointsPerGame !== null &&
+    profile.pointsPerGame >= UNDERRATED_MIN_PPG &&
+    profile.matches !== undefined &&
+    profile.matches !== null &&
+    profile.matches >= UNDERRATED_MIN_GAMES &&
+    (profile.rank === undefined || profile.rank === null || profile.rank > UNDERRATED_MAX_RANK)
+  ) {
+    const rankLabel = profile.rank === undefined || profile.rank === null ? 'unranked' : `ranked #${profile.rank}`;
+    badges.push({
+      kind: 'underrated',
+      label: 'Underrated',
+      tone: 'scoring',
+      title: `Averages ${formatDecimal(profile.pointsPerGame)} points per game over ${profile.matches} games while ${rankLabel}, outside the top ${UNDERRATED_MAX_RANK}.`
+    });
+  }
+
+  const oneTrick = getOneTrickBadge(profile);
+  if (oneTrick !== undefined) {
+    badges.push(oneTrick);
+  } else {
+    const deepPool = getDeepPoolBadge(profile);
+    if (deepPool !== undefined) {
+      badges.push(deepPool);
+    }
+  }
+
+  const newcomer = getNewcomerBadge(profile);
+  if (newcomer !== undefined) {
+    badges.push(newcomer);
+  }
+
   return badges;
+}
+
+function getOneTrickBadge(profile: PlayerProfileSummary): NotableBadge | undefined {
+  if (profile.matches === undefined || profile.matches === null || profile.matches < ONE_TRICK_MIN_GAMES) {
+    return undefined;
+  }
+
+  const topUma = getMostPlayedUma(profile.allUmas);
+  if (topUma === undefined) {
+    return undefined;
+  }
+
+  const share = topUma.matches / profile.matches;
+  if (share < ONE_TRICK_MIN_SHARE) {
+    return undefined;
+  }
+
+  return {
+    kind: 'oneTrick',
+    label: 'One-trick',
+    tone: 'style',
+    title: `${topUma.name} in ${formatPercent(share)} of games (${topUma.matches} of ${profile.matches}).`
+  };
+}
+
+function getDeepPoolBadge(profile: PlayerProfileSummary): NotableBadge | undefined {
+  const umasWithEnoughGames = (profile.allUmas ?? []).filter((uma) => uma.matches >= DEEP_POOL_MIN_GAMES_PER_UMA);
+  if (umasWithEnoughGames.length < DEEP_POOL_MIN_UMAS) {
+    return undefined;
+  }
+
+  return {
+    kind: 'deepPool',
+    label: 'Deep pool',
+    tone: 'style',
+    title: `${umasWithEnoughGames.length} different Umas with ${DEEP_POOL_MIN_GAMES_PER_UMA}+ games each in the selected stat scope.`
+  };
+}
+
+function getMostPlayedUma(allUmas: PlayerTopUmaSummary[] | undefined): PlayerTopUmaSummary | undefined {
+  if (allUmas === undefined || allUmas.length === 0) {
+    return undefined;
+  }
+
+  return allUmas.reduce((most, uma) => (uma.matches > most.matches ? uma : most), allUmas[0]!);
+}
+
+function getNewcomerBadge(profile: PlayerProfileSummary): NotableBadge | undefined {
+  if (profile.statsScope === 'allTime') {
+    if (profile.matches === undefined || profile.matches === null) {
+      return undefined;
+    }
+
+    return profile.matches < NEWCOMER_MAX_ALL_TIME_MATCHES ? buildNewcomerBadge(profile.matches) : undefined;
+  }
+
+  if (profile.matches !== undefined && profile.matches !== null && profile.matches >= NEWCOMER_MAX_ALL_TIME_MATCHES) {
+    return undefined;
+  }
+
+  const allTimeMatches = profile.allTimeStats?.matches;
+  if (allTimeMatches === undefined || allTimeMatches === null) {
+    return undefined;
+  }
+
+  return allTimeMatches < NEWCOMER_MAX_ALL_TIME_MATCHES ? buildNewcomerBadge(allTimeMatches) : undefined;
+}
+
+function buildNewcomerBadge(allTimeMatches: number): NotableBadge {
+  return {
+    kind: 'newcomer',
+    label: 'Newcomer',
+    tone: 'sample',
+    title: `Fewer than ${NEWCOMER_MAX_ALL_TIME_MATCHES} ranked games all-time (${allTimeMatches} total).`
+  };
 }
 
 export function hasDisplayableProfileLists(profile: PlayerProfileSummary | undefined): boolean {

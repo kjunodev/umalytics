@@ -6,7 +6,12 @@ const RANK_KINDS = new Set<NotableBadgeKind>(['top10', 'top25']);
 // This is presentational only; it never changes getNotableBadges() itself,
 // which other consumers (the drawer, diagnostics) rely on as-is.
 const CARD_BADGE_PRIORITY: Partial<Record<NotableBadgeKind, number>> = {
-  top10: 0, top25: 1, mvpMenace: 2, eliteScoring: 3, highScoring: 3, consistent: 4, established: 5
+  top10: 0, top25: 1,
+  oneTrick: 2, deepPool: 2,
+  eliteScoring: 3, highScoring: 3, mvpMenace: 3, podiumRegular: 3, underrated: 3,
+  newcomer: 4,
+  consistent: 5,
+  established: 6
 };
 
 const ICON_KIND_STYLE: Partial<Record<NotableBadgeKind, { background: string; color: string }>> = {
@@ -14,16 +19,15 @@ const ICON_KIND_STYLE: Partial<Record<NotableBadgeKind, { background: string; co
   eliteScoring: { background: 'var(--tone-skill-bg)', color: 'var(--tone-skill-fg)' },
   highScoring: { background: 'var(--tone-skill-bg)', color: 'var(--tone-skill-fg)' },
   consistent: { background: 'var(--tone-skill-bg)', color: 'var(--tone-skill-fg)' },
-  established: { background: 'var(--tone-sample-bg)', color: 'var(--tone-sample-fg)' }
+  established: { background: 'var(--tone-sample-bg)', color: 'var(--tone-sample-fg)' },
+  podiumRegular: { background: 'var(--tone-skill-bg)', color: 'var(--tone-skill-fg)' },
+  underrated: { background: 'var(--tone-skill-bg)', color: 'var(--tone-skill-fg)' },
+  oneTrick: { background: 'var(--tone-style-bg)', color: 'var(--tone-style-fg)' },
+  deepPool: { background: 'var(--tone-style-bg)', color: 'var(--tone-style-fg)' },
+  newcomer: { background: 'var(--tone-sample-bg)', color: 'var(--tone-sample-fg)' }
 };
 
 const MAX_CARD_BADGES = 7;
-
-// How many of the trailing chips (out of up to MAX_CARD_BADGES + 1, the "+N"
-// overflow chip included) anchor their tooltip to the right instead of the
-// left. A fixed trailing count is reliable regardless of how many chips
-// actually render or how the row wraps, unlike a "right half" split.
-const RIGHT_ANCHORED_TRAILING_CHIPS = 3;
 
 export function sortBadgesForCard(badges: NotableBadge[]): NotableBadge[] {
   return [...badges].sort((a, b) => (CARD_BADGE_PRIORITY[a.kind] ?? 9) - (CARD_BADGE_PRIORITY[b.kind] ?? 9));
@@ -33,17 +37,18 @@ export function sortBadgesForCard(badges: NotableBadge[]): NotableBadge[] {
 // badge is an icon chip keyed by NotableBadge.kind, with a hover/focus-only
 // tooltip carrying its label and real numbers. Chips wrap inside the area so
 // stats below always line up across cards. Beyond 7, extras collapse to +N.
+// Every tooltip is positioned against the .card-badges row (not the chip
+// itself), spanning the row's own width, so it can never extend past the
+// card regardless of which chip in the row is hovered.
 export function BadgeChipRow({ badges }: { badges: NotableBadge[] }) {
   const ordered = sortBadgesForCard(badges);
   const shown = ordered.slice(0, MAX_CARD_BADGES);
   const overflow = ordered.slice(MAX_CARD_BADGES);
-  const totalChips = shown.length + (overflow.length > 0 ? 1 : 0);
-  const isAnchoredRight = (index: number) => index >= totalChips - RIGHT_ANCHORED_TRAILING_CHIPS;
 
   return (
     <div className="card-badges">
-      {shown.map((badge, index) => (
-        <BadgeChip key={badge.kind} badge={badge} anchorRight={isAnchoredRight(index)} />
+      {shown.map((badge) => (
+        <BadgeChip key={badge.kind} badge={badge} />
       ))}
       {overflow.length > 0 ? (
         <span
@@ -52,7 +57,7 @@ export function BadgeChipRow({ badges }: { badges: NotableBadge[] }) {
           aria-label={`${overflow.length} more badges: ${overflow.map((badge) => badge.label).join(', ')}`}
         >
           <span>{`+${overflow.length}`}</span>
-          <span className={tooltipClassName(isAnchoredRight(shown.length))} role="tooltip">
+          <span className="chip-tooltip" role="tooltip">
             <b>{`${overflow.length} more`}</b>
             {`${overflow.map((badge) => badge.label).join(', ')}. All badges are listed in details.`}
           </span>
@@ -62,16 +67,12 @@ export function BadgeChipRow({ badges }: { badges: NotableBadge[] }) {
   );
 }
 
-function tooltipClassName(anchorRight: boolean): string {
-  return anchorRight ? 'chip-tooltip chip-tooltip-right' : 'chip-tooltip';
-}
-
-function BadgeChip({ badge, anchorRight }: { badge: NotableBadge; anchorRight: boolean }) {
+function BadgeChip({ badge }: { badge: NotableBadge }) {
   if (RANK_KINDS.has(badge.kind)) {
     return (
       <span className="chip chip-rank" tabIndex={0} aria-label={`${badge.label}: ${badge.title}`}>
         <span>{badge.label}</span>
-        <span className={tooltipClassName(anchorRight)} role="tooltip">
+        <span className="chip-tooltip" role="tooltip">
           <b>{badge.label}</b>
           {badge.title}
         </span>
@@ -84,7 +85,7 @@ function BadgeChip({ badge, anchorRight }: { badge: NotableBadge; anchorRight: b
   return (
     <span className="chip chip-icon" style={style} tabIndex={0} aria-label={`${badge.label}: ${badge.title}`}>
       <BadgeIcon kind={badge.kind} />
-      <span className={tooltipClassName(anchorRight)} role="tooltip">
+      <span className="chip-tooltip" role="tooltip">
         <b>{badge.label}</b>
         {badge.title}
       </span>
@@ -135,6 +136,55 @@ export function BadgeIcon({ kind }: { kind: NotableBadgeKind }) {
             strokeLinejoin="round"
           />
           <path d="M4.8 7l1.6 1.6L9.3 5.7" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      );
+    case 'podiumRegular':
+      return (
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+          <path d="M2 12.3V8.3h3v4" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
+          <path d="M5.5 12.3V5.7h3v6.6" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
+          <path d="M9 12.3V9.3h3v3" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
+        </svg>
+      );
+    case 'underrated':
+      return (
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+          <path d="M3 5.2 5.4 1.8h3.2l2.4 3.4-4 7-4-7z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
+          <path d="M3 5.2h8" stroke="currentColor" strokeWidth="1.3" />
+        </svg>
+      );
+    case 'oneTrick':
+      return (
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+          <path
+            d="M7 1.5c-2.2 0-4 1.7-4 3.9 0 2.9 4 7.1 4 7.1s4-4.2 4-7.1c0-2.2-1.8-3.9-4-3.9z"
+            stroke="currentColor"
+            strokeWidth="1.3"
+            strokeLinejoin="round"
+          />
+          <circle cx="7" cy="5.4" r="1.3" fill="currentColor" />
+        </svg>
+      );
+    case 'deepPool':
+      return (
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+          <circle cx="3.2" cy="3.2" r="1" fill="currentColor" />
+          <circle cx="7" cy="3.2" r="1" fill="currentColor" />
+          <circle cx="10.8" cy="3.2" r="1" fill="currentColor" />
+          <circle cx="3.2" cy="7" r="1" fill="currentColor" />
+          <circle cx="7" cy="7" r="1" fill="currentColor" />
+          <circle cx="10.8" cy="7" r="1" fill="currentColor" />
+          <circle cx="3.2" cy="10.8" r="1" fill="currentColor" />
+          <circle cx="7" cy="10.8" r="1" fill="currentColor" />
+          <circle cx="10.8" cy="10.8" r="1" fill="currentColor" />
+        </svg>
+      );
+    case 'newcomer':
+      return (
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+          <path d="M7 12.3V7.2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+          <path d="M7 7.2c0-2.6-2-4-4.3-3.9 0 2.6 1.9 4.2 4.3 3.9z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
+          <path d="M7 8.6c0-2.4 1.8-3.7 3.9-3.6 0 2.4-1.7 3.8-3.9 3.6z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
         </svg>
       );
     default:

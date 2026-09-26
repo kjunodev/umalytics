@@ -206,6 +206,12 @@ button {
   color: var(--accent-green-soft);
 }
 
+.notable-tag.style {
+  background: var(--tone-style-bg);
+  border-color: var(--accent-green);
+  color: var(--tone-style-fg);
+}
+
 .player-title {
   color: var(--text-link);
   font-size: 12px;
