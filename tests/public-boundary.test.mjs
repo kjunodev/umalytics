@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import vm from 'node:vm';
+import { loadModule } from './support/harness.mjs';
 
 const HISTORY_RECONSTRUCTION_PATTERN = /buildStatsSummaryFromHistory|buildUmaEntriesFromHistory/;
 const EXCLUDED_DIRS = new Set(['node_modules', '.output', '.wxt']);
@@ -32,8 +34,20 @@ test('community source can display history but cannot reconstruct statistics fro
  assert(build.includes("for (const mode of ['public'])"));
  const background=fs.readFileSync(new URL('../apps/extension/entrypoints/background.ts',import.meta.url),'utf8');
  const explorer=fs.readFileSync(new URL('../apps/extension/explorer/explorerService.ts',import.meta.url),'utf8');
+ const estimates=fs.readFileSync(new URL('../apps/extension/profiles/profileEstimates.ts',import.meta.url),'utf8');
  assert(background.includes('fetchPlayerProfileSummaries('));
  assert(explorer.includes('fetchPlayerProfileSummaries('));
  assert(!background.includes('fetchBatchPlayerProfileSummaries'));
  assert(!explorer.includes('fetchBatchPlayerProfileSummaries'));
+ assert(!estimates.includes('fetchPrivateHistorySample'));
+ assert(!estimates.includes('derivePrivateHistoryProfile'));
+});
+
+test('public profile estimate hook returns the same profiles without publishing an update', async () => {
+  const context = vm.createContext({});
+  loadModule(context, 'profileEstimates');
+  const profiles = { '100000000000000099': { discordId: '100000000000000099', statsPrivate: true } };
+  let updates = 0;
+  assert.equal(await context.applyPrivateEstimates(profiles, 'allTime', new AbortController().signal, () => { updates++; }), profiles);
+  assert.equal(updates, 0);
 });

@@ -3,7 +3,8 @@ import type { PlayerProfileSummary, PrematchPlayer } from '@umalytics/shared';
 import { fetchJson, fetchPlayerProfileSummaries, getApiCooldown, getSeasonLeaderboard } from '../profiles/playerProfileApi';
 import { getCachedPlayerProfiles, rememberCachedPlayerProfiles } from '../storage/profileStorage';
 import { BEST_UMA_SCORE_VERSION, PROFILE_CACHE_TTL_MS, RECENT_HISTORY_VERSION } from '../profiles/profileConstants';
-import { hasCurrentHistoryState } from '../profiles/profileMerge';
+import { hasCurrentHistoryState, mergeProfileScopes } from '../profiles/profileMerge';
+import { applyPrivateEstimates } from '../profiles/profileEstimates';
 import { lookupPlayer, parseHistoricalMatch, parseHistoryInput, parsePlayerInput, parsePlayerSearch } from './explorerData';
 import { EXPLORER_PORT, type ExplorerRequest, type ExplorerReply, type ExplorerResult } from './explorerTypes';
 
@@ -16,12 +17,13 @@ export function validateExplorerRequest(value: unknown): ExplorerRequest {
     if (Number.isInteger(input.page) && Number(input.page) >= 1 && Number(input.page) <= 5) return { kind: 'search', input: input.input, page: Number(input.page) };
   }
   if (input.kind === 'profiles' && (input.scope === 'currentSeason' || input.scope === 'allTime') && Array.isArray(input.players) && input.players.length <= 10) {
+    if (input.estimate !== undefined && typeof input.estimate !== 'boolean') throw new Error('Invalid estimate option.');
     const players = input.players.map((value: unknown): PrematchPlayer => {
       const player = value as Record<string, unknown> | null;
       if (!player || typeof player.discordId !== 'string' || !/^\d{16,20}$/.test(player.discordId)) throw new Error('Invalid player ID.');
       return lookupPlayer(player.discordId, typeof player.displayName === 'string' ? player.displayName.slice(0,100) : player.discordId);
     });
-    return { kind: 'profiles', scope: input.scope, players };
+    return { kind: 'profiles', scope: input.scope, players, estimate: input.estimate !== false };
   }
   throw new Error('Invalid lookup request.');
 }
@@ -48,10 +50,11 @@ export async function executeExplorerRequest(request: ExplorerRequest, signal: A
   signal.throwIfAborted();
   const pending = request.players.filter(player => {
     const cached = archive[player.discordId];
-    if (cached && !cached.error && !cached.isPartial && cached.statsScope === request.scope &&
+    if (cached && !cached.error && !cached.isPartial &&
+      (cached.scopeFetchedAt?.[request.scope] !== undefined || cached.statsScope === request.scope) &&
       hasCurrentHistoryState(cached, request.scope) &&
       cached.bestUmaScoreVersion === BEST_UMA_SCORE_VERSION && cached.recentHistoryVersion === RECENT_HISTORY_VERSION &&
-      Date.now() - cached.fetchedAt < PROFILE_CACHE_TTL_MS) {
+      Date.now() - (cached.scopeFetchedAt?.[request.scope] ?? cached.fetchedAt) < PROFILE_CACHE_TTL_MS) {
       profiles[player.discordId] = cached;
       return false;
     }
@@ -66,8 +69,16 @@ export async function executeExplorerRequest(request: ExplorerRequest, signal: A
   if (pending.length) {
     const loaded = await fetchPlayerProfileSummaries(pending, { scope: request.scope, signal, onProgress: update, onSummary: update });
     signal.throwIfAborted();
-    Object.assign(profiles, loaded);
-    await rememberCachedPlayerProfiles(Object.fromEntries(Object.entries(loaded).filter(([, profile]) => !profile.error && !profile.isPartial)));
+    for (const [id, profile] of Object.entries(loaded)) profiles[id] = mergeProfileScopes(archive[id] ?? profiles[id], profile);
+    await rememberCachedPlayerProfiles(Object.fromEntries(Object.entries(profiles).filter(([, profile]) => !profile.error && !profile.isPartial)));
+  }
+  if (request.estimate !== false) {
+    const estimated = await applyPrivateEstimates(profiles, request.scope, signal, update);
+    signal.throwIfAborted();
+    if (estimated !== profiles) {
+      Object.assign(profiles, estimated);
+      await rememberCachedPlayerProfiles(Object.fromEntries(Object.entries(estimated).filter(([, profile]) => !profile.error && !profile.isPartial)));
+    }
   }
   return profiles;
 }

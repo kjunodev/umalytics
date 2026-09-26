@@ -21,7 +21,7 @@ export type ExplorerRequest =
   | { kind: 'leaderboard' }
   | { kind: 'match'; input: string }
   | { kind: 'search'; input: string; page: number }
-  | { kind: 'profiles'; players: PrematchPlayer[]; scope: PlayerStatsScope };
+  | { kind: 'profiles'; players: PrematchPlayer[]; scope: PlayerStatsScope; estimate?: boolean };
 
 export type ExplorerResult = HistoricalMatch | PlayerSearchResult | SeasonLeaderboard | Record<string, PlayerProfileSummary>;
 export type ExplorerReply =

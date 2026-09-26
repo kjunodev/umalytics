@@ -40,6 +40,7 @@ export const MODULES = {
   profileCache: 'profiles/profileCache.ts',
   profileConstants: 'profiles/profileConstants.ts',
   profileMerge: 'profiles/profileMerge.ts',
+  profileEstimates: 'profiles/profileEstimates.ts',
   profileStorage: 'storage/profileStorage.ts',
   profileTiming: 'profiles/profileTiming.ts',
   requestQueue: 'profiles/requestQueue.ts',
@@ -89,10 +90,10 @@ const pathByName = new Map(Object.entries(MODULES));
 // Dependencies each module needs evaluated into the same vm context first,
 // matching the preload order the original per-test-file loaders hard coded.
 const PRELOADS = {
-  background: ['profileStates', 'scoutWindow', 'drafterTabs'],
+  background: ['profileStates', 'scoutWindow', 'drafterTabs', 'profileEstimates'],
   profileCache: ['profileMerge'],
   explorerState: ['profileMerge'],
-  explorerService: ['profileMerge'],
+  explorerService: ['profileMerge', 'profileEstimates'],
   pageHook: ['pageHookRuntime'],
   content: ['roomEvents', 'rosterIdentity', 'recordReaders'],
   domLobbyExtraction: ['recordReaders', 'teams'],

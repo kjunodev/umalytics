@@ -1,5 +1,6 @@
 import { recordDiagnostic, getDiagnosticTrace } from '../runtime/diagnosticRecorder';
 import { hasCurrentHistoryState, mergeProfileScopes } from '../profiles/profileMerge';
+import { applyPrivateEstimates } from '../profiles/profileEstimates';
 import { registerExplorerService } from '../explorer/explorerService';
 import { normalizeRosterForDisplay } from '../room/rosterDisplay';
 import { browser } from 'wxt/browser';
@@ -475,6 +476,18 @@ async function performRosterEnrichment(
 
     await publish();
     await rememberCachedPlayerProfiles(profilesByDiscordId);
+
+    const estimatedProfiles = await applyPrivateEstimates(profilesByDiscordId, scope, signal, async summary => {
+      if (signal.aborted || runId !== enrichmentRunId) return;
+      profilesByDiscordId[summary.discordId] = summary;
+      profileStates[summary.discordId] = buildCompletedProfileState(summary.discordId, summary, Date.now());
+      await publish();
+    });
+    if (signal.aborted || runId !== enrichmentRunId) return;
+    if (estimatedProfiles !== profilesByDiscordId) {
+      Object.assign(profilesByDiscordId, estimatedProfiles);
+      await rememberCachedPlayerProfiles(estimatedProfiles);
+    }
   } catch (caught) {
     if (signal.aborted || runId !== enrichmentRunId) {
       return;

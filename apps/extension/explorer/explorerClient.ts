@@ -45,6 +45,6 @@ export function loadSeasonLeaderboard(signal: AbortSignal) {
   return request<SeasonLeaderboard>({ kind: 'leaderboard' }, signal);
 }
 export function loadExplorerProfiles(players: PrematchPlayer[], scope: PlayerStatsScope,
-  onProgress: (profiles: Record<string, PlayerProfileSummary>) => void, signal: AbortSignal) {
-  return request<Record<string, PlayerProfileSummary>>({ kind: 'profiles', players, scope }, signal, onProgress);
+  onProgress: (profiles: Record<string, PlayerProfileSummary>) => void, signal: AbortSignal, estimate = true) {
+  return request<Record<string, PlayerProfileSummary>>({ kind: 'profiles', players, scope, estimate }, signal, onProgress);
 }

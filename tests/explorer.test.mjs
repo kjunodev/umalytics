@@ -118,8 +118,9 @@ function service(globals = {}) {
 
 test('lookup validates request size, IDs, page, and scope before fetching', () => {
   const { h } = service();
-  for (const bad of [{ kind:'profiles', scope:'allTime', players:[{discordId:'../admin'}] }, { kind:'profiles',scope:'both',players:[] }, {kind:'search',input:'Fixture Query',page:0}, {kind:'match',input:'x'.repeat(301)}]) assert.throws(() => h.validateExplorerRequest(bad));
+  for (const bad of [{ kind:'profiles', scope:'allTime', players:[{discordId:'../admin'}] }, { kind:'profiles',scope:'both',players:[] }, { kind:'profiles',scope:'allTime',players:[],estimate:'yes' }, {kind:'search',input:'Fixture Query',page:0}, {kind:'match',input:'x'.repeat(301)}]) assert.throws(() => h.validateExplorerRequest(bad));
   assert.equal(h.validateExplorerRequest({kind:'profiles',scope:'allTime',players:[{discordId:'100000000000000099',profileUrl:'https://evil.example'}]}).players[0].profileUrl, 'https://drafter.uma.guide/players/100000000000000099');
+  assert.equal(h.validateExplorerRequest({kind:'profiles',scope:'allTime',players:[],estimate:false}).estimate, false);
   assert.equal(h.validateExplorerRequest({kind:'leaderboard'}).kind, 'leaderboard');
 });
 
@@ -151,6 +152,19 @@ test('fresh scope-specific archive hits avoid profile requests; partial/wrong sc
   cached.isPartial=true;
   await h.executeExplorerRequest({kind:'profiles',scope:'allTime',players:[{discordId:id}]},new AbortController().signal,()=>{});
   assert.equal(fetched,2);
+});
+
+test('a cached profile can reuse a fresh previously fetched scope after switching away', async () => {
+  const id = '100000000000000099'; let fetched = 0;
+  const now = Date.now();
+  const cached = { discordId: id, statsScope: 'allTime', fetchedAt: now,
+    scopeFetchedAt: { currentSeason: now, allTime: now }, bestUmaScoreVersion: 17, recentHistoryVersion: 6 };
+  const { h } = service({ getCachedPlayerProfiles: async () => ({ [id]: cached }),
+    fetchPlayerProfileSummaries: async () => { fetched++; return {}; } });
+  const result = await h.executeExplorerRequest({ kind: 'profiles', scope: 'currentSeason', players: [{ discordId: id }] },
+    new AbortController().signal, () => {});
+  assert.equal(result[id], cached);
+  assert.equal(fetched, 0);
 });
 
 test('cancelled lookup does not publish late profiles or save the result', async () => {

@@ -14,19 +14,24 @@ export interface SelectedPlayerContext {
   player: PrematchPlayer;
 }
 
-export function HistoricalScene({ snapshot, roster, profiles, statsScope, scene, loading, navigation }: {
+export function HistoricalScene({ snapshot, roster, profiles, statsScope, scene, loading, navigation, onOpenPlayer }: {
   snapshot: DraftSnapshot; roster: PrematchRoster; profiles: Record<string, PlayerProfileSummary>;
   statsScope: PlayerStatsScope; scene: AppScene; loading: boolean; navigation: number;
+  onOpenPlayer?: (player: PrematchPlayer | undefined) => void;
 }) {
   const [selected, setSelected] = useState<string>();
-  useEffect(() => setSelected(undefined), [scene, navigation]);
+  useEffect(() => { setSelected(undefined); onOpenPlayer?.(undefined); }, [scene, navigation]);
   const teams = getTeamGroups(roster);
   const context = getSelectedPlayerContext(teams, selected);
+  const selectPlayer = (key: string) => {
+    setSelected(key);
+    onOpenPlayer?.(getSelectedPlayerContext(teams, key)?.player);
+  };
   if (scene === 'draft') return <DraftScene snapshot={snapshot} roster={roster} profiles={profiles} statsScope={statsScope} historical />;
   if (scene === 'umas') return <UmaPlannerScene roster={roster} profiles={profiles} statsScope={statsScope} />;
   return <>
-    <section className="team-list" aria-label="Historical lobby teams">{teams.map(team => <TeamSection key={team.id} team={team} profiles={profiles} loadingDiscordIds={loading ? roster.players.filter(player => !profiles[player.discordId]).map(player => player.discordId) : []} statsScope={statsScope} selectedPlayerKey={selected} onSelectPlayer={setSelected} />)}</section>
-    {context && <PlayerDrawer player={context.player} profile={profiles[context.player.discordId]} onClose={() => setSelected(undefined)} context={{ team: context.team, statsScope, isProfileLoading: loading && !profiles[context.player.discordId], now: Date.now(), inLobby: false }} />}
+    <section className="team-list" aria-label="Historical lobby teams">{teams.map(team => <TeamSection key={team.id} team={team} profiles={profiles} loadingDiscordIds={loading ? roster.players.filter(player => !profiles[player.discordId]).map(player => player.discordId) : []} statsScope={statsScope} selectedPlayerKey={selected} onSelectPlayer={selectPlayer} />)}</section>
+    {context && <PlayerDrawer player={context.player} profile={profiles[context.player.discordId]} onClose={() => { setSelected(undefined); onOpenPlayer?.(undefined); }} context={{ team: context.team, statsScope, isProfileLoading: loading && !profiles[context.player.discordId], now: Date.now(), inLobby: false }} />}
   </>;
 }
 

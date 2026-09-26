@@ -5,12 +5,15 @@ import { loadHistoricalMatch, loadExplorerProfiles } from '../../explorer/explor
 import type { HistoricalMatch } from '../../explorer/explorerTypes';
 import { mergeExplorerProfiles } from '../../explorer/explorerState';
 
-type Profiles = Record<string, PlayerProfileSummary>;
-type HistoryScene = ComponentType<{ snapshot: DraftSnapshot; roster: PrematchRoster; profiles: Profiles; statsScope: PlayerStatsScope; scene: 'lobby' | 'draft' | 'umas'; loading: boolean; navigation: number }>;
+declare const __UMALYTICS_PRIVATE_PROFILE_DATA__: boolean;
 
-function useProfiles(players: PrematchPlayer[], scope: PlayerStatsScope) {
+type Profiles = Record<string, PlayerProfileSummary>;
+type HistoryScene = ComponentType<{ snapshot: DraftSnapshot; roster: PrematchRoster; profiles: Profiles; statsScope: PlayerStatsScope; scene: 'lobby' | 'draft' | 'umas'; loading: boolean; navigation: number; onOpenPlayer?: (player: PrematchPlayer | undefined) => void }>;
+
+function useProfiles(players: PrematchPlayer[], scope: PlayerStatsScope, openedPlayer: PrematchPlayer | undefined) {
   const [profiles, setProfiles] = useState<Profiles>({});
   const [loading, setLoading] = useState(false);
+  const [readyContext, setReadyContext] = useState('');
   const [error, setError] = useState('');
   const [attempt, setAttempt] = useState(0);
   const key = players.map(player => player.discordId).join('|');
@@ -20,20 +23,35 @@ function useProfiles(players: PrematchPlayer[], scope: PlayerStatsScope) {
     const context = `${scope}:${key}`;
     if (previousContext.current !== context) setProfiles({});
     previousContext.current = context;
+    setReadyContext('');
     setError(''); setLoading(players.length > 0);
     if (players.length) {
-      void loadExplorerProfiles(players, scope, next => { if (!controller.signal.aborted) setProfiles(previous => mergeExplorerProfiles(previous, next)); }, controller.signal)
+      void loadExplorerProfiles(players, scope, next => { if (!controller.signal.aborted) setProfiles(previous => mergeExplorerProfiles(previous, next)); }, controller.signal, false)
         .then(next => {
           if (controller.signal.aborted) return;
           setProfiles(previous => mergeExplorerProfiles(previous, next));
           const errors = Object.values(next).filter(profile => profile.error);
           if (errors.length) setError(`${errors.length} ${errors.length === 1 ? 'profile could' : 'profiles could'} not be fully loaded. Available stats remain visible. Try again shortly.`);
         }).catch(caught => { if (!controller.signal.aborted) setError(caught instanceof Error ? caught.message : 'Unable to load profiles.'); })
-        .finally(() => { if (!controller.signal.aborted) setLoading(false); });
+        .finally(() => { if (!controller.signal.aborted) { setLoading(false); setReadyContext(context); } });
     }
     return () => controller.abort();
     // Identity, scope, and explicit retry define a request; display-name changes do not refetch.
   }, [key, scope, attempt]);
+  const openedId = openedPlayer?.discordId;
+  useEffect(() => {
+    if (typeof __UMALYTICS_PRIVATE_PROFILE_DATA__ === 'undefined' || !__UMALYTICS_PRIVATE_PROFILE_DATA__) return undefined;
+    if (openedPlayer === undefined || readyContext !== `${scope}:${key}` || !players.some(player => player.discordId === openedId)) return undefined;
+    const controller = new AbortController();
+    void loadExplorerProfiles([openedPlayer], scope, next => {
+      if (!controller.signal.aborted) setProfiles(previous => mergeExplorerProfiles(previous, next));
+    }, controller.signal)
+      .then(next => { if (!controller.signal.aborted) setProfiles(previous => mergeExplorerProfiles(previous, next)); })
+      .catch(() => {});
+    return () => controller.abort();
+    // Only a newly opened player, scope, or completed roster lookup starts this request.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openedId, scope, key, readyContext]);
   return { profiles, loading, error, retry: () => setAttempt(value => value + 1) };
 }
 
@@ -44,13 +62,14 @@ export function HistoryView({ Scene, scene, scope, navigation, onMatchCodeChange
   const [match, setMatch] = useState<HistoricalMatch>();
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [openedPlayer, setOpenedPlayer] = useState<PrematchPlayer>();
   const request = useRef<AbortController | undefined>(undefined);
-  const { profiles, loading: profilesLoading, error: profileError, retry } = useProfiles(match?.roster.players ?? EMPTY_PLAYERS, scope);
+  const { profiles, loading: profilesLoading, error: profileError, retry } = useProfiles(match?.roster.players ?? EMPTY_PLAYERS, scope, openedPlayer);
   useEffect(() => () => request.current?.abort(), []);
   const load = async () => {
     request.current?.abort();
     const controller = new AbortController(); request.current = controller;
-    setLoading(true); setError(''); setMatch(undefined); onMatchCodeChange(undefined);
+    setLoading(true); setError(''); setMatch(undefined); setOpenedPlayer(undefined); onMatchCodeChange(undefined);
     try {
       const result = await loadHistoricalMatch(input, controller.signal);
       if (!controller.signal.aborted) { setMatch(result); onMatchCodeChange(result.matchCode); }
@@ -71,7 +90,7 @@ export function HistoryView({ Scene, scene, scope, navigation, onMatchCodeChange
       {match.warnings.map(warning => <p className="history-message" role="status" key={warning}>{warning}</p>)}
       {profilesLoading && <p className="history-message" role="status">Loading current player stats… The completed draft is ready.</p>}
       {profileError && <p className="explorer-error" role="status">{profileError} <button type="button" disabled={profilesLoading} onClick={retry}>Retry stats</button></p>}
-      <div className="history-scene"><Scene key={match.matchCode} snapshot={match.draft} roster={match.roster} profiles={profiles} statsScope={scope} scene={scene} loading={profilesLoading} navigation={navigation} /></div>
+      <div className="history-scene"><Scene key={match.matchCode} snapshot={match.draft} roster={match.roster} profiles={profiles} statsScope={scope} scene={scene} loading={profilesLoading} navigation={navigation} onOpenPlayer={setOpenedPlayer} /></div>
     </>}
   </section>;
 }

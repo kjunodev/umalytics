@@ -49,6 +49,13 @@ test('History details select a real roster member and do not replace Draft or Um
   assert.equal(render({...props,scene:'umas'}).type,'Umas');
   assert.equal(sceneHarness('unknown')({...props,scene:'lobby'}).children.flat().filter(Boolean).length,1);
 });
+test('History selection reports only the opened player to its profile loader', () => {
+  const opened = [];
+  const result = sceneHarness()({ ...props, scene: 'lobby', onOpenPlayer: player => opened.push(player) });
+  const team = result.children.flat()[0].children.flat()[0];
+  team.props.onSelectPlayer(player.discordId);
+  assert.deepEqual(opened, [player]);
+});
 test('Explorer styling cannot override shared draft tile geometry', () => {
   const explorerCss = readModule('uiHistoryCss');
   const draftCss = readModule('uiDraftCss');
