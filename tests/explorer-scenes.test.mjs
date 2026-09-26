@@ -61,8 +61,19 @@ test('Explorer styling cannot override shared draft tile geometry', () => {
   const draftCss = readModule('uiDraftCss');
   const baseCss = readModule('uiCommonBaseCss');
   assert.doesNotMatch(explorerCss,/\.explorer-view\s+button\s*\{/);
-  assert.match(draftCss,/\.draft-pick-tile button,\n\.draft-pick-tile\.placeholder\s*\{[^}]*height:\s*128px/s);
+  assert.match(draftCss,/\.draft-pick-tile button,\n\.draft-pick-tile\.placeholder\s*\{[^}]*min-height:\s*128px/s);
   assert.match(baseCss,/scrollbar-gutter:\s*stable/);
+});
+
+test('the pick-tile grid absorbs spare column height instead of leaving an empty band below the experience table', () => {
+  const draftCss = readModule('uiDraftCss');
+  assert.match(draftCss, /\.draft-pick-grid\s*\{[^}]*flex:\s*1 1 auto/s);
+  assert.match(draftCss, /\.draft-pick-grid\s*\{[^}]*grid-auto-rows:\s*minmax\(128px,\s*1fr\)/s);
+  assert.doesNotMatch(
+    draftCss,
+    /\.draft-pick-grid\s*\{[^}]*min-height:\s*0/s,
+    'the grid must keep its automatic min-content floor (2 rows at 128px) so it never shrinks below the tile minimum and overlaps the ban/veto rows'
+  );
 });
 
 test('UI CSS never truncates names with ellipsis', () => {
