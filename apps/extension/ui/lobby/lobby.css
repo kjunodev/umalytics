@@ -1,27 +1,64 @@
 .team-section {
   display: grid;
-  gap: 10px;
+  gap: 12px;
+}
+
+.team-section.team1 {
+  --team-accent: var(--accent-blue);
+}
+
+.team-section.team2 {
+  --team-accent: var(--accent-orange);
 }
 
 .team-header {
   align-items: center;
   display: flex;
-  justify-content: space-between;
-  min-height: 36px;
+  gap: 10px;
+  min-height: 20px;
+}
+
+.team-header-accent {
+  background: var(--team-accent, var(--accent-blue));
+  border-radius: 2px;
+  flex-shrink: 0;
+  height: 20px;
+  width: 4px;
 }
 
 .team-header h2 {
-  font-size: 15px;
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 700;
   line-height: 1.2;
   margin: 0;
-  color: var(--text-primary);
 }
 
-.team-header p {
+.team-header-count {
+  color: var(--text-muted);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.team-header-divider {
+  background: var(--border-subtle);
+  flex-grow: 1;
+  height: 1px;
+  margin-left: 8px;
+}
+
+.team-header-avg {
   color: var(--text-secondary);
-  font-size: 12px;
-  line-height: 1.4;
-  margin: 4px 0 0;
+  font-family: var(--font-display);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.team-header-avg strong {
+  color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 700;
 }
 
 .player-list {
@@ -204,6 +241,14 @@
   white-space: normal;
   width: max-content;
   z-index: 50;
+}
+
+/* The trailing chips in a row anchor their tooltip to the right instead of
+   the left, so it never extends past the card (and the lobby's page edge)
+   on the rightmost cards in a row. */
+.chip-tooltip-right {
+  left: auto;
+  right: 0;
 }
 
 .chip-tooltip b {

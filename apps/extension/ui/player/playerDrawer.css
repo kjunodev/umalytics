@@ -291,6 +291,49 @@
   color: var(--text-primary);
 }
 
+.uma-table-footer {
+  display: flex;
+  justify-content: flex-start;
+  margin-top: 6px;
+}
+
+.uma-pager {
+  align-items: center;
+  display: flex;
+  gap: 6px;
+}
+
+.uma-pager-range {
+  color: var(--text-muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.uma-pager-btn {
+  align-items: center;
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 13px;
+  height: 24px;
+  justify-content: center;
+  width: 24px;
+}
+
+.uma-pager-btn:hover:not(:disabled) {
+  border-color: var(--border-emphasis);
+  color: var(--text-primary);
+}
+
+.uma-pager-btn:disabled {
+  color: var(--text-muted);
+  cursor: default;
+  opacity: 0.5;
+}
+
 .uma-table-head {
   align-items: center;
   border-bottom: 1px solid var(--border-default);
@@ -334,11 +377,6 @@
   display: flex;
   flex-direction: column;
   height: 200px;
-  overflow-y: hidden;
-}
-
-.uma-table-rows.expanded {
-  overflow-y: auto;
 }
 
 .uma-table-row {
@@ -387,18 +425,22 @@
 
 .drawer-history-rows {
   display: flex;
+  flex: 1 1 auto;
   flex-direction: column;
   min-height: 0;
   overflow-y: auto;
 }
 
+/* Rows flex to fill the space above the pager instead of leaving a gap
+   there, but never stretch past a comfortable reading height. */
 .drawer-history-row,
 .drawer-history-row-skel {
   align-items: center;
   border-bottom: 1px solid var(--border-subtle);
   display: grid;
+  flex: 1 1 0;
   gap: 8px;
-  height: 46px;
+  max-height: 64px;
   min-height: 46px;
 }
 
@@ -563,7 +605,6 @@
 
   .drawer-history-row,
   .drawer-history-row-skel {
-    height: 38px;
     min-height: 38px;
   }
 }
@@ -599,7 +640,6 @@
 
   .drawer-history-row,
   .drawer-history-row-skel {
-    height: 34px;
     min-height: 34px;
   }
 }

@@ -20,7 +20,7 @@ function harness(privateBuild = false) {
     getFallbackUmaImageUrl: () => undefined,
     getPagerSlots: (page, total) => Array.from({length:total},(_,i)=>i+1),
     umaSortValue: () => 0, formatUmaColumnValue: () => '-',
-    HISTORY_PAGE_SIZE: 5, HISTORY_API_PAGE_SIZE: 20, UMA_TABLE_ROWS: 5, PAGER_SLOT_COUNT: 7,
+    HISTORY_PAGE_SIZE: 5, HISTORY_API_PAGE_SIZE: 20, UMA_TABLE_ROWS: 5, PAGER_SLOT_COUNT: 7, MIN_UMA_GAMES: 3,
     UMA_SORT_COLUMNS: [{key:'matches',label:'GP'},{key:'winRate',label:'Win'},{key:'pointsPerGame',label:'PPG'},{key:'performanceScore',label:'Score'}],
     React: { Fragment: 'Fragment' }, filterSnapshotForBuild: x => x,
     filterProfileStatesForDisplay: x => x, getLoadingDiscordIdsForDisplay: () => [],

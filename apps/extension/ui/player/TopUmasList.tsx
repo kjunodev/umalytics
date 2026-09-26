@@ -1,6 +1,11 @@
 import type { PlayerProfileSummary } from '@umalytics/shared';
 import { formatDecimal, formatPercent } from '../common/format';
 
+// The card shows up to this many Umas; how many actually render is decided
+// purely by CSS (see .top-umas-rows in base.css), which reveals only whole
+// rows that fit the card's remaining height.
+export const MAX_TOP_UMAS = 5;
+
 export function TopUmasList({
   topUmas,
   playerName,
@@ -10,7 +15,7 @@ export function TopUmasList({
   playerName: string;
   emptyMessage?: string;
 }) {
-  const slots = Array.from({ length: 3 }, (_, index) => topUmas?.[index]);
+  const slots = Array.from({ length: MAX_TOP_UMAS }, (_, index) => topUmas?.[index]);
   const shouldShowMessage = topUmas === undefined || topUmas.length === 0;
 
   return (
@@ -23,7 +28,7 @@ export function TopUmasList({
       {shouldShowMessage ? (
         <span className="section-message">{emptyMessage ?? 'No ranked Uma data found.'}</span>
       ) : (
-        <ol>
+        <ol className="top-umas-rows">
           {slots.map((uma, index) => (
             uma === undefined ? (
               <li key={`empty-uma:${index}`} className="empty-uma-row">

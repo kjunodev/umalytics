@@ -34,14 +34,18 @@ export function TeamSection({
 }) {
   const playerSlots = Array.from({ length: Math.max(TEAM_SLOT_COUNT, team.players.length) }, (_, index) => team.players[index]);
   const partyVisuals = useMemo(() => getTeamPartyVisuals(team.players), [team.players]);
+  const averageRating = getTeamAverageRating(team, profiles);
 
   return (
-    <section className="team-section">
+    <section className={`team-section ${team.id}`}>
       <header className="team-header">
-        <div>
-          <h2>{team.name ?? team.id}</h2>
-          <p>{Math.min(team.players.length, TEAM_SLOT_COUNT)}/{TEAM_SLOT_COUNT} players</p>
-        </div>
+        <span className="team-header-accent" aria-hidden="true" />
+        <h2>{team.name ?? team.id}</h2>
+        <span className="team-header-count">{Math.min(team.players.length, TEAM_SLOT_COUNT)}/{TEAM_SLOT_COUNT} players</span>
+        <span className="team-header-divider" aria-hidden="true" />
+        <span className="team-header-avg">
+          Avg rating <strong>{averageRating === undefined ? '—' : formatNumber(averageRating)}</strong>
+        </span>
       </header>
 
       <ol className="player-list">
@@ -92,7 +96,7 @@ export function PlayerRow({
   onShowDetails: () => void;
 }) {
   const displayedProfile = getCardProfile(profile, statsScope);
-  const rating = profile?.conservativeRating ?? profile?.rating ?? player.displayRatingSnapshot ?? player.ratingSnapshot;
+  const rating = getPlayerDisplayRating(player, profile);
   const discordId = getLookupDiscordId(player);
   const note = getPlayerNote(profile, discordId);
   const statsMessage = getStatsMessage(displayedProfile, profile, isProfileLoading, discordId);
@@ -276,6 +280,22 @@ export function getCardProfile(
     ...selectedProfile, recentMatches: [], recentForm: undefined,
     historyTotal: undefined, historySummary: undefined
   };
+}
+
+export function getPlayerDisplayRating(player: PrematchPlayer, profile: PlayerProfileSummary | undefined): number | undefined {
+  return profile?.conservativeRating ?? profile?.rating ?? player.displayRatingSnapshot ?? player.ratingSnapshot;
+}
+
+export function getTeamAverageRating(team: PrematchTeam, profiles: Record<string, PlayerProfileSummary>): number | undefined {
+  const ratings = team.players
+    .map((player) => getPlayerDisplayRating(player, profiles[player.discordId]))
+    .filter((rating): rating is number => rating !== undefined && rating !== null);
+
+  if (ratings.length === 0) {
+    return undefined;
+  }
+
+  return Math.round(ratings.reduce((sum, rating) => sum + rating, 0) / ratings.length);
 }
 
 export function getPlayerRowClassName(partyVisual?: PartyVisual, isSelected = false): string {

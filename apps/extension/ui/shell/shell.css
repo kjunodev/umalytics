@@ -40,6 +40,7 @@
 .app-scene-area > .team-list,
 .history-scene > .team-list {
   height: 100%;
+  overflow-x: clip;
   overflow-y: auto;
 }
 
