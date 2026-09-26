@@ -73,17 +73,17 @@ test('10-player cold load respects global request cap and returns usable stats',
   assert.equal(h.calls.length,22);
 });
 
-test('at the unchanged 500 ms pace, 10-player stats resolve within ~5.5 s and the whole lobby within ~6.5 s',async()=>{
+test('at the 350 ms pace, 10-player stats resolve within ~4 s and the whole lobby within ~4.5 s',async()=>{
   const h=apiHarness({latency:100,fast:false});const resolved=new Map();const start=performance.now();
   await h.c.fetchPlayerProfileSummaries(players(10),{scope:'currentSeason',onProgress:summary=>{
     if(summary.currentSeasonStats.matches===4 && !resolved.has(summary.discordId)) resolved.set(summary.discordId,performance.now()-start);
   }});
   const lobbyMs=performance.now()-start;
   const times=[...resolved.values()];
-  assert.equal(times.length,10);assert(Math.min(...times)<1500);
-  assert(Math.max(...times)<5500,`stats should resolve within ~5.5s, took ${Math.max(...times)}ms`);
-  assert(lobbyMs<6500,`the whole lobby should resolve within ~6.5s, took ${lobbyMs}ms`);
-  assert(h.callTimes.slice(1).every((time,i)=>time-h.callTimes[i]>=450));
+  assert.equal(times.length,10);assert(Math.min(...times)<1200);
+  assert(Math.max(...times)<4000,`stats should resolve within ~4s, took ${Math.max(...times)}ms`);
+  assert(lobbyMs<4500,`the whole lobby should resolve within ~4.5s, took ${lobbyMs}ms`);
+  assert(h.callTimes.slice(1).every((time,i)=>time-h.callTimes[i]>=300));
 });
 
 test('seasonal stats arrive before a stalled leaderboard',async()=>{
@@ -136,7 +136,7 @@ test('slow session storage does not occupy queue slots or delay paced starts',as
     await waitUntil(()=>h.calls.length===4,2500);
     await pending;
     assert(writes>=1);
-    assert(h.callTimes.slice(1).every((time,i)=>time-h.callTimes[i]>=450));
+    assert(h.callTimes.slice(1).every((time,i)=>time-h.callTimes[i]>=300));
   } finally { gate.resolve(); }
 });
 
