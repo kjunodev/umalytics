@@ -12,7 +12,7 @@ export default defineConfig({
     },
     name: privateProfileDataBuild ? 'UmaLytics Private' : 'UmaLytics',
     version: '0.5.0',
-    version_name: privateProfileDataBuild ? '0.5.0-private.rc.1' : '0.5.0-public.open-beta.1',
+    version_name: privateProfileDataBuild ? '0.5.0-private.rc.2' : '0.5.0-public.open-beta.1',
     description: privateProfileDataBuild
       ? 'Private prematch scouting companion for Uma Drafter.'
       : 'Prematch scouting companion for Uma Drafter.',
