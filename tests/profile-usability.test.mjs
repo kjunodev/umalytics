@@ -110,18 +110,19 @@ test('Deep pool requires 8+ distinct Umas with 3+ games each, and never shows al
   assert.equal(combinedBadges.some(b => b.kind === 'deepPool'), false);
 });
 
-test('Podium regular requires a >=60% podium rate with 15+ games', () => {
+test('Podium regular requires >=2.8 podium finishes per game with 15+ games', () => {
   const c = uiContext();
-  const profile = { discordId: '1', matches: 20, podiums: 12 };
+  const profile = { discordId: '1', matches: 20, podiums: 56 };
   const badges = c.getNotableBadges(profile);
   const badge = badges.find(b => b.kind === 'podiumRegular');
   assert.notEqual(badge, undefined);
-  assert.match(badge.title, /60%/);
-  assert.match(badge.title, /12 of 20/);
+  assert.match(badge.title, /2\.8 podium finishes per game/);
+  assert.match(badge.title, /56 in 20 games/);
+  assert.equal(badge.title.includes('%'), false, 'the rate is per-game, not a percentage, since podiums are counted per race');
 
-  assert(!c.getNotableBadges({ discordId: '1', matches: 14, podiums: 9 }).some(b => b.kind === 'podiumRegular'), 'below the 15-game floor');
-  assert(!c.getNotableBadges({ discordId: '1', matches: 20, podiums: 11 }).some(b => b.kind === 'podiumRegular'), 'below the 60% rate');
-  assert(c.getNotableBadges({ discordId: '1', matches: 15, podiums: 9 }).some(b => b.kind === 'podiumRegular'), 'exactly at both boundaries');
+  assert(!c.getNotableBadges({ discordId: '1', matches: 14, podiums: 42 }).some(b => b.kind === 'podiumRegular'), 'below the 15-game floor');
+  assert(!c.getNotableBadges({ discordId: '1', matches: 20, podiums: 55 }).some(b => b.kind === 'podiumRegular'), 'below the 2.8/game rate');
+  assert(c.getNotableBadges({ discordId: '1', matches: 15, podiums: 42 }).some(b => b.kind === 'podiumRegular'), 'exactly at both boundaries');
 });
 
 test('Underrated requires 5.5+ PPG over 15+ games while ranked outside the top 100 or unranked', () => {

@@ -1077,7 +1077,7 @@ function buildUmaSummary(
   const podiums = entry.podiumPlacements ?? 0;
   const winRate = wins + losses > 0 ? wins / (wins + losses) : null;
   const pointsPerGame = matches > 0 ? points / matches : null;
-  const podiumRate = matches > 0 ? podiums / (matches * 3) : null;
+  const podiumRate = matches > 0 ? Math.min(Math.max(podiums / (matches * 3), 0), 1) : null;
 
   return {
     umaId,

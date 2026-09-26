@@ -29,7 +29,7 @@ const ONE_TRICK_MIN_SHARE = 0.4;
 const ONE_TRICK_MIN_GAMES = 20;
 const DEEP_POOL_MIN_UMAS = 8;
 const DEEP_POOL_MIN_GAMES_PER_UMA = 3;
-const PODIUM_REGULAR_MIN_RATE = 0.6;
+const PODIUM_REGULAR_MIN_PER_GAME = 2.8;
 const PODIUM_REGULAR_MIN_GAMES = 15;
 const UNDERRATED_MIN_PPG = 5.5;
 const UNDERRATED_MIN_GAMES = 15;
@@ -148,14 +148,14 @@ export function getNotableBadges(profile: PlayerProfileSummary | undefined): Not
     profile.matches !== undefined &&
     profile.matches !== null &&
     profile.matches >= PODIUM_REGULAR_MIN_GAMES &&
-    profile.podiums / profile.matches >= PODIUM_REGULAR_MIN_RATE
+    profile.podiums / profile.matches >= PODIUM_REGULAR_MIN_PER_GAME
   ) {
-    const rate = profile.podiums / profile.matches;
+    const perGame = profile.podiums / profile.matches;
     badges.push({
       kind: 'podiumRegular',
       label: 'Podium regular',
       tone: 'scoring',
-      title: `Podiums in ${formatPercent(rate)} of ranked games (${profile.podiums} of ${profile.matches}), with ${PODIUM_REGULAR_MIN_GAMES}+ games in the selected stat scope.`
+      title: `Averages ${formatDecimal(perGame)} podium finishes per game (${profile.podiums} in ${profile.matches} games), with ${PODIUM_REGULAR_MIN_GAMES}+ games in the selected stat scope.`
     });
   }
 
