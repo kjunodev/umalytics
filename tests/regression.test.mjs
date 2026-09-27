@@ -465,9 +465,11 @@ test('cooldown preserves HTTP cause and successful endpoints are reused on recov
 });
 
 test('HTTP date Retry-After and server failures preserve their recovery deadline',async()=>{
+  let clock=Date.now();class Clock extends Date {static now(){return clock;}}
   for(const status of [429,503]) {
-    const until=Math.ceil((Date.now()+90000)/1000)*1000;
+    const until=Math.ceil((clock+90000)/1000)*1000;
     const h=apiHarness({responder:()=>({status,headers:{'retry-after':new Date(until).toUTCString()}})});
+    h.c.Date=Clock;
     await h.c.fetchPlayerProfileSummaries(players(1));
     assert.equal(h.c.getApiCooldown().until,until);assert.equal(h.c.getApiCooldown().status,status);
   }

@@ -1,6 +1,12 @@
 // pnpm preview:shots — starts the preview harness (dev/preview) and saves a
 // screenshot of every scene/state at all supported viewport sizes and UI sizes into
 // dev/preview/.shots (git-ignored). Dev-only: never run as part of a build.
+//
+// --concurrency=N   worker pool size (default: CPU count - 1)
+// --scenes=a,b,...  only run these scenes (see SCENES below for names)
+// --sizes=WxH,...   only run these viewport sizes (see SIZES below for names)
+// --interactions-only  skip the screenshot matrix, only run verifyInteractions
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import fs from 'node:fs';
@@ -30,10 +36,76 @@ const SCENES = [
   { name: 'history-draft', query: 'mode=history&scene=draft&draft=complete' }
 ];
 
+function argValue(name) {
+  const prefix = `--${name}=`;
+  const arg = process.argv.find(a => a.startsWith(prefix));
+  return arg ? arg.slice(prefix.length) : undefined;
+}
+
+function filterByName(all, requestedCsv, label) {
+  if (!requestedCsv) return all;
+  const requested = requestedCsv.split(',').map(s => s.trim()).filter(Boolean);
+  const byName = new Map(all.map(item => [item.name, item]));
+  const unknown = requested.filter(name => !byName.has(name));
+  if (unknown.length) {
+    throw new Error(`Unknown ${label}: ${unknown.join(', ')} (available: ${all.map(item => item.name).join(', ')})`);
+  }
+  return requested.map(name => byName.get(name));
+}
+
+const scenes = filterByName(SCENES, argValue('scenes'), 'scene');
+const sizes = filterByName(SIZES, argValue('sizes'), 'size');
+const concurrency = Math.max(1, Number(argValue('concurrency')) || Math.max(1, os.cpus().length - 1));
+
+let activeBrowser;
+let activeServer;
+
+async function shutdown(code) {
+  await Promise.allSettled([activeBrowser?.close(), activeServer?.close()]);
+  process.exit(code);
+}
+process.on('SIGINT', () => shutdown(130));
+process.on('SIGTERM', () => shutdown(143));
+
+async function newPage(browser) {
+  const page = await browser.newPage();
+  await page.route('https://**/*', route => route.abort());
+  return page;
+}
+
+async function runCase(page, baseUrl, { uiSize, scene, size }) {
+  await page.setViewportSize({ width: size.width, height: size.height });
+  await page.goto(`${baseUrl}/?${scene.query}&uiSize=${uiSize}`, { waitUntil: 'domcontentloaded' });
+  await page.locator('.app-header').waitFor();
+  await page.evaluate(() => document.fonts.ready);
+  if (scene.name.includes('draft')) {
+    for (const panel of await page.locator('.draft-team-panel').all()) {
+      const picks = panel.locator('.draft-pick-tile button');
+      if (await picks.count()) await picks.nth((await picks.count()) > 1 ? 1 : 0).click();
+    }
+  }
+  await page.waitForTimeout(50);
+  const geometry = await page.evaluate(checkGeometry);
+  if (scene.name === 'lobby' || scene.name === 'history-lobby') {
+    const heights = await page.locator('.player-row:not(.empty-player-row)').evaluateAll(
+      elements => elements.map(el => el.getBoundingClientRect().height)
+    );
+    // Same 1.1px tolerance as checkGeometry's own dimension checks
+    // (fractional `zoom` rounds each box's subpixels independently).
+    if (Math.max(...heights) - Math.min(...heights) > 1.1) {
+      geometry.failures.push(`lobby cards do not share one height at ${size.name} ${uiSize}: ${heights.join(', ')}`);
+    }
+  }
+  const fileName = `${scene.name}_${size.name}_${uiSize}.png`;
+  await page.screenshot({ path: path.join(outDir, fileName) });
+  return { scene: scene.name, size: size.name, uiSize, fileName, ...geometry };
+}
+
 async function main() {
   fs.mkdirSync(outDir, { recursive: true });
 
   const server = await createServer({ configFile: path.join(dirname, 'vite.config.ts'), root: dirname });
+  activeServer = server;
   await server.listen();
   const address = server.httpServer?.address();
   const port = typeof address === 'object' && address !== null ? address.port : undefined;
@@ -41,53 +113,49 @@ async function main() {
   const baseUrl = `http://localhost:${port}`;
 
   const browser = await chromium.launch({ channel: process.env.PREVIEW_BROWSER ?? 'chrome' });
-  const results = [];
+  activeBrowser = browser;
   try {
-    const page = await browser.newPage();
-    await page.route('https://**/*', route => route.abort());
     if (process.argv.includes('--interactions-only')) {
+      const page = await newPage(browser);
       await verifyInteractions(page, baseUrl);
       return;
     }
 
-    for (const uiSize of UI_SIZES) {
-      for (const scene of SCENES) {
-        for (const size of SIZES) {
-          await page.setViewportSize({ width: size.width, height: size.height });
-          await page.goto(`${baseUrl}/?${scene.query}&uiSize=${uiSize}`, { waitUntil: 'domcontentloaded' });
-          await page.locator('.app-header').waitFor();
-          await page.evaluate(() => document.fonts.ready);
-          if (scene.name.includes('draft')) {
-            for (const panel of await page.locator('.draft-team-panel').all()) {
-              const picks = panel.locator('.draft-pick-tile button');
-              if (await picks.count()) await picks.nth((await picks.count()) > 1 ? 1 : 0).click();
-            }
-          }
-          await page.waitForTimeout(50);
-          const geometry = await page.evaluate(checkGeometry);
-          if (scene.name === 'lobby' || scene.name === 'history-lobby') {
-            const heights = await page.locator('.player-row:not(.empty-player-row)').evaluateAll(
-              elements => elements.map(el => el.getBoundingClientRect().height)
-            );
-            // Same 1.1px tolerance as checkGeometry's own dimension checks
-            // (fractional `zoom` rounds each box's subpixels independently).
-            if (Math.max(...heights) - Math.min(...heights) > 1.1) {
-              geometry.failures.push(`lobby cards do not share one height at ${size.name} ${uiSize}: ${heights.join(', ')}`);
-            }
-          }
-          if (geometry.failures.length) console.log(geometry.failures.join('\n'));
-          results.push({ scene: scene.name, size: size.name, uiSize, ...geometry });
-          const fileName = `${scene.name}_${size.name}_${uiSize}.png`;
-          await page.screenshot({ path: path.join(outDir, fileName) });
-          console.log(`${geometry.failures.length ? 'FAIL' : 'PASS'} ${fileName}: ${geometry.failures.length} geometry failures`);
+    const cases = [];
+    for (const uiSize of UI_SIZES) for (const scene of scenes) for (const size of sizes) cases.push({ uiSize, scene, size });
+
+    const total = cases.length;
+    const workerCount = Math.min(concurrency, total);
+    console.log(`Running ${total} cases across ${workerCount} worker${workerCount === 1 ? '' : 's'}...`);
+
+    const results = [];
+    let completed = 0;
+    async function worker() {
+      const page = await newPage(browser);
+      try {
+        while (cases.length) {
+          const nextCase = cases.shift();
+          if (!nextCase) break;
+          const result = await runCase(page, baseUrl, nextCase);
+          results.push(result);
+          completed++;
+          console.log(`[${completed}/${total}] ${result.failures.length ? 'FAIL' : 'PASS'} ${result.fileName}: ${result.failures.length} geometry failures`);
+          if (result.failures.length) console.log(result.failures.join('\n'));
         }
+      } finally {
+        await page.close();
       }
     }
+
+    await Promise.all(Array.from({ length: workerCount }, () => worker()));
+
     fs.writeFileSync(path.join(outDir, 'geometry.json'), JSON.stringify(results, null, 2));
     const failures = results.filter(result => result.failures.length);
     console.log(`${results.length} cases, ${failures.length} failed cases`);
     if (failures.length) process.exitCode = 1;
-    await verifyInteractions(page, baseUrl);
+
+    const interactionsPage = await newPage(browser);
+    await verifyInteractions(interactionsPage, baseUrl);
   } finally {
     await browser.close();
     await server.close();
@@ -152,7 +220,9 @@ async function verifyInteractions(page, baseUrl) {
   console.log('PASS UI size initialization, resize stability, menu persistence, paging, point pluralization, and geometry negative control');
 }
 
-main().catch((error) => {
-  console.error(error);
-  process.exitCode = 1;
-});
+main()
+  .catch((error) => {
+    console.error(error);
+    process.exitCode = 1;
+  })
+  .finally(() => Promise.allSettled([activeBrowser?.close(), activeServer?.close()]));
