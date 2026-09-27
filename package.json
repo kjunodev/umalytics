@@ -7,6 +7,7 @@
     "dev": "pnpm --filter @umalytics/extension dev",
     "build": "pnpm --filter @umalytics/extension build",
     "build:all": "node scripts/build-all.mjs",
+    "package:release": "node scripts/package-release.mjs",
     "typecheck": "pnpm -r typecheck",
     "test": "node --disable-warning=ExperimentalWarning --test tests/*.test.mjs"
   },

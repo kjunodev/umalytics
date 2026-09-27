@@ -46,7 +46,7 @@ The release workflow (`.github/workflows/release.yml`) publishes automatically: 
 
 Firefox currently emits a data-collection declaration warning. Permanent/store distribution requires an accurate declaration and signing work; do not suppress the warning and describe the result as store-ready.
 
-For local candidate archives, run `pwsh -NoProfile -File scripts/package-candidate.ps1` after `pnpm build:all`. The script refuses existing output names, verifies every archive entry against its build file by SHA-256, and writes `SHA256SUMS.txt` under `downloads/<version>/<candidate>/`. It does not publish anything.
+For local candidate or release archives, run `pnpm package:release`. It reads `version` and `version_name` from `apps/extension/wxt.config.ts`, builds with `pnpm build:all`, and zips the Chromium and Firefox outputs to `downloads/<version>/<version_name>/umalytics-<browser>-<version_name>.zip`. It refuses existing output names, verifies every archive entry against its build folder by SHA-256, and writes `SHA256SUMS.txt` alongside the ZIPs. It does not publish anything.
 
 ## Manual checks
 
