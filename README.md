@@ -2,12 +2,12 @@
 
 UmaLytics opens a separate scouting window beside [Uma Drafter](https://drafter.uma.guide). See the players in team slots, their available ranked statistics, and the confirmed live draft.
 
-**0.4.1 — manual installation and updates.**
+**0.5.0 — manual installation and updates.**
 
 | Browser | Download |
 | --- | --- |
-| Chrome, Edge, Brave, Opera GX | [Chromium download](https://github.com/skimuic/UmaLytics/releases/tag/v0.4.1) |
-| Firefox / LibreWolf | [Firefox download](https://github.com/skimuic/UmaLytics/releases/tag/v0.4.1) — temporary installation |
+| Chrome, Edge, Brave, Opera GX | [Chromium download](https://github.com/skimuic/UmaLytics/releases/tag/v0.5.0) |
+| Firefox / LibreWolf | [Firefox download](https://github.com/skimuic/UmaLytics/releases/tag/v0.5.0) — temporary installation |
 
 [Install or update](docs/INSTALL.md) · [Changes](CHANGELOG.md) · [Privacy](PRIVACY.md) · [Report a bug](https://github.com/kjunodev/umalytics/issues/new?template=bug_report.md)
 
@@ -41,7 +41,7 @@ The extension contacts Uma Drafter's services with player identifiers. Scouting 
 
 This is a testing release. Cached data can appear quickly; uncached data depends on the upstream API. HTTP 429 pauses requests rather than bypassing the server's limits. Site changes can affect detection. A player whose room exposes no verified identity cannot be looked up reliably.
 
-Chromium behavior has been observed during a live ranked draft on the preceding candidate. The 0.4.1 changes have automated regression coverage; see [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for exact checks and limits. Firefox remains an unsigned temporary add-on, not a permanent store installation. Human team cards currently assume up to five slots per side; complete support for every custom mode is not claimed.
+Chromium behavior has been observed during a live ranked draft on the preceding candidate. The 0.5.0 changes have automated regression coverage; see [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for exact checks and limits. Firefox remains an unsigned temporary add-on, not a permanent store installation. Human team cards currently assume up to five slots per side; complete support for every custom mode is not claimed.
 
 ## Development and feedback
 
