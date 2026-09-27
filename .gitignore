@@ -16,3 +16,6 @@ release-repo/
 .pnpm-store/
 downloads/
 PATCH-NOTES-*.txt
+
+# Preview harness screenshots (pnpm preview:shots) — dev-only, never shipped.
+apps/extension/dev/preview/.shots/

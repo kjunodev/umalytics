@@ -7,11 +7,11 @@ export type {
   DraftUmaAction,
   DraftUmaActionKind
 } from './draft';
+export type { EsportsTeamIcon, EsportsTeamIconMap } from './esportsTeam';
 export type { MatchCode } from './match';
 export type {
   PlayerProfileStatsSummary,
   PlayerProfileSummary,
-  PlayerRecentFormSummary,
   PlayerRecentMatchSummary,
   PlayerStatsScope,
   PlayerTopUmaSummary

@@ -48,7 +48,29 @@ test('recorded completed match maps final picks, vetoes, maps, stable IDs and te
   assert.equal(result.draft.teams.team2.maps.find(item => item.status === 'vetoed').order, 6);
   assert.match(result.draft.tiebreakerMap.name, /Hanshin/);
   assert.equal(result.draft.currentTeam, undefined);
+  assert.equal(result.draft.rules.mapVetoes, 1, 'read from rules.map.bansPerTeam in the fixture');
   assert(result.roster.players.every(player => player.ratingSnapshot === undefined));
+});
+
+test('completed-match race fields populate structured chips for picks, vetoes, and tiebreaker', () => {
+  const draft = harness().parseHistoricalMatch(fixture, 'FX1A2B').draft;
+  const picked = draft.teams.team1.maps.find(map => map.mapId === 'kyoto-2000-turf-inner');
+  assert.deepEqual({ track: picked.track, distance: picked.distance, surface: picked.surface,
+    variant: picked.variant, direction: picked.direction, season: picked.season,
+    weather: picked.weather, ground: picked.ground },
+    { track: 'Kyoto', distance: 2000, surface: 'Turf', variant: 'Inner', direction: 'right',
+      season: 'Winter', weather: 'Snowy', ground: 'Soft' });
+  assert.match(picked.details, /Winter/);
+  const vetoed = draft.teams.team1.maps.find(map => map.status === 'vetoed');
+  assert.equal(vetoed.season, 'Spring');
+  assert.equal(vetoed.weather, 'Rainy');
+  assert.equal(vetoed.ground, 'Heavy');
+  assert.deepEqual({ track: draft.tiebreakerMap.track, distance: draft.tiebreakerMap.distance,
+    surface: draft.tiebreakerMap.surface, variant: draft.tiebreakerMap.variant,
+    direction: draft.tiebreakerMap.direction, season: draft.tiebreakerMap.season,
+    weather: draft.tiebreakerMap.weather, ground: draft.tiebreakerMap.ground },
+    { track: 'Hanshin', distance: 1800, surface: 'Turf', variant: 'Outer',
+      direction: 'right', season: 'Summer', weather: 'Cloudy', ground: 'Good' });
 });
 
 test('missing, wrong, or incomplete matches fail clearly; missing player IDs never infer identity', () => {
@@ -87,6 +109,7 @@ function service(globals = {}) {
   const calls = [];
   const h = harness({ BEST_UMA_SCORE_VERSION: 17, RECENT_HISTORY_VERSION: 6, PROFILE_CACHE_TTL_MS: 900000,
     getCachedPlayerProfiles: async () => ({}), rememberCachedPlayerProfiles: async () => {},
+    getSeasonLeaderboard: async () => ({ activeSeasonId: 'S1', entries: [{ rank: 1, userId: '100000000000000099', displayName: 'Leader', rating: 1700, rd: 50, wins: 12, losses: 8 }] }),
     getApiCooldown: () => undefined, fetchJson: async path => { calls.push(path); return fixture; },
     ...globals });
   load(h, 'explorerTypes'); load(h, 'explorerService');
@@ -97,6 +120,17 @@ test('lookup validates request size, IDs, page, and scope before fetching', () =
   const { h } = service();
   for (const bad of [{ kind:'profiles', scope:'allTime', players:[{discordId:'../admin'}] }, { kind:'profiles',scope:'both',players:[] }, {kind:'search',input:'Fixture Query',page:0}, {kind:'match',input:'x'.repeat(301)}]) assert.throws(() => h.validateExplorerRequest(bad));
   assert.equal(h.validateExplorerRequest({kind:'profiles',scope:'allTime',players:[{discordId:'100000000000000099',profileUrl:'https://evil.example'}]}).players[0].profileUrl, 'https://drafter.uma.guide/players/100000000000000099');
+  assert.equal(h.validateExplorerRequest({kind:'profiles',scope:'allTime',players:[]}).kind, 'profiles');
+  assert.equal(h.validateExplorerRequest({kind:'leaderboard'}).kind, 'leaderboard');
+});
+
+test('leaderboard request returns season rows without directory search or profile enrichment', async () => {
+  const { h, calls } = service();
+  const result = await h.executeExplorerRequest({ kind: 'leaderboard' }, new AbortController().signal, () => {});
+  assert.equal(result.entries[0].rank, 1);
+  assert.equal(result.entries[0].userId, '100000000000000099');
+  assert.equal(result.entries[0].wins, 12);
+  assert.deepEqual(calls, []);
 });
 
 test('history and exact ID lookup do not invoke live enrichment or write live storage', async () => {
@@ -118,6 +152,19 @@ test('fresh scope-specific archive hits avoid profile requests; partial/wrong sc
   cached.isPartial=true;
   await h.executeExplorerRequest({kind:'profiles',scope:'allTime',players:[{discordId:id}]},new AbortController().signal,()=>{});
   assert.equal(fetched,2);
+});
+
+test('a cached profile can reuse a fresh previously fetched scope after switching away', async () => {
+  const id = '100000000000000099'; let fetched = 0;
+  const now = Date.now();
+  const cached = { discordId: id, statsScope: 'allTime', fetchedAt: now,
+    scopeFetchedAt: { currentSeason: now, allTime: now }, bestUmaScoreVersion: 17, recentHistoryVersion: 6 };
+  const { h } = service({ getCachedPlayerProfiles: async () => ({ [id]: cached }),
+    fetchPlayerProfileSummaries: async () => { fetched++; return {}; } });
+  const result = await h.executeExplorerRequest({ kind: 'profiles', scope: 'currentSeason', players: [{ discordId: id }] },
+    new AbortController().signal, () => {});
+  assert.equal(result[id], cached);
+  assert.equal(fetched, 0);
 });
 
 test('cancelled lookup does not publish late profiles or save the result', async () => {

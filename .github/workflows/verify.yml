@@ -1,4 +1,4 @@
-name: Verify public build
+name: Verify build
 on:
   push:
     branches: [main]

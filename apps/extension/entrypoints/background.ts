@@ -1,15 +1,16 @@
 import { recordDiagnostic, getDiagnosticTrace } from '../runtime/diagnosticRecorder';
-import { hasCurrentHistoryState, mergeProfileScopes } from '../profiles/profileMerge';
+import { mergeProfileScopes } from '../profiles/profileMerge';
 import { registerExplorerService } from '../explorer/explorerService';
 import { normalizeRosterForDisplay } from '../room/rosterDisplay';
 import { browser } from 'wxt/browser';
-import type { PlayerProfileSummary, PrematchRoster } from '@umalytics/shared';
+import type { PlayerProfileSummary, PrematchPlayer, PrematchRoster } from '@umalytics/shared';
 import {
   isUmaLyticsMessage,
   type LobbyReconnectResult
 } from '../runtime/messaging';
 import {
   buildUnavailablePlayerSummary,
+  fetchPlayerAllTimeStats,
   fetchPlayerHistoryPage,
   fetchPlayerProfileSummaries,
   fetchPlayerProfileTitle,
@@ -26,6 +27,7 @@ import type { PlayerProfileLoadState } from '../profiles/profileTypes';
 import {
   BEST_UMA_SCORE_VERSION,
   MANUAL_PROFILE_REFRESH_COOLDOWN_MS,
+  NEWCOMER_MAX_ALL_TIME_MATCHES,
   PROFILE_CACHE_TTL_MS,
   RECENT_HISTORY_VERSION
 } from '../profiles/profileConstants';
@@ -36,6 +38,7 @@ import {
   setLatestPrematchRoster
 } from '../storage/rosterStorage';
 import { getLobbyLockState } from '../storage/lobbyLockStorage';
+import { queueTeamIconRefresh } from '../background/teamIcons';
 import {
   MAX_AUTOMATIC_RETRIES,
   buildProfileLoadStates,
@@ -53,6 +56,7 @@ import {
 } from '../background/profileStates';
 import {
   configureScoutWindow,
+  handleScoutWindowBoundsChanged,
   handleScoutWindowRemoved,
   openScoutWindow
 } from '../background/scoutWindow';
@@ -108,13 +112,21 @@ export default defineBackground(() => {
   });
   browser.action?.onClicked.addListener(() => {
     void openScoutWindow().catch((error) => console.warn('[UmaLytics] Cannot open scout:', error));
+    void queueTeamIconRefresh();
   });
 
   browser.windows?.onRemoved.addListener((windowId) => {
     handleScoutWindowRemoved(windowId);
   });
 
+  // Chrome-only (no Firefox equivalent): remembers the scout window's size
+  // and position as the user drags/resizes it, so the next open restores it.
+  browser.windows?.onBoundsChanged?.addListener((window) => {
+    handleScoutWindowBoundsChanged(window);
+  });
+
   void initialization.then(handleLobbyReconnectRequested).catch(reportEnrichmentError);
+  void initialization.then(() => queueTeamIconRefresh());
 
   browser.runtime.onInstalled.addListener(() => {
     void reconnectOpenDrafterTabs();
@@ -302,6 +314,7 @@ function enrichRosterProfiles(
   roster: PrematchRoster,
   options: EnrichmentOptions = {}
 ): Promise<void> {
+  void queueTeamIconRefresh();
   roster = normalizeRosterForDisplay(roster)!;
   // Membership controls fetching; team/name/phase changes only update the roster.
   const key = getEnrichmentKey(roster);
@@ -475,6 +488,13 @@ async function performRosterEnrichment(
 
     await publish();
     await rememberCachedPlayerProfiles(profilesByDiscordId);
+
+    if (scope === 'currentSeason') {
+      await fetchNewcomerAllTimeStats(roster.players, profilesByDiscordId, signal);
+      if (signal.aborted || runId !== enrichmentRunId) return;
+      await publish();
+      await rememberCachedPlayerProfiles(profilesByDiscordId);
+    }
   } catch (caught) {
     if (signal.aborted || runId !== enrichmentRunId) {
       return;
@@ -513,6 +533,36 @@ async function performRosterEnrichment(
   } else pendingRecovery = undefined;
   await persistProfileRecovery();
   await publish();
+}
+
+// Newcomer badge support: when showing current-season stats, a player under
+// the all-time newcomer threshold in-season needs their real all-time match
+// count too. Runs once cards have already published their season stats, at
+// the lowest request priority, and only for players who still need it.
+async function fetchNewcomerAllTimeStats(
+  players: PrematchPlayer[],
+  profilesByDiscordId: Record<string, PlayerProfileSummary>,
+  signal: AbortSignal
+): Promise<void> {
+  const candidates = players.filter((player) => {
+    const profile = profilesByDiscordId[player.discordId];
+    if (profile === undefined || profile.matches === null || profile.matches === undefined) return false;
+    if (profile.matches >= NEWCOMER_MAX_ALL_TIME_MATCHES) return false;
+    const allTimeMatches = profile.allTimeStats?.matches;
+    return allTimeMatches === null || allTimeMatches === undefined;
+  });
+  if (candidates.length === 0) return;
+
+  await Promise.all(candidates.map(async (player) => {
+    try {
+      const allTimeStats = await fetchPlayerAllTimeStats(player.discordId, signal);
+      if (signal.aborted) return;
+      const current = profilesByDiscordId[player.discordId];
+      if (current !== undefined) profilesByDiscordId[player.discordId] = { ...current, allTimeStats };
+    } catch {
+      // Leave allTimeStats unresolved; the newcomer badge just stays hidden until a later attempt succeeds.
+    }
+  }));
 }
 
 function getEnrichmentKey(roster: PrematchRoster): string {
@@ -591,7 +641,6 @@ function getFreshProfiles(
           profile.isPartial !== true &&
           now - (profile.scopeFetchedAt === undefined ? profile.fetchedAt : profile.scopeFetchedAt[selectedStatsScope] ?? 0) < PROFILE_CACHE_TTL_MS &&
           hasCurrentStatsShape(profile) &&
-          hasCurrentHistoryState(profile, selectedStatsScope) &&
           profile.bestUmaScoreVersion === BEST_UMA_SCORE_VERSION &&
           profile.recentHistoryVersion === RECENT_HISTORY_VERSION &&
           profile.currentSeasonStats?.recentHistoryVersion === RECENT_HISTORY_VERSION &&

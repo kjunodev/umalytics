@@ -1,6 +1,6 @@
 # Install or update UmaLytics 0.4.1
 
-Download the public Chromium or Firefox package linked from the README. Extract it into a permanent folder; manifest.json is at the root of the extracted package.
+Download the Chromium or Firefox package linked from the README. Extract it into a permanent folder; manifest.json is at the root of the extracted package.
 
 ## Chrome, Edge, Brave and Opera GX
 

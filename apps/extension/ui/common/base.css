@@ -1,0 +1,567 @@
+@import './tokens.css';
+@import '@fontsource/barlow-semi-condensed/latin-500.css';
+@import '@fontsource/barlow-semi-condensed/latin-600.css';
+@import '@fontsource/barlow-semi-condensed/latin-700.css';
+@import '@fontsource/ibm-plex-sans/latin-400.css';
+@import '@fontsource/ibm-plex-sans/latin-500.css';
+@import '@fontsource/ibm-plex-sans/latin-600.css';
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scrollbar-gutter: stable;
+  zoom: var(--ui-scale);
+}
+
+body {
+  margin: 0;
+  background: var(--bg-page);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+}
+
+a {
+  color: var(--text-link);
+}
+
+a:hover {
+  color: var(--text-link-hover);
+}
+
+button {
+  font-family: inherit;
+  color: inherit;
+}
+
+:root [hidden] {
+  display: none !important;
+}
+
+.team-list {
+  display: grid;
+  gap: 22px;
+  align-content: start;
+}
+
+.empty-state {
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface-2);
+  padding: 14px;
+}
+
+.empty-state h2 {
+  font-size: 15px;
+  margin: 0 0 6px;
+  color: var(--text-primary);
+}
+
+.empty-state p {
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.45;
+  margin: 0;
+}
+
+/*
+ * Player-card primitives shared by the lobby roster cards (ui/lobby) and the
+ * player detail scene (ui/player) — both render the same PlayerRow/StatCell
+ * building blocks, so their styles live here instead of one folder importing
+ * the other's CSS.
+ */
+.player-row {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  background: var(--bg-surface-2);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: var(--space-md);
+}
+
+.player-row:hover {
+  background: var(--bg-raised);
+  border-color: var(--border-emphasis);
+}
+
+/* Lets a card's chip tooltips (card-badges overflow:visible) draw over the
+   next row/card in the grid instead of being covered by it. */
+.player-row:hover,
+.player-row:focus-within {
+  z-index: 3;
+}
+
+.player-row.is-selected {
+  border-color: var(--accent-blue);
+  box-shadow: 0 0 0 1px var(--accent-blue) inset;
+}
+
+.player-row.party-accent-1 {
+  background:
+    linear-gradient(90deg, rgba(134, 224, 212, 0.16), transparent 48%),
+    var(--bg-surface-2);
+}
+
+.player-row.party-accent-2 {
+  background:
+    linear-gradient(90deg, rgba(201, 182, 255, 0.18), transparent 48%),
+    var(--bg-surface-2);
+}
+
+.empty-player-row {
+  opacity: 0.72;
+}
+
+.player-row > * {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.player-row .player-note {
+  overflow-wrap: anywhere;
+}
+
+.player-row .compact-scouting-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.player-row .compact-scouting-grid .stat-cell {
+  min-width: 0;
+}
+
+.player-row .compact-scouting-grid .stat-cell strong {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.player-meta {
+  align-content: start;
+  align-items: start;
+  color: var(--text-secondary);
+  display: grid;
+  font-size: 13px;
+  gap: 4px;
+  line-height: 1.2;
+  min-height: 62px;
+  overflow: visible;
+}
+
+.player-rank-line {
+  align-items: center;
+  color: var(--text-secondary);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: var(--font-step-sm);
+  gap: 4px;
+  min-height: 16px;
+}
+
+.player-badge-row {
+  align-content: start;
+  align-items: start;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2xs);
+  min-height: 44px;
+}
+
+.player-tag {
+  background: var(--bg-raised);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-pill);
+  color: var(--text-primary);
+  font-size: var(--font-step-md);
+  font-weight: 700;
+  line-height: 1.4;
+  padding: 3px 6px;
+  white-space: nowrap;
+}
+
+.notable-tag.rank {
+  background: var(--tone-rank-bg);
+  border-color: var(--accent-gold);
+  color: var(--accent-gold);
+}
+
+.notable-tag.scoring {
+  background: var(--tone-skill-bg);
+  border-color: var(--accent-blue);
+  color: var(--tone-skill-fg);
+}
+
+.notable-tag.private {
+  background: var(--border-default);
+  border-color: var(--border-strong);
+  color: var(--text-secondary);
+}
+
+.notable-tag.sample {
+  background: var(--status-live-bg);
+  border-color: var(--accent-green);
+  color: var(--accent-green-soft);
+}
+
+.notable-tag.style {
+  background: var(--tone-style-bg);
+  border-color: var(--accent-green);
+  color: var(--tone-style-fg);
+}
+
+.player-title {
+  color: var(--text-link);
+  font-size: var(--font-step-md);
+  font-weight: 700;
+  line-height: 1.2;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.identity-tag {
+  background: var(--bg-raised);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-pill);
+  color: var(--text-primary);
+  flex-shrink: 0;
+  font-size: var(--font-step-md);
+  font-weight: 700;
+  line-height: 1.4;
+  padding: 3px 6px;
+  white-space: nowrap;
+}
+
+.identity-tag.party-accent-1 {
+  background: var(--party-b-bg);
+  border-color: var(--accent-teal);
+  color: var(--party-b-fg);
+}
+
+.identity-tag.party-accent-2 {
+  background: var(--party-a-bg);
+  border-color: var(--accent-purple);
+  color: var(--party-a-fg);
+}
+
+.captain-crown {
+  flex-shrink: 0;
+  align-items: center;
+  background: #3b2a0b;
+  border: 1px solid var(--accent-gold);
+  border-radius: var(--radius-pill);
+  color: var(--accent-gold);
+  display: inline-flex;
+  height: 18px;
+  justify-content: center;
+  line-height: 0;
+  width: 18px;
+}
+
+.captain-crown svg {
+  display: block;
+  fill: currentColor;
+  height: 12px;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.7;
+  width: 12px;
+}
+
+/* Shared by the lobby card, the drawer header and the Players rows. The
+   tooltip itself carries no position; each call site anchors it to that
+   context's own row (see TeamIcon.tsx), the same pattern .chip-tooltip uses. */
+.team-icon {
+  background: var(--bg-raised);
+  border: 1px solid var(--border-subtle);
+  box-sizing: border-box;
+  padding: 2px;
+  border-radius: var(--radius-sm);
+  cursor: help;
+  display: inline-flex;
+  flex-shrink: 0;
+  height: var(--icon-team-logo);
+  position: static;
+  width: var(--icon-team-logo);
+}
+
+.team-icon img {
+  display: block;
+  height: 100%;
+  object-fit: contain;
+  width: 100%;
+}
+
+.team-icon:focus-visible {
+  outline: 2px solid var(--accent-blue);
+  outline-offset: 2px;
+}
+
+.team-icon-tooltip {
+  background: var(--bg-page);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  opacity: 0;
+  padding: 6px 10px;
+  pointer-events: none;
+  position: absolute;
+  transition: opacity 0.12s;
+  visibility: hidden;
+  white-space: nowrap;
+  z-index: 50;
+}
+
+.team-icon:hover .team-icon-tooltip,
+.team-icon:focus-visible .team-icon-tooltip {
+  opacity: 1;
+  visibility: visible;
+}
+
+.player-note {
+  color: var(--accent-gold);
+  font-size: 12px;
+  line-height: 1.3;
+  min-height: 14px;
+  margin: 0;
+}
+
+.player-note.empty {
+  display: none;
+}
+
+.scouting-grid {
+  display: grid;
+  gap: 5px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  min-width: 0;
+}
+
+.compact-scouting-grid {
+  gap: 4px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  width: 100%;
+}
+
+.compact-scouting-grid .stat-cell span {
+  font-size: 9px;
+}
+
+.compact-scouting-grid .stat-cell {
+  padding-top: 4px;
+  padding-bottom: 4px;
+  padding-left: 3px;
+  padding-right: 3px;
+}
+
+.compact-scouting-grid .stat-cell strong {
+  font-size: var(--font-step-sm);
+  overflow: visible;
+  text-overflow: clip;
+}
+
+.stat-cell {
+  background: var(--bg-inset);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  display: grid;
+  gap: var(--space-3xs);
+  min-height: 38px;
+  min-width: 0;
+  padding: var(--space-xs) var(--space-2xs);
+  text-align: center;
+}
+
+.stat-cell span {
+  color: var(--text-secondary);
+  font-size: var(--font-step-xs);
+  font-weight: 800;
+  letter-spacing: 0;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+  text-transform: uppercase;
+  white-space: normal;
+}
+
+.stat-cell strong {
+  color: var(--text-primary);
+  font-size: var(--font-step-md);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.4;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: nowrap;
+}
+
+.record-stat-cell {
+  min-width: 68px;
+}
+
+.compact-scouting-grid .record-stat-cell {
+  min-width: 0;
+}
+
+.profile-data-status {
+  align-items: center;
+  background: var(--bg-inset);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  display: flex;
+  font-size: var(--font-step-sm);
+  font-weight: 700;
+  line-height: 1.25;
+  margin-top: 2px;
+  min-height: 25px;
+  padding: 5px 7px;
+}
+
+.profile-data-status.fresh {
+  background: var(--status-live-bg);
+  border-color: var(--accent-green);
+  color: var(--accent-green-soft);
+}
+
+.profile-data-status.loading {
+  background: var(--tone-skill-bg);
+  border-color: var(--accent-blue);
+  color: var(--accent-blue-soft);
+}
+
+.profile-data-status.warning {
+  background: var(--tone-rank-bg);
+  border-color: var(--accent-gold);
+  color: var(--accent-gold);
+}
+
+.profile-data-status.muted {
+  background: var(--bg-inset);
+}
+
+/*
+ * Uma-list primitives for lobby cards.
+ */
+
+.top-umas {
+  border-top: 1px solid var(--border-default);
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: 5px;
+  min-height: 0;
+  padding-top: 5px;
+}
+
+.top-umas p {
+  color: var(--text-secondary);
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0;
+  line-height: 1.4;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.top-umas-rows {
+  display: grid;
+  flex: none;
+  gap: var(--space-2xs);
+  grid-template-rows: repeat(3, 40px);
+  list-style: none;
+  margin: 0;
+  min-height: 0;
+  padding: 0;
+}
+
+/* Reserves the same footprint as .top-umas-rows (3 rows + 2 gaps) so a card
+   with no Uma data is the same height as one with entries. */
+.top-umas-empty {
+  align-items: center;
+  display: flex;
+  height: calc(3 * 40px + 2 * var(--space-2xs));
+}
+
+.top-umas-rows li {
+  align-content: center;
+  align-items: center;
+  display: grid;
+  column-gap: var(--space-sm);
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  min-height: 0;
+  min-width: 0;
+}
+
+.top-umas .uma-meta {
+  justify-self: start;
+  text-align: left;
+}
+
+.top-umas-rows .uma-name {
+  font-size: 12px;
+}
+
+.top-umas-rows .uma-meta {
+  font-size: 10px;
+  white-space: normal;
+}
+
+.best-uma-portrait {
+  align-items: center;
+  aspect-ratio: 1;
+  background: var(--bg-inset);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  display: flex;
+  flex-shrink: 0;
+  justify-content: center;
+  overflow: hidden;
+  width: 36px;
+  height: 36px;
+}
+
+.best-uma-portrait img { display: block; height: 100%; object-fit: cover; width: 100%; }
+
+.top-umas-rows .best-uma-portrait {
+  border-radius: var(--radius-md);
+  grid-row: 1 / 3;
+  width: 36px;
+  height: 36px;
+}
+
+.uma-name {
+  color: var(--text-primary);
+  font-size: var(--font-step-md);
+  font-weight: 700;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.uma-meta {
+  color: var(--text-secondary);
+  font-size: var(--font-step-sm);
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.section-message {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.uma-resolution-note {
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.25;
+  margin: -1px 0 0;
+}

@@ -3,30 +3,37 @@ import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import { loadModuleTS, loadFunction, parseTsxModule } from './support/harness.mjs';
 
-const playerDetailSyntax = parseTsxModule('uiPlayerDetailScene');
+const playerDisplaySyntax = parseTsxModule('uiPlayerProfileDisplay');
+const playerDrawerSyntax = parseTsxModule('uiPlayerDrawer');
 const teamSectionSyntax = parseTsxModule('uiLobbyTeamSection');
-const recentMatchesSyntax = parseTsxModule('uiPlayerRecentMatchesList');
+const recentMatchFormatSyntax = parseTsxModule('uiPlayerRecentMatchFormat');
 const scoutDataSyntax = parseTsxModule('uiScoutData');
-function harness(privateBuild = false) {
-  const c = vm.createContext({ console, __UMALYTICS_PRIVATE_PROFILE_DATA__: privateBuild,
+function harness() {
+  const c = vm.createContext({ console,
     useState: initial => [initial, () => {}], useRef: initial => ({ current: initial }), useEffect: () => {},
     element: (type, props, ...children) => ({ type, props, children }),
     getLookupDiscordId: p => p.discordId, getPlayerNote: () => undefined, getStatsMessage: () => undefined,
     getNotableBadges: () => [], getPlayerPartyVisual: () => undefined, getTeamPartyVisuals: () => ({}),
     formatRank: () => '', formatRecord: () => '', formatPercent: () => '', formatDecimal: () => '', formatNumber: () => '',
     getRecentResultTone: () => 'win', formatRecentResult: () => 'W',
-    ProfileDataStatus: 'Status', StatCell: 'Stat', TopUmasList: 'Umas', UmaResolutionNote: 'Note',
-    ScoutingReport: 'Report', BestUmasList: 'Best', filterSnapshotForBuild: x => x,
+    ProfileDataStatus: 'Status', StatCell: 'Stat', BestUmaPortrait: 'Portrait', UmaImage: 'Image',
+    getFallbackUmaImageUrl: () => undefined,
+    getPagerSlots: (page, total) => Array.from({length:total},(_,i)=>i+1),
+    umaSortValue: () => 0, formatUmaColumnValue: () => '-',
+    HISTORY_PAGE_SIZE: 5, HISTORY_API_PAGE_SIZE: 20, UMA_TABLE_ROWS: 5, PAGER_SLOT_COUNT: 7, MIN_UMA_GAMES: 3,
+    UMA_SORT_COLUMNS: [{key:'matches',label:'GP'},{key:'winRate',label:'Win'},{key:'pointsPerGame',label:'PPG'},{key:'performanceScore',label:'Score'}],
+    React: { Fragment: 'Fragment' },
     filterProfileStatesForDisplay: x => x, getLoadingDiscordIdsForDisplay: () => [],
   });
   for (const name of ['profileConstants', 'profileMerge', 'profileCache', 'explorerState']) {
     loadModuleTS(c, name);
   }
-  loadFunction(c, playerDetailSyntax, 'getDisplayedProfileStats');
-  loadFunction(c, playerDetailSyntax, 'withDetailHistory');
-  loadFunction(c, playerDetailSyntax, 'PlayerDetailScene');
+  loadFunction(c, playerDisplaySyntax, 'getDisplayedProfileStats');
+  loadFunction(c, playerDisplaySyntax, 'withDetailHistory');
+  loadFunction(c, playerDrawerSyntax, 'apiPageForPagerPage');
+  loadFunction(c, playerDrawerSyntax, 'apiPageRowOffset');
+  loadFunction(c, playerDrawerSyntax, 'PlayerDrawer');
   loadFunction(c, teamSectionSyntax, 'getCardProfile');
-  loadFunction(c, recentMatchesSyntax, 'RecentMatchesList');
   loadFunction(c, scoutDataSyntax, 'isDisplayableStoredProfile');
   loadFunction(c, scoutDataSyntax, 'normalizeProfileSnapshotForDisplay');
   return c;
@@ -44,42 +51,50 @@ function find(node, predicate) {
   if (predicate(node)) return node;
   for (const child of (node.children ?? []).flat(Infinity)) { const result = find(child,predicate); if(result)return result; }
 }
+function findAll(node, predicate, results = []) {
+  if (!node || typeof node !== 'object') return results;
+  if (predicate(node)) results.push(node);
+  for (const child of (node.children ?? []).flat(Infinity)) findAll(child, predicate, results);
+  return results;
+}
 function renderedRecent(c,p,scope) {
   const normalized=c.normalizeProfileSnapshotForDisplay({profiles:{[p.discordId]:p},loadingDiscordIds:[],updatedAt:Date.now()}).profiles[p.discordId];
-  const details=c.PlayerDetailScene({player:{discordId:p.discordId,displayName:'Fixture'},profile:normalized,statsScope:scope,isProfileLoading:false,now:Date.now(),onBack(){}});
-  const recent=find(details,n=>n.type===c.RecentMatchesList);
-  assert(recent, 'Details contains the real RecentMatchesList');
-  return c.RecentMatchesList(recent.props);
+  return c.PlayerDrawer({player:{discordId:p.discordId,displayName:'Fixture'},profile:normalized,
+    context:{statsScope:scope,isProfileLoading:false,now:Date.now()},onClose(){}});
 }
 
-test('cached history does not show on public details before its on-demand page opens',()=>{
-  const c=harness(false), p=profile();
+function drawerRuntime(c, p, scope = 'allTime') {
+  const states = [], refs = [], effects = [];
+  let stateIndex = 0, refIndex = 0, effectIndex = 0, nextId = 0;
+  c.crypto = { randomUUID: () => `fixture-request-${++nextId}` };
+  c.useState = initial => {
+    const index = stateIndex++;
+    if (states[index] === undefined) states[index] = [initial, update => {
+      states[index][0] = typeof update === 'function' ? update(states[index][0]) : update;
+    }];
+    return states[index];
+  };
+  c.useRef = initial => {
+    const index = refIndex++;
+    if (refs[index] === undefined) refs[index] = { current: initial };
+    return refs[index];
+  };
+  c.useEffect = callback => { effects[effectIndex++] = callback; };
+  const render = () => {
+    stateIndex = refIndex = effectIndex = 0;
+    return c.PlayerDrawer({player:{discordId:p.discordId,displayName:'Fixture'},profile:p,
+      context:{statsScope:scope,isProfileLoading:false,now:Date.now()},onClose(){}});
+  };
+  return { render, effects };
+}
+
+test('cached history does not show in details before its on-demand page opens',()=>{
+  const c=harness(), p=profile();
   const rendered=renderedRecent(c,p,'allTime');
   assert(!find(rendered,n=>n.type==='a' && n.props.href.endsWith('/FIX001')));
 });
-test('public cards discard history fields from an older cached batch profile',()=>{
-  const c=harness(), p={...profile(),recentForm:{matches:5,scoringRate:1},historyTotal:25,historySummary:{wins:9}};
-  p.allTimeStats={...p.allTimeStats,recentForm:p.recentForm,historyTotal:25,historySummary:p.historySummary};
-  const card=c.getCardProfile(p,'allTime',false);
-  assert.equal(card.recentMatches.length,0);
-  assert.equal(card.recentForm,undefined);
-  assert.equal(card.historyTotal,undefined);
-  assert.equal(card.historySummary,undefined);
-  assert.equal(c.getCardProfile(p,'allTime',true).recentMatches.length,1);
-});
-test('scope changes retain history through both the cache and player lookup, including private reconstruction',()=>{
-  for (const privateBuild of [false,true]) {
-    const c=harness(privateBuild), old={...profile(),statsPrivate:privateBuild,historyDerived:privateBuild};
-    const next={...profile('currentSeason',[{...entry,matchId:'NEW001'}]),statsPrivate:privateBuild,historyDerived:privateBuild};
-    for (const merged of [c.mergeProfileCache({[old.discordId]:old},{[old.discordId]:next},Date.now())[old.discordId],c.mergeExplorerProfiles({[old.discordId]:old},{[old.discordId]:next})[old.discordId]]) {
-      assert.equal(c.getDisplayedProfileStats(merged,'allTime').recentMatches[0].matchId,'FIX001');
-      assert.equal(c.getDisplayedProfileStats(merged,'currentSeason').recentMatches[0].matchId,'NEW001');
-      assert(!find(renderedRecent(c,merged,'allTime'),n=>n.type==='a'));
-    }
-  }
-});
 test('partial and failed history updates preserve loaded history, but completed empty responses clear it',()=>{
-  const c=harness(true), old=profile();
+  const c=harness(), old=profile();
   for (const status of ['loading','unavailable']) {
     const next=profile('allTime',[]); next.allTimeStats.recentHistoryStatus=status;
     next.isPartial=status==='loading';
@@ -95,23 +110,32 @@ test('partial and failed history updates preserve loaded history, but completed 
 test('privacy denial clears history and unavailable history never claims a genuinely empty response',()=>{
   const old=profile();
   const denied={...profile('allTime',[]),statsPrivate:true,recentHistoryStatus:'private'}; denied.allTimeStats.recentHistoryStatus='private';
-  for (const privateBuild of [false,true]) {
-    const c=harness(privateBuild), result=c.mergeProfileScopes(old,denied);
-    assert.equal(result.recentMatches.length,0);
-    assert.equal(c.recentHistoryEmptyMessage(result),'Match history is private.');
-  }
-  const c=harness(), unavailable=profile('allTime',[]);unavailable.recentHistoryStatus='unavailable';
+  const c=harness(), result=c.mergeProfileScopes(old,denied);
+  assert.equal(result.recentMatches.length,0);
+  assert.equal(c.recentHistoryEmptyMessage(result),'Match history is private.');
+  const unavailable=profile('allTime',[]);unavailable.recentHistoryStatus='unavailable';
   assert.match(c.recentHistoryEmptyMessage(unavailable),/unavailable/);
 });
-test('new season and another player cannot inherit previous scoped history; loaded matches render',()=>{
+test('new season and another player cannot inherit previous scoped history; loaded matches render',async()=>{
   const c=harness(), old=profile('currentSeason');
   const next={...profile(),activeSeasonId:'S2'};
   assert.equal(c.getDisplayedProfileStats(c.mergeProfileScopes(old,next),'currentSeason').recentMatches.length,0);
   const other={...profile('currentSeason',[]),discordId:'987654321098765432'};
   assert.equal(c.mergeProfileScopes(old,other).recentMatches.length,0);
   const many=profile('allTime',Array.from({length:8},(_,i)=>({...entry,matchId:`FIX00${i}`})));
-  const list=find(c.RecentMatchesList({recentMatches:many.recentMatches,playerName:'Fixture',total:8}),n=>n.type==='ol');
-  assert.equal(list.children.flat().length,8);
+  const runtime=drawerRuntime(c,many);
+  c.sendPlayerHistoryPageRequest=async(_,__,page)=>({page,total:8,matches:many.recentMatches.slice((page-1)*20,page*20)});
+  c.cancelPlayerHistoryPageRequest=async()=>{};
+  c.sendPlayerProfileRequest=async()=>({title:null});
+  c.cancelPlayerProfileRequest=async()=>{};
+  runtime.render();
+  runtime.effects[0]();
+  await new Promise(resolve=>setImmediate(resolve));
+  const firstPage=runtime.render();
+  assert.equal(findAll(firstPage,node=>node.props?.className==='drawer-history-row').length,5);
+  find(firstPage,node=>node.props?.['aria-label']==='Page 2').props.onClick();
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(findAll(runtime.render(),node=>node.props?.className==='drawer-history-row').length,3);
 });
 
 test('an early partial response awaiting season metadata cannot invalidate cached season history',()=>{
@@ -123,7 +147,7 @@ test('an early partial response awaiting season metadata cannot invalidate cache
 });
 
 test('history privacy denial also invalidates cached history in the unrequested scope',()=>{
-  const c=harness(true), old=profile('currentSeason');
+  const c=harness(), old=profile('currentSeason');
   const next=profile('allTime',[]); next.allTimeStats.recentHistoryStatus='private'; next.recentHistoryStatus='private'; next.statsPrivate=true;
   const result=c.mergeProfileScopes(old,next);
   assert.equal(c.getDisplayedProfileStats(result,'currentSeason').recentMatches.length,0);
@@ -131,99 +155,165 @@ test('history privacy denial also invalidates cached history in the unrequested 
   assert.equal(c.mergeProfileCache({[old.discordId]:old},{[old.discordId]:next},Date.now())[old.discordId].currentSeasonStats.recentMatches.length,0);
 });
 
-test('history transport status takes precedence over stats privacy while reconstructing a private profile',()=>{
-  const c=harness(true);
+test('history transport status takes precedence over hidden stats',()=>{
+  const c=harness();
   for (const [status,message] of [['loading','Loading recent match history.'],['unavailable','Recent match history is unavailable for this scope.'],['loaded','No recent match history found.'],['private','Match history is private.']]) {
-    assert.equal(c.recentHistoryEmptyMessage({...profile('allTime',[]),statsPrivate:true,historyDerived:false,recentHistoryStatus:status}),message);
+    assert.equal(c.recentHistoryEmptyMessage({...profile('allTime',[]),statsPrivate:true,recentHistoryStatus:status}),message);
   }
   assert.equal(c.recentHistoryEmptyMessage(c.getDisplayedProfileStats(profile(),'currentSeason')),'Recent match history is unavailable for this scope.');
 });
 
-test('legacy team caches stay displayable but must refresh missing history state once',()=>{
-  const old=profile();delete old.allTimeStats.recentHistoryStatus;
-  const c=harness(true);
-  assert.equal(c.hasCurrentHistoryState(old,'allTime'),false);
-  assert.equal(c.getDisplayedProfileStats(old,'allTime').recentMatches.length,1);
-  assert.equal(c.hasCurrentHistoryState(profile(),'allTime'),true);
-  assert.equal(harness(false).hasCurrentHistoryState(old,'allTime'),true);
-});
 
-test('opening details requests page one, Load more requests page two, and closing cancels pending work',async()=>{
+test('opening drawer requests page one, pager pages 2-4 reuse it, page 5 requests API page two, and closing cancels pending work',async()=>{
   const c=harness();
-  let states=[], refs=[], effects=[], stateIdx=0, refIdx=0, effectIdx=0, nextId=0;
   const requests=[], cancelled=[], profileRequests=[], profileCancelled=[];
   const badgeProfiles=[];
   c.getNotableBadges=value=>{badgeProfiles.push(value);return [];};
-  c.crypto={randomUUID:()=>`fixture-request-${++nextId}`};
-  c.useState=initial=>{
-    const i=stateIdx++;
-    if(states[i]===undefined) states[i]=[initial,update=>{states[i][0]=typeof update==='function'?update(states[i][0]):update;}];
-    return states[i];
-  };
-  c.useRef=initial=>{
-    const i=refIdx++;
-    if(refs[i]===undefined) refs[i]={current:initial};
-    return refs[i];
-  };
-  c.useEffect=callback=>{effects[effectIdx++]=callback;};
+  const page1Matches=Array.from({length:20},(_,i)=>({...entry,matchId:`P1-${i+1}`}));
   c.sendPlayerHistoryPageRequest=(id,scope,page,requestId)=>{
     requests.push({id,scope,page,requestId});
-    return page===1 ? Promise.resolve({page,total:21,matches:[entry],summary:{wins:1}}) : new Promise(()=>{});
+    return page===1 ? Promise.resolve({page,total:21,matches:page1Matches,summary:{wins:1}}) : new Promise(()=>{});
   };
   c.cancelPlayerHistoryPageRequest=async requestId=>{cancelled.push(requestId);};
   c.sendPlayerProfileRequest=(id,requestId)=>{profileRequests.push({id,requestId});return new Promise(()=>{});};
   c.cancelPlayerProfileRequest=async requestId=>{profileCancelled.push(requestId);};
-  const p=profile(), player={discordId:p.discordId,displayName:'Fixture'};
-  const render=()=>{stateIdx=0;refIdx=0;effectIdx=0;return c.PlayerDetailScene({player,profile:p,statsScope:'allTime',isProfileLoading:false,now:Date.now(),onBack(){}});};
-  render();
-  assert.equal(badgeProfiles.at(-1).recentForm,undefined);
-  const closeHistory=effects[0]();
-  const closeProfile=effects[1]();
+  const p=profile();
+  const runtime=drawerRuntime(c,p);
+  runtime.render();
+  const closeHistory=runtime.effects[0]();
+  const closeProfile=runtime.effects[1]();
   await new Promise(resolve=>setImmediate(resolve));
-  const recent=find(render(),node=>node.type===c.RecentMatchesList);
+  const rendered=runtime.render();
   assert.equal(requests[0].page,1);
-  assert.equal(recent.props.recentMatches.length,1);
-  assert.equal(badgeProfiles.at(-1).recentForm.matches,1);
+  assert.equal(findAll(rendered,node=>node.props?.className==='drawer-history-row').length,5);
+  assert(find(rendered,node=>node.type==='a' && node.props.href.endsWith('/P1-1')));
   assert.equal(badgeProfiles.at(-1).historySummary.wins,1);
-  assert.equal(profileRequests.length,1,'opening details requests the profile once, alongside the first history page');
+  assert.equal(profileRequests.length,1,'opening drawer requests the profile once, alongside the first history page');
   assert.equal(profileRequests[0].id,p.discordId);
-  const detail=c.withDetailHistory(p,[entry],21,{wins:1});
-  assert.equal(detail.recentMatches[0].matchId,'FIX001');
-  assert.equal(detail.recentForm.matches,1);
+  const detail=c.withDetailHistory(p,page1Matches,21,{wins:1});
+  assert.equal(detail.recentMatches[0].matchId,'P1-1');
   assert.equal(detail.historySummary.wins,1);
   assert.equal(detail.matches,p.matches);
-  recent.props.onLoadMore();
-  assert.equal(requests[1].page,2);
+
+  for (const pagerPage of [2,3,4]) {
+    find(runtime.render(),node=>node.props?.['aria-label']===`Page ${pagerPage}`).props.onClick();
+  }
+  assert.equal(requests.length,1,'pager pages 2-4 stay within the cached API page 1 response and request nothing new');
+  const page4Rendered=runtime.render();
+  assert.equal(findAll(page4Rendered,node=>node.props?.className==='drawer-history-row').length,5);
+  assert(find(page4Rendered,node=>node.type==='a' && node.props.href.endsWith('/P1-16')));
+  assert(find(page4Rendered,node=>node.type==='a' && node.props.href.endsWith('/P1-20')));
+
+  find(runtime.render(),node=>node.props?.['aria-label']==='Page 5').props.onClick();
+  assert.equal(requests[1].page,2,'page 5 crosses into API page two');
   closeHistory();
   assert.deepEqual(cancelled,[requests[1].requestId]);
   closeProfile();
   assert.deepEqual(profileCancelled,[profileRequests[0].requestId]);
 });
 
+test('exactly 5 rows render from a 20-row API response, page 4 shows matches 16-20, and page 5 fetches API page two for matches 21-25',async()=>{
+  const c=harness();
+  const page1Matches=Array.from({length:20},(_,i)=>({...entry,matchId:`M${String(i+1).padStart(2,'0')}`}));
+  const page2Matches=Array.from({length:5},(_,i)=>({...entry,matchId:`M${String(i+21).padStart(2,'0')}`}));
+  const requestedApiPages=[];
+  c.sendPlayerHistoryPageRequest=(id,scope,page)=>{
+    requestedApiPages.push(page);
+    if (page===1) return Promise.resolve({page,total:25,matches:page1Matches});
+    if (page===2) return Promise.resolve({page,total:25,matches:page2Matches});
+    return new Promise(()=>{});
+  };
+  c.cancelPlayerHistoryPageRequest=async()=>{};
+  c.sendPlayerProfileRequest=()=>new Promise(()=>{});
+  c.cancelPlayerProfileRequest=async()=>{};
+  const runtime=drawerRuntime(c,profile());
+  runtime.render();
+  runtime.effects[0]();
+  await new Promise(resolve=>setImmediate(resolve));
+
+  const page1=runtime.render();
+  assert.equal(findAll(page1,node=>node.props?.className==='drawer-history-row').length,5);
+  assert(find(page1,node=>node.type==='a' && node.props.href.endsWith('/M01')));
+  assert(find(page1,node=>node.type==='a' && node.props.href.endsWith('/M05')));
+
+  find(page1,node=>node.props?.['aria-label']==='Page 4').props.onClick();
+  await new Promise(resolve=>setImmediate(resolve));
+  const page4=runtime.render();
+  assert.equal(findAll(page4,node=>node.props?.className==='drawer-history-row').length,5);
+  assert(find(page4,node=>node.type==='a' && node.props.href.endsWith('/M16')));
+  assert(find(page4,node=>node.type==='a' && node.props.href.endsWith('/M20')));
+  assert.deepEqual(requestedApiPages,[1],'page 4 stays within the cached API page 1 response');
+
+  find(page4,node=>node.props?.['aria-label']==='Page 5').props.onClick();
+  await new Promise(resolve=>setImmediate(resolve));
+  const page5=runtime.render();
+  assert.equal(findAll(page5,node=>node.props?.className==='drawer-history-row').length,5);
+  assert(find(page5,node=>node.type==='a' && node.props.href.endsWith('/M21')));
+  assert(find(page5,node=>node.type==='a' && node.props.href.endsWith('/M25')));
+  assert.deepEqual(requestedApiPages,[1,2],'page 5 crosses into API page two and fetches it once');
+});
+
 test('a title already present on the profile summary is used without a profile request',async()=>{
   const c=harness();
-  let states=[], refs=[], effects=[], stateIdx=0, refIdx=0, effectIdx=0;
   const profileRequests=[];
-  c.useState=initial=>{
-    const i=stateIdx++;
-    if(states[i]===undefined) states[i]=[initial,update=>{states[i][0]=typeof update==='function'?update(states[i][0]):update;}];
-    return states[i];
-  };
-  c.useRef=initial=>{
-    const i=refIdx++;
-    if(refs[i]===undefined) refs[i]={current:initial};
-    return refs[i];
-  };
-  c.useEffect=callback=>{effects[effectIdx++]=callback;};
   c.sendPlayerHistoryPageRequest=()=>new Promise(()=>{});
   c.cancelPlayerHistoryPageRequest=async()=>{};
   c.sendPlayerProfileRequest=(id,requestId)=>{profileRequests.push({id,requestId});return new Promise(()=>{});};
   c.cancelPlayerProfileRequest=async()=>{};
-  const p={...profile(),title:'Fixture Title'}, player={discordId:p.discordId,displayName:'Fixture'};
-  const render=()=>{stateIdx=0;refIdx=0;effectIdx=0;return c.PlayerDetailScene({player,profile:p,statsScope:'allTime',isProfileLoading:false,now:Date.now(),onBack(){}});};
-  const details=render();
-  effects[1]();
+  const p={...profile(),title:'Fixture Title'};
+  const runtime=drawerRuntime(c,p);
+  const details=runtime.render();
+  runtime.effects[1]();
   assert.equal(profileRequests.length,0);
   const title=find(details,node=>node.props?.className==='player-title');
   assert.equal(title.children[0],'Fixture Title');
+});
+
+
+
+test('scope changes retain separate history and a new season cannot inherit the old season', () => {
+  const c = harness();
+  const old = profile('currentSeason');
+  const incoming = profile('allTime', [{ ...entry, matchId: 'NEW001' }]);
+  const merged = c.mergeProfileScopes(old, incoming);
+  assert.equal(c.getDisplayedProfileStats(merged, 'currentSeason').recentMatches[0].matchId, 'FIX001');
+  assert.equal(c.getDisplayedProfileStats(merged, 'allTime').recentMatches[0].matchId, 'NEW001');
+  const nextSeason = c.mergeProfileScopes(old, { ...incoming, activeSeasonId: 'S2' });
+  assert.equal(c.getDisplayedProfileStats(nextSeason, 'currentSeason').recentMatches.length, 0);
+});
+
+test('partial history updates preserve loaded rows; completed empty responses clear them', () => {
+  const c = harness(), old = profile();
+  for (const status of ['loading', 'unavailable']) {
+    const next = profile('allTime', []);
+    next.allTimeStats.recentHistoryStatus = status;
+    next.isPartial = status === 'loading';
+    assert.equal(c.mergeProfileScopes(old, next).allTimeStats.recentMatches.length, 1);
+  }
+  assert.equal(c.mergeProfileScopes(old, profile('allTime', [])).recentMatches.length, 0);
+});
+
+test('privacy denial invalidates cached history in both scopes', () => {
+  const c = harness(), old = profile('currentSeason');
+  const denied = profile('allTime', []);
+  denied.statsPrivate = true;
+  denied.recentHistoryStatus = 'private';
+  denied.allTimeStats.recentHistoryStatus = 'private';
+  const result = c.mergeProfileScopes(old, denied);
+  assert.equal(result.recentMatches.length, 0);
+  assert.equal(c.getDisplayedProfileStats(result, 'currentSeason').recentMatches.length, 0);
+});
+
+
+
+
+test('unfetched drawer uses the top status line without repeating the message in its footer', () => {
+  const c = harness();
+  loadFunction(c, playerDisplaySyntax, 'getProfileDataStatus');
+  loadFunction(c, playerDisplaySyntax, 'getPlayerNote');
+  assert.equal(c.getProfileDataStatus('123456789012345678', undefined, false, Date.now()).label,
+    'Profile data has not loaded yet.');
+  const tree = c.PlayerDrawer({ player: { discordId: '123456789012345678', displayName: 'Fixture' },
+    profile: undefined, context: { statsScope: 'allTime', isProfileLoading: false, now: Date.now() }, onClose() {} });
+  assert(!find(tree, node => node.props?.className === 'player-note' && node.children.includes('Profile data has not loaded yet.')));
 });

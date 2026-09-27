@@ -3,10 +3,8 @@ import { browser } from 'wxt/browser';
 import type { PlayerProfileSummary } from '@umalytics/shared';
 import type { PlayerProfileSummariesSnapshot } from '../profiles/profileTypes';
 
-export const PLAYER_PROFILE_SUMMARIES_STORAGE_KEY = 'playerProfileSummaries';
-declare const __UMALYTICS_PRIVATE_PROFILE_DATA__: boolean;
-const BUILD_MODE = __UMALYTICS_PRIVATE_PROFILE_DATA__ ? 'private' : 'public';
-const PROFILE_ARCHIVE_KEY = 'profileArchiveV1-' + BUILD_MODE;
+export const PLAYER_PROFILE_SUMMARIES_STORAGE_KEY = 'playerProfileSummariesV2';
+const PROFILE_ARCHIVE_KEY = 'profileArchiveV2';
 let profileArchive: Record<string, PlayerProfileSummary> | undefined;
 let archiveLoad: Promise<Record<string, PlayerProfileSummary>> | undefined;
 let archiveWrites = Promise.resolve();
@@ -42,24 +40,13 @@ export async function getPlayerProfileSummaries(): Promise<
     PLAYER_PROFILE_SUMMARIES_STORAGE_KEY
   )) as PlayerProfileSummariesStorage;
 
-  return filterSnapshotForBuild(values[PLAYER_PROFILE_SUMMARIES_STORAGE_KEY]);
+  return values[PLAYER_PROFILE_SUMMARIES_STORAGE_KEY];
 }
 
 export async function setPlayerProfileSummaries(
   snapshot: PlayerProfileSummariesSnapshot
 ): Promise<void> {
   await browser.storage.local.set({
-    [PLAYER_PROFILE_SUMMARIES_STORAGE_KEY]: { ...snapshot, buildMode: BUILD_MODE }
+    [PLAYER_PROFILE_SUMMARIES_STORAGE_KEY]: snapshot
   } satisfies PlayerProfileSummariesStorage);
-}
-
-export function filterSnapshotForBuild(snapshot: PlayerProfileSummariesSnapshot | undefined): PlayerProfileSummariesSnapshot | undefined {
-  if (snapshot === undefined) return undefined;
-  if (snapshot.buildMode !== undefined && snapshot.buildMode !== BUILD_MODE) return undefined;
-  // Older snapshots did not record their build. Never expose private history after
-  // someone replaces a private package with a public package in the same folder.
-  if (!__UMALYTICS_PRIVATE_PROFILE_DATA__ && snapshot.buildMode === undefined) return {
-    ...snapshot, profiles: Object.fromEntries(Object.entries(snapshot.profiles).filter(([, profile]) => !profile.statsPrivate))
-  };
-  return snapshot;
 }

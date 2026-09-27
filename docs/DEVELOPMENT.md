@@ -18,10 +18,10 @@ The extension's postinstall/typecheck prepares WXT generated types. Keep separat
 | pnpm dev | WXT Chromium development session |
 | pnpm test | API, room-state, cache, cancellation, privacy and timing regressions |
 | pnpm typecheck | Shared and extension TypeScript checks |
-| pnpm build | Public Chromium build |
-| pnpm build:all | Public Chromium and Firefox builds with manifest/privacy checks |
+| pnpm build | Chromium build |
+| pnpm build:all | Chromium and Firefox builds with manifest and history-display checks |
 
-Generated bundles live in apps/extension/.output. Checked build snapshots live in .releases; latest.json describes the latest pair. This repository supports public builds only. The build configuration rejects a private-mode environment flag. Public history pages may be fetched and displayed, but public statistics must never be calculated from them.
+Generated bundles live in apps/extension/.output. Checked build snapshots live in .releases; latest.json describes the latest pair. There is one extension build for each browser. Match history can be fetched and displayed, including for players with hidden stats, but never used to calculate ranked statistics.
 
 ## Architecture
 
@@ -36,15 +36,17 @@ Generated bundles live in apps/extension/.output. Checked build snapshots live i
 
 Fresh complete profiles are reused for 15 minutes. The reusable archive is bounded to 100 profiles and approximately 4 MiB, and trims entries older than 24 hours when processed. The local diagnostic trace is capped at 200 sanitized entries. These limits apply to the archive/trace, not every byte of extension storage.
 
-Lobby enrichment uses paced per-player stats requests for the selected Season or All-time scope, plus a seasons request and a leaderboard request scheduled at a lower priority so every stats request starts first; switching scope loads the other stats scope. Lobby cards make no profile request and show no title, since names come from the roster. The public build makes no batch request during lobby loading. The batch client, response mapper, roster settling, and budget helpers remain available for private integration. Opening a player's details requests that player's profile once, at 'profile' priority, for their title; the response is cached for 24 hours and the request is cancelled if details close first. A title already present on the profile summary (for example from a batch response) is used without a request. Opening details also requests a 20-entry public history page, including for hidden-stats players; the first page supplies recent results and form, and Load more fetches another page. No other view starts history paging. History responses are cached for five minutes and never feed the public statistics mapper.
+Lobby enrichment uses paced per-player stats requests for the selected Season or All-time scope, plus seasons and leaderboard requests. Switching scope loads the other stats scope. Lobby cards make no profile or history request. Opening details requests the player's profile for their title and a 20-entry history page, including for hidden-stats players. Load more fetches additional pages. History responses are cached for five minutes and never feed the statistics mapper.
 
-Requests are paced by `DEFAULT_REQUEST_INTERVAL_MS` (500 ms in the public build). A 429 doubles the pacing interval, capped at 2000 ms; once doubled, every 20 consecutive successful requests step the interval back toward the base by ×0.75, never below it. `setBaseRequestInterval(ms)`, bounded to at least 250 ms, lets a build choose a different base pace without editing the constant; the public build never calls it.
+Requests start at least 350 ms apart. A 429 doubles the pacing interval, capped at 2000 ms; after 20 consecutive successes it recovers toward 350 ms by ×0.75, never below the base.
 
 ## Release checks
 
-The release workflow (`.github/workflows/release.yml`) publishes automatically: on a push to `main` in `skimuic/UmaLytics` that changes `package.json` or `scripts/publish-release.mjs`, it reruns `pnpm test`, `pnpm typecheck` and `pnpm build:all`, then packages and uploads the public Chromium/Firefox ZIPs and `SHA256SUMS.txt` to a GitHub release for that version. It never runs against the mirror repository. Before changing download links, build and verify the exact public ZIPs; preserve older versioned assets. Update README, docs/INSTALL.md and CHANGELOG together. Beta release objects, if created later, should be marked as pre-releases.
+The release workflow (`.github/workflows/release.yml`) publishes automatically: on a push to `main` in `skimuic/UmaLytics` that changes `package.json` or `scripts/publish-release.mjs`, it reruns `pnpm test`, `pnpm typecheck` and `pnpm build:all`, then packages and uploads the Chromium/Firefox ZIPs and `SHA256SUMS.txt` to a GitHub release for that version. It never runs against the mirror repository. Before changing download links, build and verify the exact ZIPs; preserve older versioned assets. Update README, docs/INSTALL.md and CHANGELOG together. Candidate release objects, if created later, should be marked as pre-releases.
 
 Firefox currently emits a data-collection declaration warning. Permanent/store distribution requires an accurate declaration and signing work; do not suppress the warning and describe the result as store-ready.
+
+For local candidate archives, run `pwsh -NoProfile -File scripts/package-candidate.ps1` after `pnpm build:all`. The script refuses existing output names, verifies every archive entry against its build file by SHA-256, and writes `SHA256SUMS.txt` under `downloads/<version>/<candidate>/`. It does not publish anything.
 
 ## Manual checks
 

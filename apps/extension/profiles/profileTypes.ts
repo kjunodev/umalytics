@@ -14,7 +14,6 @@ export interface PlayerProfileLoadState {
 }
 
 export interface PlayerProfileSummariesSnapshot {
-  buildMode?: 'private' | 'public';
   matchCode?: string;
   runId?: number;
   startedAt?: number;

@@ -2,12 +2,12 @@
 
 UmaLytics opens a separate scouting window beside [Uma Drafter](https://drafter.uma.guide). See the players in team slots, their available ranked statistics, and the confirmed live draft.
 
-**0.4.1 Open Beta — manual installation and updates.**
+**0.4.1 — manual installation and updates.**
 
 | Browser | Download |
 | --- | --- |
-| Chrome, Edge, Brave, Opera GX | [Chromium ZIP](https://github.com/skimuic/UmaLytics/releases/download/v0.4.1/umalytics-chromium-0.4.1-open-beta.1.zip) |
-| Firefox / LibreWolf | [Firefox ZIP](https://github.com/skimuic/UmaLytics/releases/download/v0.4.1/umalytics-firefox-0.4.1-open-beta.1.zip) — temporary installation |
+| Chrome, Edge, Brave, Opera GX | [Chromium download](https://github.com/skimuic/UmaLytics/releases/tag/v0.4.1) |
+| Firefox / LibreWolf | [Firefox download](https://github.com/skimuic/UmaLytics/releases/tag/v0.4.1) — temporary installation |
 
 [Install or update](docs/INSTALL.md) · [Changes](CHANGELOG.md) · [Privacy](PRIVACY.md) · [Report a bug](https://github.com/kjunodev/umalytics/issues/new?template=bug_report.md)
 
@@ -26,25 +26,25 @@ History keeps its selected match separate from the live lobby. Any accompanying 
 
 - Starting-room trainer identification, with player identities kept independent of companion images and spectators excluded from the roster.
 - Versioned room events and DOM fallback for lobby and draft detection.
-- Cached player summaries, selected-scope loading, and explicit private/unavailable states. A lobby uses paced per-player stats requests, plus a season request and a leaderboard request; lobby cards make no profile request, since names come from the roster. Switching scope loads the other scope. The public build makes no batch request during lobby loading.
+- Cached player summaries, selected-scope loading, and explicit hidden/unavailable states. A lobby uses paced per-player stats requests, plus a season request and a leaderboard request; lobby cards make no profile or match-history request. Switching scope loads the other scope.
 - Paced API requests, request cancellation on room changes, and bounded automatic recovery after rate limits.
 - Confirmed picks, bans, vetoes, map order and a tiebreaker view.
 - Local diagnostics that you can copy when reporting a problem.
 
 ## Privacy
 
-This source and its packages respect private ranked stats. Opening a player's details requests their profile once, for their title, and the first public history page for recent results and form; Load more requests additional history pages, including for players with hidden stats. Lobby cards have no title or history data, and the public build makes no batch request. History is displayed but never used to calculate ranked statistics. Loading a completed match by code displays that match's publicly exposed draft. The community configuration cannot enable hidden-profile reconstruction with a build flag. Public identity, rank or rating may still appear when separately exposed by the site; private detailed statistics remain unavailable, including in profile lookup.
+This extension respects hidden ranked stats. Opening a player's details requests their profile once for their title and the first history page for recent results; Load more requests additional history pages, including for players with hidden stats. Lobby cards have no title or history data. Match history is displayed but never used to calculate ranked statistics. Loading a completed match by code displays that match's available draft. Identity, rank or rating may still appear when separately exposed by the site; hidden detailed statistics remain unavailable, including in profile lookup.
 
 The extension contacts Uma Drafter's services with player identifiers. Scouting state and a bounded diagnostic trace stay in local extension storage. There is no UmaLytics backend, analytics service or automatic diagnostic upload. See [PRIVACY.md](PRIVACY.md).
 
 ## Expectations
 
-This is the public testing release. Cached data can appear quickly; uncached data depends on the upstream API. HTTP 429 pauses requests rather than bypassing the server's limits. Site changes can affect detection. A player whose room exposes no verified identity cannot be looked up reliably.
+This is a testing release. Cached data can appear quickly; uncached data depends on the upstream API. HTTP 429 pauses requests rather than bypassing the server's limits. Site changes can affect detection. A player whose room exposes no verified identity cannot be looked up reliably.
 
 Chromium behavior has been observed during a live ranked draft on the preceding candidate. The 0.4.1 changes have automated regression coverage; see [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for exact checks and limits. Firefox remains an unsigned temporary add-on, not a permanent store installation. Human team cards currently assume up to five slots per side; complete support for every custom mode is not claimed.
 
 ## Development and feedback
 
-Built with TypeScript, React and WXT. [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) documents tests and reproducible public builds. [skimuic/UmaLytics](https://github.com/skimuic/UmaLytics) hosts community releases; [kjunodev/umalytics](https://github.com/kjunodev/umalytics) mirrors the same source.
+Built with TypeScript, React and WXT. [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) documents tests and reproducible builds. [skimuic/UmaLytics](https://github.com/skimuic/UmaLytics) hosts releases; [kjunodev/umalytics](https://github.com/kjunodev/umalytics) mirrors the same source.
 
 Bug reports should include the version, browser, expected/actual behavior and diagnostics copied soon after the problem. Review the report before posting: its status section can include player IDs, room codes and API error paths. Older download assets retain their original contents.

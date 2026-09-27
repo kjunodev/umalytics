@@ -1,0 +1,505 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import vm from 'node:vm';
+import { loadFunction, loadModule, parseTsxModule, readModule } from './support/harness.mjs';
+
+const teamSectionSyntax = parseTsxModule('uiLobbyTeamSection');
+const badgeChipSyntax = parseTsxModule('uiLobbyBadgeChip');
+const playerDrawerSyntax = parseTsxModule('uiPlayerDrawer');
+const playerDetailSyntax = parseTsxModule('uiPlayerProfileDisplay');
+const recentMatchesSyntax = parseTsxModule('uiPlayerRecentMatchFormat');
+const topUmasListSyntax = parseTsxModule('uiPlayerTopUmasList');
+
+function cardStateHarness() {
+  const c = vm.createContext({
+    hasDisplayableProfileLists: (profile) =>
+      (profile?.topUmas?.length ?? 0) > 0 || (profile?.bestUmas?.length ?? 0) > 0 ||
+    (profile?.allUmas?.length ?? 0) > 0 || (profile?.recentMatches?.length ?? 0) > 0
+  });
+  loadFunction(c, teamSectionSyntax, 'getCardState');
+  return c;
+}
+
+const emptyDisplay = { topUmas: [] };
+const withUmas = { topUmas: [{ umaId: 'a', name: 'A' }] };
+
+test('a card with no linked Discord ID never shows loading, private or error chrome', () => {
+  const c = cardStateHarness();
+  assert.equal(c.getCardState(undefined, undefined, true, undefined), 'loaded');
+  assert.equal(c.getCardState({ discordId: 'x' }, emptyDisplay, true, undefined), 'loaded');
+});
+
+test('an unfetched profile shows the skeleton only while a fetch is in flight', () => {
+  const c = cardStateHarness();
+  assert.equal(c.getCardState(undefined, undefined, true, 'd1'), 'loading');
+  assert.equal(c.getCardState(undefined, undefined, false, 'd1'), 'loaded');
+});
+
+test('an unfetched card prints the profile status once, in the same reserved Most Played area as other empty states', () => {
+  const c = vm.createContext({
+    element: (type, props, ...children) => ({ type, props, children }),
+    React: { Fragment: 'Fragment' }, BadgeChipRow: 'Badges', StatCell: 'Stat',
+    TopUmasList: 'Umas', UmaResolutionNote: 'Resolution',
+    formatRecord: () => '-', formatPercent: () => '-', formatDecimal: () => '-', formatNumber: () => '-'
+  });
+  loadFunction(c, teamSectionSyntax, 'CardBody');
+  const tree = c.CardBody({ state: 'loaded', player: { displayName: 'Fixture' },
+    displayedProfile: undefined, notableBadges: [], note: 'Profile data has not loaded yet.',
+    statsMessage: 'Profile data has not loaded yet.', canRetryProfile: false });
+  const messageBoxes = findAll(tree, node => node.props?.className === 'card-message-box');
+  assert.equal(messageBoxes.length, 0, 'must not fall back to the full-body message box, which reserves badges+scouting+top-umas height');
+  const umaLists = findAll(tree, node => node.type === 'Umas');
+  assert.equal(umaLists.length, 1);
+  assert.equal(umaLists[0].props.emptyMessage, 'Profile data has not loaded yet.');
+});
+
+test('hidden stats without a usable Uma list show the restricted state', () => {
+  const c = cardStateHarness();
+  const privateProfile = { discordId: 'd1', statsPrivate: true };
+  assert.equal(c.getCardState(privateProfile, emptyDisplay, false, 'd1'), 'private');
+});
+
+test('a stats-private profile that still carries a displayable Uma list is loaded, not private', () => {
+  const c = cardStateHarness();
+  assert.equal(c.getCardState({ discordId: 'd1', statsPrivate: true }, withUmas, false, 'd1'), 'loaded');
+});
+
+test('a failed fetch with nothing displayable is an error card; a failed fetch with cached data stays loaded', () => {
+  const c = cardStateHarness();
+  assert.equal(c.getCardState({ discordId: 'd1', error: 'HTTP 503' }, emptyDisplay, false, 'd1'), 'error');
+  assert.equal(c.getCardState({ discordId: 'd1', error: 'HTTP 503' }, withUmas, false, 'd1'), 'loaded');
+});
+
+const cardBadgePriority = {
+  top10: 0, top25: 1,
+  oneTrick: 2, deepPool: 2,
+  eliteScoring: 3, highScoring: 3, mvpMenace: 3, podiumRegular: 3, underrated: 3,
+  newcomer: 4,
+  established: 6
+};
+
+test('badge chip ordering puts rank first, then playstyle, then sample size, regardless of input order', () => {
+  const c = vm.createContext({ CARD_BADGE_PRIORITY: cardBadgePriority });
+  loadFunction(c, badgeChipSyntax, 'sortBadgesForCard');
+  const badges = [
+    { kind: 'established', label: 'Established' },
+    { kind: 'mvpMenace', label: 'MVP Menace' },
+    { kind: 'top25', label: 'Top 25' },
+    { kind: 'newcomer', label: 'Newcomer' }
+  ];
+  const ordered = Array.from(c.sortBadgesForCard(badges), (badge) => badge.kind);
+  assert.deepEqual(ordered, ['top25', 'mvpMenace', 'newcomer', 'established']);
+  assert.notDeepEqual(ordered, Array.from(badges, (badge) => badge.kind), 'input array order is unchanged');
+});
+
+test('badge chip ordering places rank first, then playstyle, scoring, newcomer and established', () => {
+  const c = vm.createContext({ CARD_BADGE_PRIORITY: cardBadgePriority });
+  loadFunction(c, badgeChipSyntax, 'sortBadgesForCard');
+  const badges = [
+    { kind: 'established', label: 'Established' },
+    { kind: 'newcomer', label: 'Newcomer' },
+    { kind: 'underrated', label: 'Underrated' },
+    { kind: 'podiumRegular', label: 'Podium regular' },
+    { kind: 'mvpMenace', label: 'MVP Menace' },
+    { kind: 'deepPool', label: 'Deep pool' },
+    { kind: 'top10', label: 'Top 10' }
+  ];
+  const ordered = Array.from(c.sortBadgesForCard(badges), (badge) => badge.kind);
+  // eliteScoring/highScoring/mvpMenace/podiumRegular/underrated are a tied
+  // tier; the stable sort keeps their original relative order (underrated,
+  // podiumRegular, mvpMenace, matching the input array above).
+  assert.deepEqual(ordered, ['top10', 'deepPool', 'underrated', 'podiumRegular', 'mvpMenace', 'newcomer', 'established']);
+});
+
+test('the match history pager always resolves to at most 7 slots, with the current page centered once truncated', () => {
+  const c = vm.createContext({ PAGER_SLOT_COUNT: 7 });
+  loadFunction(c, playerDrawerSyntax, 'getPagerSlots');
+  const slots = (page, totalPages) => Array.from(c.getPagerSlots(page, totalPages));
+  assert.deepEqual(slots(1, 3), [1, 2, 3]);
+  assert.deepEqual(slots(1, 10), [1, 2, 3, 4, 5, 'gap', 10]);
+  assert.deepEqual(slots(10, 10), [1, 'gap', 6, 7, 8, 9, 10]);
+  assert.deepEqual(slots(7, 12), [1, 'gap', 6, 7, 8, 'gap', 12]);
+  for (const totalPages of [1, 5, 7, 8, 15, 40]) {
+    for (let page = 1; page <= totalPages; page += 1) {
+      assert(slots(page, totalPages).length <= 7, `page ${page} of ${totalPages} stays within 7 slots`);
+    }
+  }
+});
+
+test('the card badge area is a fixed two-row height so cards never shift as badges resolve', () => {
+  const css = readModule('uiLobbyCss');
+  const tokensCss = readModule('uiCommonTokensCss');
+  assert.match(css, /\.card-badges\s*\{[^}]*height:\s*var\(--badge-row-height\)/s);
+  assert.match(tokensCss, /--badge-row-height:\s*49px/, 'the 49px badge area is a named token, defined once');
+  assert.match(css, /\.chip:hover \.chip-tooltip,\s*\n?\s*\.chip:focus-visible \.chip-tooltip/);
+});
+
+test('the card badge area keeps overflow visible so chip tooltips are not clipped, and a hovered/focused card raises z-index to stack over neighbours', () => {
+  const lobbyCss = readModule('uiLobbyCss');
+  assert.match(lobbyCss, /\.card-badges\s*\{[^}]*height:\s*var\(--badge-row-height\)[^}]*\}/s, 'the badge area keeps its fixed height');
+  assert.match(lobbyCss, /\.card-badges\s*\{[^}]*overflow:\s*visible/s, 'overflow must not clip the chip tooltip');
+  assert.doesNotMatch(lobbyCss, /\.card-badges\s*\{[^}]*overflow:\s*hidden/s);
+
+  const baseCss = readModule('uiCommonBaseCss');
+  assert.match(
+    baseCss,
+    /\.player-row:hover,\s*\n?\s*\.player-row:focus-within\s*\{[^}]*z-index:/s,
+    'a hovered or focused card must raise its stacking order above sibling cards'
+  );
+});
+
+test('card content sits above .card-hit for stacking only, not for clicks: it is pointer-events:none except for chips and the Retry button, so the whole card opens the drawer', () => {
+  const css = readModule('uiLobbyCss');
+  assert.match(
+    css,
+    /\.player-row > \*:not\(\.card-hit\)\s*\{[^}]*pointer-events:\s*none/s,
+    'card content must not swallow clicks meant for .card-hit'
+  );
+  assert.match(
+    css,
+    /\.chip,\s*\n?\s*\.card-message-box button\s*\{[^}]*pointer-events:\s*auto/s,
+    'chips and the Retry button must opt back into pointer events for their own hover/click behavior'
+  );
+});
+
+test('the team header shows a 4px team-accent bar, a 20px/700 team name in the display font, and a flexible divider before the average rating', () => {
+  const css = readModule('uiLobbyCss');
+  assert.match(css, /\.team-header-accent\s*\{[^}]*width:\s*4px[^}]*\}/s);
+  assert.match(css, /\.team-header-accent\s*\{[^}]*height:\s*20px/s);
+  assert.match(css, /\.team-header h2\s*\{[^}]*font-size:\s*20px/s);
+  assert.match(css, /\.team-header h2\s*\{[^}]*font-weight:\s*700/s);
+  assert.match(css, /\.team-header h2\s*\{[^}]*font-family:\s*var\(--font-display\)/s);
+  assert.match(css, /\.team-header-divider\s*\{[^}]*flex-grow:\s*1/s, 'the divider between the name and the average must stretch to fill the row');
+  assert.match(css, /\.team-header-avg strong\s*\{[^}]*font-weight:\s*700/s);
+});
+
+test('the card uses a 15px name and a smaller explicit rating size', () => {
+  const lobbyCss = readModule('uiLobbyCss');
+  const baseCss = readModule('uiCommonBaseCss');
+  assert.match(lobbyCss, /\.card-name\s*\{[^}]*font-size:\s*var\(--font-step-lg\)/s);
+  assert.match(baseCss, /\.player-rank-line\s*\{[^}]*font-size:\s*var\(--font-step-sm\)/s,
+    'the rating line (shared with the drawer header) must not fall back to the unstyled 16px body default, which used to render larger than the card name');
+});
+
+test('lobby spacing matches the mockup: 12px from a team header to its cards, 22px between teams', () => {
+  const lobbyCss = readModule('uiLobbyCss');
+  assert.match(lobbyCss, /\.team-section\s*\{[^}]*gap:\s*12px/s);
+
+  const baseCss = readModule('uiCommonBaseCss');
+  assert.match(baseCss, /\.team-list\s*\{[^}]*gap:\s*22px/s);
+});
+
+test('the Most Played list shows exactly the top 3 Umas by matches played (ties by name), sourced from allUmas and falling back to topUmas, with no placeholder rows', () => {
+  const c = vm.createContext({
+    element: (type, props, ...children) => ({ type, props, children }),
+    React: { Fragment: 'Fragment' }, BestUmaPortrait: 'Portrait', MAX_TOP_UMAS: 3,
+    formatPercent: () => 'PCT', formatDecimal: () => 'DEC'
+  });
+  loadFunction(c, topUmasListSyntax, 'sortTopUmasForCard');
+  loadFunction(c, topUmasListSyntax, 'TopUmasList');
+  const uma = (name, matches) => ({
+    umaId: name, name, matches, wins: 0, losses: 0, winRate: 0.5, points: 0, pointsPerGame: 1, podiums: 0, mvpMatches: 0
+  });
+  const allUmas = [uma('Low', 2), uma('High', 9), uma('Tie', 5), uma('Also Tie', 5)];
+
+  const sortedNames = Array.from(c.sortTopUmasForCard(allUmas), (entry) => entry.name);
+  assert.deepEqual(sortedNames, ['High', 'Also Tie', 'Tie'], 'sorted by matches descending, ties broken by name');
+
+  const tree = c.TopUmasList({ topUmas: [uma('Fallback', 1)], allUmas, playerName: 'Fixture' });
+  const rows = findAll(tree, (n) => n.type === 'li');
+  assert.equal(rows.length, 3, 'exactly 3 rows render, one per real entry, never a placeholder');
+  assert(!findAll(tree, (n) => n.props?.className === 'uma-name').some((n) => n.children[0] === '-'),
+    'no dash placeholder row is rendered');
+
+  const fallback = c.TopUmasList({ topUmas: [uma('OnlyOne', 4)], playerName: 'Fixture' });
+  assert.equal(findAll(fallback, (n) => n.type === 'li').length, 1,
+    'falls back to topUmas and renders only the real entries when allUmas is absent');
+});
+
+test('each Most Played row shows a small portrait before the Uma name', () => {
+  const c = vm.createContext({
+    element: (type, props, ...children) => ({ type, props, children }),
+    React: { Fragment: 'Fragment' }, BestUmaPortrait: 'Portrait', MAX_TOP_UMAS: 3,
+    formatPercent: () => '-', formatDecimal: () => '-'
+  });
+  loadFunction(c, topUmasListSyntax, 'sortTopUmasForCard');
+  loadFunction(c, topUmasListSyntax, 'TopUmasList');
+  const uma = { umaId: 'a', name: 'A', matches: 5, wins: 0, losses: 0, winRate: 0.5, points: 0, pointsPerGame: 1, podiums: 0, mvpMatches: 0 };
+  const tree = c.TopUmasList({ allUmas: [uma], playerName: 'Fixture' });
+  const row = find(tree, (n) => n.type === 'li');
+  assert.equal(row.children[0].type, 'Portrait', 'the portrait renders ahead of the name inside the row');
+});
+
+
+
+
+test('every chip tooltip (first, last, and the "+N" overflow chip) uses the same single tooltip class, anchored to the row rather than to any one chip', () => {
+  const c = vm.createContext({
+    element: (type, props, ...children) => ({ type, props, children }),
+    RANK_KINDS: new Set(['top10', 'top25']),
+    ICON_KIND_STYLE: {},
+    CARD_BADGE_PRIORITY: cardBadgePriority,
+    MAX_CARD_BADGES: 7,
+    BadgeIcon: () => null
+  });
+  loadFunction(c, badgeChipSyntax, 'sortBadgesForCard');
+  loadFunction(c, badgeChipSyntax, 'BadgeChip');
+  loadFunction(c, badgeChipSyntax, 'BadgeChipRow');
+
+  const tooltipClassesOf = (badgeCount, extra = 0) => {
+    const badges = Array.from({ length: badgeCount }, (_, i) => ({ kind: 'established', label: `B${i}`, title: `T${i}` }));
+    for (let i = 0; i < extra; i += 1) badges.push({ kind: 'consistent', label: `E${i}`, title: `ET${i}` });
+    const tree = c.BadgeChipRow({ badges });
+    const [shownDescriptors, overflowDescriptor] = tree.children;
+    // BadgeChipRow builds one un-invoked <BadgeChip> descriptor per badge;
+    // invoke it to get the real rendered tooltip markup underneath.
+    const classes = Array.from(shownDescriptors, (descriptor) =>
+      find(c.BadgeChip(descriptor.props), (n) => n.props?.role === 'tooltip').props.className);
+    if (overflowDescriptor !== null) {
+      classes.push(find(overflowDescriptor, (n) => n.props?.role === 'tooltip').props.className);
+    }
+    return classes;
+  };
+
+  // No badge or chip position (first, last, or the trailing "+N" overflow
+  // chip) gets a different tooltip class any more; there is nothing left to
+  // anchor per-chip since the row itself bounds every tooltip.
+  assert.deepEqual(tooltipClassesOf(5), Array(5).fill('chip-tooltip'));
+  assert.deepEqual(tooltipClassesOf(7, 2), Array(8).fill('chip-tooltip'));
+
+  assert.equal(c.BadgeChip({ badge: { kind: 'established', label: 'X', title: 'Y' } })
+    .children.find((n) => n.props?.role === 'tooltip').props.className, 'chip-tooltip');
+});
+
+function tooltipBoundsWithinRow(rowLeft, rowWidth) {
+  // .chip-tooltip is `left: 0; right: 0;` against .card-badges (position:
+  // relative), so its box is defined to exactly match the row's own box,
+  // regardless of the row's position on screen or which chip inside it
+  // triggered the tooltip.
+  return { left: rowLeft, right: rowLeft + rowWidth };
+}
+
+test('tooltips stay inside the card for the first and last chip, on both the leftmost and rightmost cards in a row', () => {
+  const css = readModule('uiLobbyCss');
+  assert.match(css, /\.card-badges\s*\{[^}]*position:\s*relative/s, '.card-badges is the positioning context for every chip tooltip in it');
+  assert.doesNotMatch(
+    css,
+    /\.chip\s*\{[^}]*position:\s*relative/s,
+    '.chip must not create its own positioning context, or a tooltip would anchor to the chip instead of the row'
+  );
+  assert.match(css, /\.chip-tooltip\s*\{[^}]*left:\s*0/s);
+  assert.match(css, /\.chip-tooltip\s*\{[^}]*right:\s*0/s);
+  assert.doesNotMatch(css, /\.chip-tooltip-right/, 'the old right-anchored variant is gone: one rule now fits every chip, on every card');
+
+  // A card near the left edge of the lobby grid and one near the right edge,
+  // both at a plausible card content width; first-chip and last-chip tooltips
+  // are identical (the row bounds them, not the chip), so both are checked
+  // via the same row geometry.
+  for (const [rowLeft, rowWidth, cardLabel] of [[0, 280, 'leftmost card'], [960, 280, 'rightmost card']]) {
+    const bounds = tooltipBoundsWithinRow(rowLeft, rowWidth);
+    assert(bounds.left >= rowLeft, `${cardLabel}: tooltip must not start left of the card`);
+    assert(bounds.right <= rowLeft + rowWidth, `${cardLabel}: tooltip must not extend right of the card`);
+  }
+});
+
+
+test('the drawer MVP star tooltip is right-anchored within the fixed-width drawer', () => {
+  const css = readModule('uiPlayerDrawerCss');
+  assert.match(css, /\.mvp-star-tooltip\s*\{[^}]*right:\s*0/s);
+});
+
+
+
+
+
+
+
+
+
+test('the team average rating uses each player\'s displayed rating (profile conservative/rating, then snapshot fallbacks) and shows an em dash with no ratings', () => {
+  const c = vm.createContext({});
+  loadFunction(c, teamSectionSyntax, 'getPlayerDisplayRating');
+  loadFunction(c, teamSectionSyntax, 'getTeamAverageRating');
+
+  const team = {
+    id: 'team1',
+    players: [
+      { discordId: 'a', ratingSnapshot: 1000 },
+      { discordId: 'b', displayRatingSnapshot: 1200 },
+      { discordId: 'c' }
+    ]
+  };
+  const profiles = { b: { rating: 1400 }, c: { conservativeRating: 1600, rating: 1800 } };
+
+  assert.equal(c.getTeamAverageRating(team, profiles), Math.round((1000 + 1400 + 1600) / 3));
+  assert.equal(c.getTeamAverageRating({ id: 'team2', players: [{ discordId: 'z' }] }, {}), undefined,
+    'no player has any resolvable rating, so the average is undefined (rendered as an em dash)');
+});
+
+test('the Umas table excludes players with fewer than MIN_UMA_GAMES by default, paginates 5 per page, and resets to page 1 when the sort or the low-games filter changes', () => {
+  const uma = (name, matches, ppg) => ({
+    umaId: name, name, matches, wins: 0, losses: 0, winRate: 0.5, points: 0, pointsPerGame: ppg, podiums: 0, mvpMatches: 0
+  });
+  const profile = {
+    discordId: '123456789012345678', displayName: 'Fixture',
+    allUmas: [
+      uma('A', 10, 9), uma('B', 9, 8), uma('C', 8, 7), uma('D', 7, 6), uma('E', 6, 5), uma('F', 5, 4),
+      uma('G', 2, 1), uma('H', 1, 0.5)
+    ]
+  };
+  const { render } = renderableDrawer(profile);
+
+  const rowNames = (tree) => findAll(tree, (n) => n.props?.className === 'uma-table-row')
+    .map((row) => find(row, (n) => n.props?.className === 'uma-name').children[0]);
+  const pagerRange = (tree) => find(tree, (n) => n.props?.className === 'uma-pager-range')?.children?.join('');
+  const lowGamesToggle = (tree) => find(tree, (n) => n.props?.className === 'drawer-toggle-button');
+
+  const first = render();
+  assert.deepEqual(rowNames(first), ['A', 'B', 'C', 'D', 'E'], 'the 6 Umas with >=3 games fill page 1, sorted by PPG desc');
+  assert.equal(pagerRange(first), '1–5 of 6');
+  assert.equal(lowGamesToggle(first).children[0], '+2 with <3 games');
+
+  const nextButton = find(first, (n) => n.props?.['aria-label'] === 'Next Umas');
+  nextButton.props.onClick();
+  const secondPage = render();
+  assert.deepEqual(rowNames(secondPage), ['F'], 'page 2 holds the remaining filtered Uma');
+  assert.equal(pagerRange(secondPage), '6–6 of 6');
+
+  lowGamesToggle(secondPage).props.onClick();
+  const revealed = render();
+  assert.deepEqual(rowNames(revealed), ['A', 'B', 'C', 'D', 'E'], 'toggling the low-games filter resets to page 1');
+  assert.equal(pagerRange(revealed), '1–5 of 8', 'all 8 Umas now count, including the 2 with <3 games');
+  assert.equal(lowGamesToggle(revealed).children[0], 'Hide <3 games');
+
+  nextButton.props.onClick();
+  const revealedPage2 = render();
+  assert.deepEqual(rowNames(revealedPage2), ['F', 'G', 'H'], 'page 2 of all 8 Umas holds the remaining 3 after the top 5');
+
+  const gpSortButton = find(revealedPage2, (n) => n.props?.className?.startsWith?.('th') && n.children[0] === 'GP');
+  gpSortButton.props.onClick();
+  const afterSortChange = render();
+  assert.equal(pagerRange(afterSortChange), '1–5 of 8', 'changing the sort column resets paging back to page 1');
+});
+
+function find(node, predicate) {
+  if (!node || typeof node !== 'object') return undefined;
+  if (predicate(node)) return node;
+  for (const child of (node.children ?? []).flat(Infinity)) { const result = find(child, predicate); if (result) return result; }
+}
+
+function findAll(node, predicate, results = []) {
+  if (!node || typeof node !== 'object') return results;
+  if (predicate(node)) results.push(node);
+  for (const child of (node.children ?? []).flat(Infinity)) findAll(child, predicate, results);
+  return results;
+}
+
+function drawerHarness() {
+  const c = vm.createContext({
+    console,
+    element: (type, props, ...children) => ({ type, props, children }),
+    React: { Fragment: 'Fragment' },
+    UmaImage: 'Image', BestUmaPortrait: 'Portrait', StatCell: 'Stat', ProfileDataStatus: 'Status',
+    getFallbackUmaImageUrl: () => undefined,
+    getPlayerPartyVisual: () => undefined, getTeamPartyVisuals: () => ({}),
+    getLookupDiscordId: (p) => p.discordId, getPlayerNote: () => undefined,
+    getDisplayedProfileStats: (profile) => profile,
+    formatRank: () => '#1', formatRecord: () => '-', formatPercent: () => '-', formatDecimal: () => '-', formatNumber: () => '-',
+    HISTORY_PAGE_SIZE: 5, HISTORY_API_PAGE_SIZE: 20, UMA_TABLE_ROWS: 5, PAGER_SLOT_COUNT: 7, MIN_UMA_GAMES: 3,
+    UMA_SORT_COLUMNS: [
+      { key: 'matches', label: 'GP' }, { key: 'winRate', label: 'Win' },
+      { key: 'pointsPerGame', label: 'PPG' }, { key: 'performanceScore', label: 'Score' }
+    ]
+  });
+  loadModule(c, 'uiCommonBadges');
+  loadFunction(c, playerDetailSyntax, 'withDetailHistory');
+  loadFunction(c, recentMatchesSyntax, 'getRecentResultTone');
+  loadFunction(c, recentMatchesSyntax, 'formatRecentResult');
+  loadFunction(c, playerDrawerSyntax, 'umaSortValue');
+  loadFunction(c, playerDrawerSyntax, 'formatUmaColumnValue');
+  loadFunction(c, playerDrawerSyntax, 'getPagerSlots');
+  loadFunction(c, playerDrawerSyntax, 'apiPageForPagerPage');
+  loadFunction(c, playerDrawerSyntax, 'apiPageRowOffset');
+  loadFunction(c, playerDrawerSyntax, 'PlayerDrawer');
+  return c;
+}
+
+function confirmedMatch(id, isWinner, pointsScored = 4) {
+  return {
+    matchId: id, reportedAt: '2026-01-01T00:00:00Z', mode: 'ranked', verificationState: 'confirmed',
+    umaId: 'u1', umaName: 'Uma', isWinner, pointsScored, podiums: isWinner ? 1 : 0, isMvp: false
+  };
+}
+
+function renderableDrawer(profile) {
+  const c = drawerHarness();
+  let states = [], refs = [], effects = [], stateIdx = 0, refIdx = 0, effectIdx = 0, nextId = 0;
+  c.crypto = { randomUUID: () => `req-${++nextId}` };
+  c.useState = (initial) => {
+    const i = stateIdx++;
+    if (states[i] === undefined) states[i] = [initial, (update) => { states[i][0] = typeof update === 'function' ? update(states[i][0]) : update; }];
+    return states[i];
+  };
+  c.useRef = (initial) => {
+    const i = refIdx++;
+    if (refs[i] === undefined) refs[i] = { current: initial };
+    return refs[i];
+  };
+  c.useEffect = (callback) => { effects[effectIdx++] = callback; };
+  c.cancelPlayerHistoryPageRequest = async () => {};
+  c.sendPlayerProfileRequest = () => new Promise(() => {});
+  c.cancelPlayerProfileRequest = async () => {};
+  const render = () => {
+    stateIdx = 0; refIdx = 0; effectIdx = 0;
+    return c.PlayerDrawer({
+      player: { discordId: '123456789012345678', displayName: 'Fixture' },
+      profile,
+      onClose() {},
+      context: { statsScope: 'allTime', isProfileLoading: false, now: Date.now() }
+    });
+  };
+  return { c, render, effects: () => effects };
+}
+
+test('drawer history uses pt only for exactly one point', async () => {
+  const { c, render, effects } = renderableDrawer({ matches: 97 });
+  c.sendPlayerHistoryPageRequest = async () => ({ total: 3, matches: [
+    confirmedMatch('zero', false, 0), confirmedMatch('one', false, 1), confirmedMatch('two', true, 2)
+  ] });
+  render();
+  effects()[0]();
+  await new Promise(resolve => setImmediate(resolve));
+  const tree = render();
+  const points = findAll(tree, n => n.props?.className?.includes('drawer-history-points'));
+  assert.deepEqual(points.map(n => n.children.flat().filter(v => typeof v !== 'object').join('')), ['0 pts', '1 pt', '2 pts']);
+});
+
+
+test('the last-5 dots beside Match history show real confirmed results once loaded, and neutral placeholders before that', async () => {
+  const profile = {
+    discordId: '123456789012345678', displayName: 'Fixture', fetchedAt: Date.now(), profileUrl: '',
+    matches: 12, wins: 7, losses: 5, winRate: 0.58, pointsPerGame: 4, mvpMatches: 1
+  };
+  const { c, render, effects } = renderableDrawer(profile);
+  const historyMatches = [
+    confirmedMatch('H0', true), confirmedMatch('H1', true), confirmedMatch('H2', true),
+    confirmedMatch('H3', false), confirmedMatch('H4', false)
+  ];
+  c.sendPlayerHistoryPageRequest = (id, scope, page) =>
+    page === 1 ? Promise.resolve({ total: 12, matches: historyMatches, summary: undefined }) : new Promise(() => {});
+
+  const before = render();
+  const dotsBefore = findAll(before, (n) => typeof n.props?.className === 'string' && n.props.className.startsWith('dot'));
+  assert.equal(dotsBefore.length, 5, 'exactly 5 dots render while history has not loaded yet');
+  assert(dotsBefore.every((n) => n.props.className === 'dot dot-u'), 'placeholder dots are neutral before history loads');
+
+  effects()[0]();
+  await new Promise((resolve) => setImmediate(resolve));
+
+  const after = render();
+  const dotsAfter = findAll(after, (n) => typeof n.props?.className === 'string' && n.props.className.startsWith('dot'));
+  assert.deepEqual(
+    Array.from(dotsAfter, (n) => n.props.className),
+    ['dot dot-w', 'dot dot-w', 'dot dot-w', 'dot dot-l', 'dot dot-l']
+  );
+});

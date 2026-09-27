@@ -1,21 +1,15 @@
 import { defineConfig } from 'wxt';
 
-// Community source cannot enable history-derived profiles through an environment flag.
-if (process.env.UMALYTICS_PRIVATE_PROFILE_DATA === 'true') throw new Error('This repository supports public builds only.');
-const privateProfileDataBuild = false;
-
 export default defineConfig({
   manifestVersion: 3,
   manifest: {
     browser_specific_settings: {
-      gecko: { id: privateProfileDataBuild ? 'umalytics-private@kjunodev' : 'umalytics@kjunodev' }
+      gecko: { id: 'umalytics@kjunodev' }
     },
-    name: privateProfileDataBuild ? 'UmaLytics Private' : 'UmaLytics',
-    version: '0.4.1',
-    version_name: privateProfileDataBuild ? '0.4.1-private.rc.1' : '0.4.1-public.open-beta.1',
-    description: privateProfileDataBuild
-      ? 'Private prematch scouting companion for Uma Drafter.'
-      : 'Prematch scouting companion for Uma Drafter.',
+    name: 'UmaLytics',
+    version: '0.5.0',
+    version_name: '0.5.0',
+    description: 'Prematch scouting companion for Uma Drafter.',
     icons: {
       16: 'icon/16.png',
       32: 'icon/32.png',
@@ -40,10 +34,5 @@ export default defineConfig({
       }
     ]
   },
-  vite: () => ({
-    define: {
-      __UMALYTICS_PRIVATE_PROFILE_DATA__: JSON.stringify(privateProfileDataBuild)
-    }
-  }),
   modules: ['@wxt-dev/module-react']
 });
