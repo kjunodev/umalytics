@@ -19,6 +19,14 @@ export interface DraftMapSelection {
   team: TeamId;
   name: string;
   details?: string;
+  track?: string;
+  distance?: number;
+  surface?: string;
+  variant?: string;
+  direction?: string;
+  season?: string;
+  weather?: string;
+  ground?: string;
   order?: number;
   status?: 'selected' | 'vetoed' | 'unknown';
 }
@@ -26,6 +34,14 @@ export interface DraftMapSelection {
 export interface DraftTiebreakerMap {
   name: string;
   details?: string;
+  track?: string;
+  distance?: number;
+  surface?: string;
+  variant?: string;
+  direction?: string;
+  season?: string;
+  weather?: string;
+  ground?: string;
 }
 
 export interface DraftTeamSnapshot {
@@ -38,7 +54,7 @@ export interface DraftTeamSnapshot {
 export interface DraftSnapshot {
   matchCode?: MatchCode;
   version?: number;
-  rules?: { maps: number; picks: number; bans: number; vetoes: number };
+  rules?: { maps: number; picks: number; bans: number; vetoes: number; mapVetoes: number };
   phase?: string;
   currentTeam?: TeamId;
   tiebreakerMap?: DraftTiebreakerMap;

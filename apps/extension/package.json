@@ -1,15 +1,19 @@
 {
   "name": "@umalytics/extension",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "wxt",
     "build": "wxt build",
     "postinstall": "wxt prepare",
-    "typecheck": "wxt prepare && tsc --project tsconfig.json"
+    "typecheck": "wxt prepare && tsc --project tsconfig.json",
+    "preview": "vite --config dev/preview/vite.config.ts",
+    "preview:shots": "node dev/preview/shots.mjs"
   },
   "dependencies": {
+    "@fontsource/barlow-semi-condensed": "^5.3.0",
+    "@fontsource/ibm-plex-sans": "^5.3.0",
     "@umalytics/shared": "workspace:*",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
@@ -17,8 +21,11 @@
   "devDependencies": {
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^4",
     "@wxt-dev/module-react": "^1.2.2",
+    "playwright": "^1.48.0",
     "typescript": "^5.7.2",
+    "vite": "^6",
     "wxt": "^0.20.27"
   }
 }

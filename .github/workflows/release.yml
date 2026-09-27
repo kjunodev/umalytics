@@ -1,4 +1,4 @@
-name: Publish public release
+name: Publish release
 on:
   push:
     branches: [main]
@@ -7,7 +7,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: public-release
+  group: release
   cancel-in-progress: false
 jobs:
   release:
@@ -45,7 +45,7 @@ jobs:
       - run: pnpm test
       - run: pnpm typecheck
       - run: pnpm build:all
-      - name: Package and publish public assets
+      - name: Package and publish assets
         run: node scripts/publish-release.mjs
         env:
           GH_TOKEN: ${{ github.token }}

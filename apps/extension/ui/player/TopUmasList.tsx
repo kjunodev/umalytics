@@ -1,17 +1,31 @@
-import type { PlayerProfileSummary } from '@umalytics/shared';
+import type { PlayerProfileSummary, PlayerTopUmaSummary } from '@umalytics/shared';
 import { formatDecimal, formatPercent } from '../common/format';
+import { BestUmaPortrait } from './BestUmaPortrait';
+
+// The card shows exactly this many Umas (or fewer if the player hasn't
+// played that many); there is no placeholder row for a missing entry.
+export const MAX_TOP_UMAS = 3;
+
+export function sortTopUmasForCard(umas: PlayerTopUmaSummary[]): PlayerTopUmaSummary[] {
+  return [...umas]
+    .sort((a, b) => b.matches - a.matches || a.name.localeCompare(b.name))
+    .slice(0, MAX_TOP_UMAS);
+}
 
 export function TopUmasList({
   topUmas,
+  allUmas,
   playerName,
   emptyMessage
 }: {
   topUmas?: PlayerProfileSummary['topUmas'];
+  allUmas?: PlayerProfileSummary['allUmas'];
   playerName: string;
   emptyMessage?: string;
 }) {
-  const slots = Array.from({ length: 3 }, (_, index) => topUmas?.[index]);
-  const shouldShowMessage = topUmas === undefined || topUmas.length === 0;
+  const source = allUmas ?? topUmas;
+  const cardUmas = source === undefined ? undefined : sortTopUmasForCard(source);
+  const shouldShowMessage = cardUmas === undefined || cardUmas.length === 0;
 
   return (
     <div
@@ -21,25 +35,21 @@ export function TopUmasList({
     >
       <p>Most Played</p>
       {shouldShowMessage ? (
-        <span className="section-message">{emptyMessage ?? 'No ranked Uma data found.'}</span>
+        <div className="top-umas-empty">
+          <span className="section-message">{emptyMessage ?? 'No ranked Uma data found.'}</span>
+        </div>
       ) : (
-        <ol>
-          {slots.map((uma, index) => (
-            uma === undefined ? (
-              <li key={`empty-uma:${index}`} className="empty-uma-row">
-                <span className="uma-name">-</span>
-                <span className="uma-meta">-</span>
-              </li>
-            ) : (
-              <li key={uma.umaId}>
-                <span className="uma-name" title={uma.name}>
-                  {uma.name}
-                </span>
-                <span className="uma-meta">
-                  {uma.matches} GP - {formatPercent(uma.winRate)} - {formatDecimal(uma.pointsPerGame)} PPG
-                </span>
-              </li>
-            )
+        <ol className="top-umas-rows">
+          {cardUmas.map((uma) => (
+            <li key={uma.umaId}>
+              <BestUmaPortrait uma={uma} />
+              <span className="uma-name" title={uma.name}>
+                {uma.name}
+              </span>
+              <span className="uma-meta">
+                {uma.matches} GP - {formatPercent(uma.winRate)} - {formatDecimal(uma.pointsPerGame)} PPG
+              </span>
+            </li>
           ))}
         </ol>
       )}
@@ -48,7 +58,6 @@ export function TopUmasList({
 }
 
 export function UmaResolutionNote({ profile }: { profile: PlayerProfileSummary | undefined }) {
-  if (profile?.historyDerived) return <p className="profile-status-note">History-derived stats; limited to the available history sample (up to 100 matches per scope).</p>;
   const unresolvedUmaMatches = profile?.unresolvedUmaMatches ?? 0;
   const disqualifiedMatches = profile?.disqualifiedMatches ?? 0;
   const notes = [

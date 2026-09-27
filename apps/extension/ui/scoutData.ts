@@ -3,15 +3,13 @@ import type { DraftSnapshot, PlayerProfileSummary, PlayerStatsScope, PrematchRos
 import { latestStatsCheckAt } from '../profiles/profileTiming';
 import { BEST_UMA_SCORE_VERSION, RECENT_HISTORY_VERSION } from '../profiles/profileConstants';
 import { normalizeRosterForDisplay } from '../room/rosterDisplay';
-import { filterSnapshotForBuild } from '../storage/profileStorage';
 import type { PlayerProfileLoadState, PlayerProfileSummariesSnapshot } from '../profiles/profileTypes';
 import type { LobbyLockState } from '../storage/lobbyLockStorage';
 import { formatRelativeAge, formatStatsScopeShortLabel } from './common/format';
-import { getDisplayedProfileStats } from './player/PlayerDetailScene';
+import { getDisplayedProfileStats } from './player/playerProfileDisplay';
 
 export const APP_MANIFEST = browser.runtime.getManifest();
 export const APP_VERSION_LABEL = formatAppVersionLabel(APP_MANIFEST);
-export const IS_PRIVATE_BUILD = isPrivateBuild(APP_MANIFEST);
 
 export interface DiagnosticRow {
   label: string;
@@ -21,7 +19,6 @@ export interface DiagnosticRow {
 export function normalizeProfileSnapshotForDisplay(
   snapshot: PlayerProfileSummariesSnapshot | undefined
 ): PlayerProfileSummariesSnapshot | undefined {
-  snapshot = filterSnapshotForBuild(snapshot);
   if (snapshot === undefined) {
     return undefined;
   }
@@ -155,15 +152,6 @@ function formatAppVersionLabel(manifest: unknown): string {
   return version;
 }
 
-function isPrivateBuild(manifest: unknown): boolean {
-  if (!isRecord(manifest)) {
-    return false;
-  }
-
-  return [manifest.name, manifest.version_name, manifest.description]
-    .some((value) => typeof value === 'string' && /\bprivate\b/i.test(value));
-}
-
 export function getProfileLoadStates(
   snapshot: PlayerProfileSummariesSnapshot | undefined
 ): PlayerProfileLoadState[] {
@@ -233,7 +221,7 @@ export function getDiagnostics(
   const readyProfiles = profileStates.length > 0
     ? profileStates.filter((state) => ['loaded', 'private'].includes(state.status)).length
     : profileValues.length;
-  const privateProfiles = profileValues.filter((profile) => profile.statsPrivate === true).length;
+  const hiddenProfiles = profileValues.filter((profile) => profile.statsPrivate === true).length;
   const unresolvedUmaMatches = profileValues.reduce(
     (total, profile) => total + (getDisplayedProfileStats(profile, statsScope)?.unresolvedUmaMatches ?? 0),
     0
@@ -244,8 +232,7 @@ export function getDiagnostics(
   );
 
   return [
-    { label: 'Version', value: `v${APP_VERSION_LABEL}${IS_PRIVATE_BUILD ? ' (private)' : ''}` },
-    { label: 'Build', value: IS_PRIVATE_BUILD ? 'Private full-profile' : 'Public safe' },
+    { label: 'Version', value: `v${APP_VERSION_LABEL}` },
     { label: 'Scene Scope', value: formatStatsScopeShortLabel(statsScope) },
     {
       label: 'Lobby Lock',
@@ -265,7 +252,7 @@ export function getDiagnostics(
     { label: 'Load Stages', value: [...new Set(profileStates.filter(isPendingProfileLoadState).map(state => state.stage ?? 'Queued'))].join(', ') || 'Idle' },
     { label: 'Last Errors', value: [...new Set(profileStates.map(state => state.error).filter(Boolean))].join(' | ') || 'none' },
     { label: 'Automatic Retry', value: profileStates.some(state => state.retryAt !== undefined) ? `${Math.max(0, Math.ceil((Math.max(...profileStates.map(state => state.retryAt ?? 0)) - now) / 1000))}s` : 'none' },
-    { label: 'Private Profiles', value: String(privateProfiles) },
+    { label: 'Hidden Stats', value: String(hiddenProfiles) },
     { label: 'Uma Gaps', value: `${unresolvedUmaMatches} unresolved, ${disqualifiedMatches} disqualified` },
     {
       label: 'Latest Stats Check',

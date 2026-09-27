@@ -16,7 +16,14 @@ export const MODULES = {
   content: 'entrypoints/content.ts',
   pageHook: 'entrypoints/pageHook.ts',
   scoutApp: 'entrypoints/scout/App.tsx',
-  scoutStyles: 'entrypoints/scout/styles.css',
+  uiCommonTokensCss: 'ui/common/tokens.css',
+  uiCommonBaseCss: 'ui/common/base.css',
+  uiCommonUiSize: 'ui/common/uiSize.ts',
+  uiShellCss: 'ui/shell/shell.css',
+  uiLobbyCss: 'ui/lobby/lobby.css',
+  uiDraftCss: 'ui/draft/draft.css',
+  uiUmasCss: 'ui/umas/umas.css',
+  uiHistoryCss: 'ui/history/history.css',
   diagnosticRecorder: 'runtime/diagnosticRecorder.ts',
   domLobbyExtraction: 'room/domLobbyExtraction.ts',
   draftExtraction: 'room/draftExtraction.ts',
@@ -30,6 +37,8 @@ export const MODULES = {
   playerExtraction: 'room/playerExtraction.ts',
   recordReaders: 'room/recordReaders.ts',
   playerProfileApi: 'profiles/playerProfileApi.ts',
+  esportsTeamApi: 'profiles/esportsTeamApi.ts',
+  teamIconStorage: 'storage/teamIconStorage.ts',
   profileAvailability: 'profiles/profileAvailability.ts',
   profileCache: 'profiles/profileCache.ts',
   profileConstants: 'profiles/profileConstants.ts',
@@ -53,23 +62,31 @@ export const MODULES = {
   uiCommonBadges: 'ui/common/badges.ts',
   uiCommonPartyVisuals: 'ui/common/partyVisuals.ts',
   uiCommonRoster: 'ui/common/roster.ts',
-  uiPlayerDetailScene: 'ui/player/PlayerDetailScene.tsx',
-  uiPlayerScoutingReport: 'ui/player/ScoutingReport.tsx',
+  uiPlayerProfileDisplay: 'ui/player/playerProfileDisplay.tsx',
   uiPlayerTopUmasList: 'ui/player/TopUmasList.tsx',
-  uiPlayerBestUmasList: 'ui/player/BestUmasList.tsx',
-  uiPlayerRecentMatchesList: 'ui/player/RecentMatchesList.tsx',
+  uiPlayerBestUmaPortrait: 'ui/player/BestUmaPortrait.tsx',
+  uiPlayerRecentMatchFormat: 'ui/player/recentMatchFormat.ts',
   uiLobbyTeamSection: 'ui/lobby/TeamSection.tsx',
+  uiLobbyBadgeChip: 'ui/lobby/BadgeChip.tsx',
+  uiCommonTeamIcon: 'ui/common/TeamIcon.tsx',
+  uiPlayerDrawer: 'ui/player/PlayerDrawer.tsx',
+  uiPlayerDrawerCss: 'ui/player/playerDrawer.css',
   uiDraftScene: 'ui/draft/DraftScene.tsx',
   uiDraftFormat: 'ui/draft/draftFormat.ts',
   uiUmasCatalog: 'ui/umas/umaCatalog.ts',
   uiUmasPlannerScene: 'ui/umas/UmaPlannerScene.tsx',
   uiHistoryScene: 'ui/history/HistoricalScene.tsx',
   uiHistoryExplorerViews: 'ui/history/ExplorerViews.tsx',
+  uiPlayersData: 'ui/players/playersData.ts',
+  uiPlayersView: 'ui/players/PlayersView.tsx',
+  uiPlayersCss: 'ui/players/players.css',
+  storagePlayersRecent: 'storage/playersRecentStorage.ts',
 
   // background (phase 3)
   profileStates: 'background/profileStates.ts',
   scoutWindow: 'background/scoutWindow.ts',
   drafterTabs: 'background/drafterTabs.ts',
+  teamIcons: 'background/teamIcons.ts',
 };
 
 const pathByName = new Map(Object.entries(MODULES));
@@ -77,7 +94,7 @@ const pathByName = new Map(Object.entries(MODULES));
 // Dependencies each module needs evaluated into the same vm context first,
 // matching the preload order the original per-test-file loaders hard coded.
 const PRELOADS = {
-  background: ['profileStates', 'scoutWindow', 'drafterTabs'],
+  background: ['profileStates', 'scoutWindow', 'drafterTabs', 'profileConstants'],
   profileCache: ['profileMerge'],
   explorerState: ['profileMerge'],
   explorerService: ['profileMerge'],
@@ -89,6 +106,7 @@ const PRELOADS = {
   recordReaders: ['teams'],
   rosterDisplay: ['teams'],
   uiCommonRoster: ['teams'],
+  uiCommonBadges: ['uiCommonFormat', 'profileConstants'],
 };
 
 function resolvePath(name) {
@@ -112,8 +130,7 @@ function applyFastPatches(source) {
     .replace(/const API_REQUEST_TIMEOUT_MS = [^;]+;/, 'const API_REQUEST_TIMEOUT_MS = 120;')
     .replace(/const PROFILE_SUMMARY_TIMEOUT_MS = [^;]+;/, 'const PROFILE_SUMMARY_TIMEOUT_MS = 1500;')
     .replace('15_000', '300')
-    .replace('const DEFAULT_REQUEST_INTERVAL_MS = 500;', 'const DEFAULT_REQUEST_INTERVAL_MS = 1;')
-    .replace('const BATCH_SETTLE_MS = 1200;', 'const BATCH_SETTLE_MS = 10;');
+    .replace('const DEFAULT_REQUEST_INTERVAL_MS = 350;', 'const DEFAULT_REQUEST_INTERVAL_MS = 1;');
 }
 
 const loadedByContext = new WeakMap();

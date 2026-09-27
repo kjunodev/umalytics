@@ -1,15 +1,16 @@
 import { browser } from 'wxt/browser';
 import type { PlayerProfileSummary, PrematchPlayer } from '@umalytics/shared';
-import { fetchJson, fetchPlayerProfileSummaries, getApiCooldown } from '../profiles/playerProfileApi';
+import { fetchJson, fetchPlayerProfileSummaries, getApiCooldown, getSeasonLeaderboard } from '../profiles/playerProfileApi';
 import { getCachedPlayerProfiles, rememberCachedPlayerProfiles } from '../storage/profileStorage';
 import { BEST_UMA_SCORE_VERSION, PROFILE_CACHE_TTL_MS, RECENT_HISTORY_VERSION } from '../profiles/profileConstants';
-import { hasCurrentHistoryState } from '../profiles/profileMerge';
+import { mergeProfileScopes } from '../profiles/profileMerge';
 import { lookupPlayer, parseHistoricalMatch, parseHistoryInput, parsePlayerInput, parsePlayerSearch } from './explorerData';
 import { EXPLORER_PORT, type ExplorerRequest, type ExplorerReply, type ExplorerResult } from './explorerTypes';
 
 export function validateExplorerRequest(value: unknown): ExplorerRequest {
   if (!value || typeof value !== 'object') throw new Error('Invalid lookup request.');
   const input = value as Record<string, unknown>;
+  if (input.kind === 'leaderboard') return { kind: 'leaderboard' };
   if ((input.kind === 'match' || input.kind === 'search') && typeof input.input === 'string' && input.input.length <= 300) {
     if (input.kind === 'match') return { kind: 'match', input: input.input };
     if (Number.isInteger(input.page) && Number(input.page) >= 1 && Number(input.page) <= 5) return { kind: 'search', input: input.input, page: Number(input.page) };
@@ -28,26 +29,29 @@ export function validateExplorerRequest(value: unknown): ExplorerRequest {
 export async function executeExplorerRequest(request: ExplorerRequest, signal: AbortSignal,
   progress: (profiles: Record<string, PlayerProfileSummary>) => void): Promise<ExplorerResult> {
   signal.throwIfAborted();
+  if (request.kind === 'leaderboard') return getSeasonLeaderboard(signal);
   if (request.kind === 'match') {
     const code = parseHistoryInput(request.input);
-    return parseHistoricalMatch(await fetchJson<unknown>(`/api/matches/${code}`, signal), code);
+    return parseHistoricalMatch(await fetchJson<unknown>(`/api/matches/${code}`, signal, 'background', 'match'), code);
   }
   if (request.kind === 'search') {
     const { id, query } = parsePlayerInput(request.input);
     if (id) return { players: [lookupPlayer(id)], total: 1, page: 1, pageSize: 10 };
     // The directory exposes a capped result set, not a paged global leaderboard.
     const params = new URLSearchParams({ query: query!, limit: '50' });
-    return parsePlayerSearch(await fetchJson<unknown>(`/api/players/directory-search?${params}`, signal), request.page);
+    return parsePlayerSearch(
+      await fetchJson<unknown>(`/api/players/directory-search?${params}`, signal, 'background', 'directory-search'), request.page
+    );
   }
   const profiles: Record<string, PlayerProfileSummary> = {};
   const archive = await getCachedPlayerProfiles();
   signal.throwIfAborted();
   const pending = request.players.filter(player => {
     const cached = archive[player.discordId];
-    if (cached && !cached.error && !cached.isPartial && cached.statsScope === request.scope &&
-      hasCurrentHistoryState(cached, request.scope) &&
+    if (cached && !cached.error && !cached.isPartial &&
+      (cached.scopeFetchedAt?.[request.scope] !== undefined || cached.statsScope === request.scope) &&
       cached.bestUmaScoreVersion === BEST_UMA_SCORE_VERSION && cached.recentHistoryVersion === RECENT_HISTORY_VERSION &&
-      Date.now() - cached.fetchedAt < PROFILE_CACHE_TTL_MS) {
+      Date.now() - (cached.scopeFetchedAt?.[request.scope] ?? cached.fetchedAt) < PROFILE_CACHE_TTL_MS) {
       profiles[player.discordId] = cached;
       return false;
     }
@@ -62,8 +66,8 @@ export async function executeExplorerRequest(request: ExplorerRequest, signal: A
   if (pending.length) {
     const loaded = await fetchPlayerProfileSummaries(pending, { scope: request.scope, signal, onProgress: update, onSummary: update });
     signal.throwIfAborted();
-    Object.assign(profiles, loaded);
-    await rememberCachedPlayerProfiles(Object.fromEntries(Object.entries(loaded).filter(([, profile]) => !profile.error && !profile.isPartial)));
+    for (const [id, profile] of Object.entries(loaded)) profiles[id] = mergeProfileScopes(archive[id] ?? profiles[id], profile);
+    await rememberCachedPlayerProfiles(Object.fromEntries(Object.entries(profiles).filter(([, profile]) => !profile.error && !profile.isPartial)));
   }
   return profiles;
 }

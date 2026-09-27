@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
-import type { DraftSnapshot, PlayerProfileSummary, PlayerStatsScope, PrematchPlayer, PrematchRoster, PrematchTeam } from '@umalytics/shared';
+import type { DraftSnapshot, EsportsTeamIconMap, PlayerProfileSummary, PlayerStatsScope, PrematchPlayer, PrematchRoster, PrematchTeam } from '@umalytics/shared';
 import { getTeamGroups } from '../../room/rosterDisplay';
 import { getPlayerKey } from '../common/roster';
 import { DraftScene } from '../draft/DraftScene';
 import { TeamSection } from '../lobby/TeamSection';
-import { PlayerDetailScene } from '../player/PlayerDetailScene';
+import { PlayerDrawer } from '../player/PlayerDrawer';
 import { UmaPlannerScene } from '../umas/UmaPlannerScene';
 
 export type AppScene = 'lobby' | 'draft' | 'umas';
@@ -14,18 +14,26 @@ export interface SelectedPlayerContext {
   player: PrematchPlayer;
 }
 
-export function HistoricalScene({ snapshot, roster, profiles, statsScope, scene, loading, navigation }: {
+export function HistoricalScene({ snapshot, roster, profiles, statsScope, scene, loading, navigation, onOpenPlayer, teamIcons = {} }: {
   snapshot: DraftSnapshot; roster: PrematchRoster; profiles: Record<string, PlayerProfileSummary>;
   statsScope: PlayerStatsScope; scene: AppScene; loading: boolean; navigation: number;
+  onOpenPlayer?: (player: PrematchPlayer | undefined) => void;
+  teamIcons?: EsportsTeamIconMap;
 }) {
   const [selected, setSelected] = useState<string>();
-  useEffect(() => setSelected(undefined), [scene, navigation]);
+  useEffect(() => { setSelected(undefined); onOpenPlayer?.(undefined); }, [scene, navigation]);
   const teams = getTeamGroups(roster);
   const context = getSelectedPlayerContext(teams, selected);
-  if (context && scene === 'lobby') return <PlayerDetailScene team={context.team} player={context.player} profile={profiles[context.player.discordId]} isProfileLoading={loading && !profiles[context.player.discordId]} statsScope={statsScope} now={Date.now()} onBack={() => setSelected(undefined)} />;
+  const selectPlayer = (key: string) => {
+    setSelected(key);
+    onOpenPlayer?.(getSelectedPlayerContext(teams, key)?.player);
+  };
   if (scene === 'draft') return <DraftScene snapshot={snapshot} roster={roster} profiles={profiles} statsScope={statsScope} historical />;
   if (scene === 'umas') return <UmaPlannerScene roster={roster} profiles={profiles} statsScope={statsScope} />;
-  return <section className="team-list" aria-label="Historical lobby teams">{teams.map(team => <TeamSection key={team.id} team={team} profiles={profiles} loadingDiscordIds={loading ? roster.players.filter(player => !profiles[player.discordId]).map(player => player.discordId) : []} statsScope={statsScope} onSelectPlayer={setSelected} />)}</section>;
+  return <>
+    <section className="team-list" aria-label="Historical lobby teams">{teams.map(team => <TeamSection key={team.id} team={team} profiles={profiles} loadingDiscordIds={loading ? roster.players.filter(player => !profiles[player.discordId]).map(player => player.discordId) : []} statsScope={statsScope} teamIcons={teamIcons} selectedPlayerKey={selected} onSelectPlayer={selectPlayer} />)}</section>
+    {context && <PlayerDrawer player={context.player} profile={profiles[context.player.discordId]} onClose={() => { setSelected(undefined); onOpenPlayer?.(undefined); }} context={{ team: context.team, statsScope, isProfileLoading: loading && !profiles[context.player.discordId], now: Date.now(), inLobby: false, teamIcon: teamIcons[context.player.discordId] }} />}
+  </>;
 }
 
 export function getSelectedPlayerContext(

@@ -1,0 +1,107 @@
+:root {
+  /* Type */
+  --font-display: 'Barlow Semi Condensed', 'IBM Plex Sans', system-ui, sans-serif;
+  --font-body: 'IBM Plex Sans', system-ui, sans-serif;
+
+  /* Surfaces */
+  --bg-page: #0d111b;
+  --bg-surface-1: #121826;
+  --bg-surface-2: #161d2c;
+  --bg-inset: #111726;
+  --bg-raised: #1f2840;
+
+  /* Borders */
+  --border-subtle: #1f2738;
+  --border-default: #263048;
+  --border-strong: #2e3850;
+  --border-emphasis: #3a4868;
+
+  /* Text */
+  --text-primary: #e8ecf4;
+  --text-secondary: #9aa4b8;
+  --text-muted: #8591a7;
+  --text-link: #8fb8ff;
+  --text-link-hover: #b9d2ff;
+
+  /* Accents */
+  --accent-blue: #6a9bff;
+  --accent-blue-soft: #9cc2ff;
+  --accent-orange: #f0a05a;
+  --accent-gold: #f0cd74;
+  --accent-pink: #ff9fc2;
+  --accent-purple: #c9b6ff;
+  --accent-teal: #86e0d4;
+  --accent-green: #4cc38a;
+  --accent-green-soft: #9fe0c0;
+  --accent-silver: #d6dce6;
+  --accent-bronze: #e0a070;
+
+  /* Tone chips (badges, tags) */
+  --tone-rank-bg: #2e2716;
+  --tone-rank-fg: var(--accent-gold);
+  --tone-skill-bg: #16243f;
+  --tone-skill-fg: var(--accent-blue-soft);
+  --tone-sample-bg: #232b3c;
+  --tone-sample-fg: #c6cdda;
+  --tone-mvp-bg: #351d2a;
+  --tone-mvp-fg: var(--accent-pink);
+  --tone-style-bg: #1c2e28;
+  --tone-style-fg: var(--accent-green-soft);
+  --tone-more-fg: var(--text-muted);
+
+  /* Party duos */
+  --party-a-bg: #251f3d;
+  --party-a-fg: var(--accent-purple);
+  --party-b-bg: #15302d;
+  --party-b-fg: var(--accent-teal);
+
+  /* Match outcomes */
+  --status-win-bg: #2f6fdb;
+  --status-win-fg: #ffffff;
+  --status-loss-bg: #2a1f1a;
+  --status-loss-fg: var(--accent-orange);
+  --status-unplayed-bg: #232b3c;
+  --status-unplayed-fg: var(--text-secondary);
+
+  /* Live indicator */
+  --status-live-bg: #13261f;
+  --status-live-fg: var(--accent-green-soft);
+  --status-live-dot: var(--accent-green);
+  --status-live-code: #d5f2e4;
+
+  /* Radii */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+  --radius-xl: 12px;
+  --radius-pill: 999px;
+
+  /* Shell */
+  --header-height: 60px;
+  --drawer-width: 600px;
+
+  /* Designed dimensions at Default. The root UI zoom scales all pixels together. */
+  --space-3xs: 2px;
+  --space-2xs: 4px;
+  --space-xs: 6px;
+  --space-sm: 8px;
+  --space-md: 10px;
+  --space-lg: 14px;
+  --space-xl: 18px;
+  --space-2xl: 22px;
+  --font-step-xs: 10px;
+  --font-step-sm: 12px;
+  --font-step-md: 12px;
+  --font-step-lg: 15px;
+  --font-step-xl: 20px;
+  --row-sm: 30px;
+  --row-md: 44px;
+  --row-lg: 46px;
+  --pick-tile-height: 128px;
+  --badge-row-height: 49px;
+  --icon-team-logo: 22px;
+  --ui-scale: 1;
+}
+
+:root[data-ui-size="small"] { --ui-scale: 0.875; }
+:root[data-ui-size="large"] { --ui-scale: 1.15; }

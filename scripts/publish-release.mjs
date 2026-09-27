@@ -24,15 +24,14 @@ if(release.version!==version || release.builds.length!==2) throw Error('Unexpect
 const output=path.join(root,'.releases/assets');fs.mkdirSync(output,{recursive:true});
 const assets=[];
 for(const family of ['chromium','firefox']) {
-  const build=release.builds.find(x=>x.family===family && x.mode==='public');
-  if(!build) throw Error('Public build missing');
+  const build=release.builds.find(x=>x.family===family);
+  if(!build) throw Error('Browser build missing');
   const dir=path.resolve(build.path);
   if(!dir.startsWith(path.resolve(root,'.releases')+path.sep)) throw Error('Build outside release directory');
   const manifest=JSON.parse(fs.readFileSync(path.join(dir,'manifest.json')));
-  // Public stats boundaries are checked in tests/public-boundary.test.mjs and
-  // the stats-versus-history fixture in tests/batch-profiles.test.mjs.
-  if(manifest.version!==version || manifest.name!=='UmaLytics') throw Error('Public boundary/version check failed');
-  const asset=path.join(output,`umalytics-${family}-${version}-open-beta.1.zip`);
+  // Display-only history rules are checked before packaging.
+  if(manifest.version!==version || manifest.name!=='UmaLytics') throw Error('Manifest version or name mismatch');
+  const asset=path.join(output,`umalytics-${family}-${version}.zip`);
   // The release runner is Linux; fresh output avoids adding stale files to an existing ZIP.
   if(fs.existsSync(asset)) throw Error('Asset already exists; use a fresh build directory');
   if(process.platform==='win32') {
@@ -45,7 +44,7 @@ const sums=path.join(output,'SHA256SUMS.txt');
 fs.writeFileSync(sums,assets.map(file=>`${createHash('sha256').update(fs.readFileSync(file)).digest('hex')}  ${path.basename(file)}`).join('\n')+'\n');
 assets.push(sums);
 if(packageOnly) {
-  console.log(`Local public assets verified and packaged: ${output}`);
+  console.log(`Local assets verified and packaged: ${output}`);
 } else {
 const gh=(...args)=>execFileSync('gh',args,{cwd:root,encoding:'utf8'}).trim();
 const refs=JSON.parse(gh('api',`repos/${repo}/git/matching-refs/tags/${tag}`));

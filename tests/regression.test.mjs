@@ -23,9 +23,9 @@ function players(count=5) {
 }
 const roster = (match='ROOM01', count=5) => ({matchCode:match,players:players(count)});
 const stats = {summary:{matchesIncluded:4,totalPointsScored:12},umaEntries:[{umaId:'100101',matches:4,wins:2,losses:2,pointsScored:12}]};
-function apiHarness({privateBuild=false, responder, latency=2, fast=true, sessionStorage}={}) {
+function apiHarness({responder, latency=2, fast=true, sessionStorage}={}) {
   const calls=[],callTimes=[],diagnostics=[]; let active=0, peak=0, aborts=0;
-  const c=context({__UMALYTICS_PRIVATE_PROFILE_DATA__:privateBuild,
+  const c=context({
     ...(sessionStorage ? {browser:{storage:{session:sessionStorage}}} : {}),
     recordDiagnostic:value=>diagnostics.push(value),
     fetch:async (url,init)=>{
@@ -73,17 +73,17 @@ test('10-player cold load respects global request cap and returns usable stats',
   assert.equal(h.calls.length,22);
 });
 
-test('at the unchanged 500 ms pace, 10-player stats resolve within ~5.5 s and the whole lobby within ~6.5 s',async()=>{
+test('at the 350 ms pace, 10-player stats resolve within ~4 s and the whole lobby within ~4.5 s',async()=>{
   const h=apiHarness({latency:100,fast:false});const resolved=new Map();const start=performance.now();
   await h.c.fetchPlayerProfileSummaries(players(10),{scope:'currentSeason',onProgress:summary=>{
     if(summary.currentSeasonStats.matches===4 && !resolved.has(summary.discordId)) resolved.set(summary.discordId,performance.now()-start);
   }});
   const lobbyMs=performance.now()-start;
   const times=[...resolved.values()];
-  assert.equal(times.length,10);assert(Math.min(...times)<1500);
-  assert(Math.max(...times)<5500,`stats should resolve within ~5.5s, took ${Math.max(...times)}ms`);
-  assert(lobbyMs<6500,`the whole lobby should resolve within ~6.5s, took ${lobbyMs}ms`);
-  assert(h.callTimes.slice(1).every((time,i)=>time-h.callTimes[i]>=450));
+  assert.equal(times.length,10);assert(Math.min(...times)<1200);
+  assert(Math.max(...times)<4000,`stats should resolve within ~4s, took ${Math.max(...times)}ms`);
+  assert(lobbyMs<4500,`the whole lobby should resolve within ~4.5s, took ${lobbyMs}ms`);
+  assert(h.callTimes.slice(1).every((time,i)=>time-h.callTimes[i]>=300));
 });
 
 test('seasonal stats arrive before a stalled leaderboard',async()=>{
@@ -136,7 +136,7 @@ test('slow session storage does not occupy queue slots or delay paced starts',as
     await waitUntil(()=>h.calls.length===4,2500);
     await pending;
     assert(writes>=1);
-    assert(h.callTimes.slice(1).every((time,i)=>time-h.callTimes[i]>=450));
+    assert(h.callTimes.slice(1).every((time,i)=>time-h.callTimes[i]>=300));
   } finally { gate.resolve(); }
 });
 
@@ -189,6 +189,14 @@ test('session storage failure falls back to memory and cache diagnostics name th
   assert(h.diagnostics.every(entry=>entry.endpoint!==undefined));
 });
 
+test('an explicit endpoint label overrides the dynamic last path segment in diagnostics, so per-match-code paths still aggregate under one label',async()=>{
+  const h=apiHarness();
+  await h.c.fetchJson('/api/matches/FX1A2B',undefined,'background','match');
+  await h.c.fetchJson('/api/matches/QZ9K3M',undefined,'background','match');
+  assert(h.diagnostics.every(entry=>entry.endpoint==='match'));
+  assert(!h.diagnostics.some(entry=>entry.endpoint==='FX1A2B' || entry.endpoint==='QZ9K3M'));
+});
+
 test('shared season/leaderboard requests are deduplicated and cached',async()=>{
   const h=apiHarness();
   await Promise.all([h.c.fetchPlayerProfileSummaries(players(1)),h.c.fetchPlayerProfileSummaries(players(1))]);
@@ -216,15 +224,11 @@ test('cancelling a roster aborts active requests and does not start queued profi
   assert.equal(summaries,0);
 });
 
-test('public source stops at private stats even if a runtime flag is supplied',async()=>{
-  for (const privateBuild of [false,true]) {
-    const h=apiHarness({privateBuild,responder:url=>url.pathname.endsWith('/stats')?{status:403}:undefined});
-    const result=await h.c.fetchPlayerProfileSummaries(players(1));
-    assert.equal(h.calls.filter(p=>p.includes('/history')).length,0);
-    assert.equal(Object.values(result)[0].statsPrivate,true);
-  }
-  const h=apiHarness({privateBuild:true});await h.c.fetchPlayerProfileSummaries(players(1));
+test('hidden stats never trigger history reconstruction',async()=>{
+  const h=apiHarness({responder:url=>url.pathname.endsWith('/stats')?{status:403}:undefined});
+  const result=await h.c.fetchPlayerProfileSummaries(players(1));
   assert.equal(h.calls.filter(p=>p.includes('/history')).length,0);
+  assert.equal(Object.values(result)[0].statsPrivate,true);
 });
 
 test('rate limits fail explicitly without sleeping or issuing a retry storm',async()=>{
@@ -236,9 +240,10 @@ test('rate limits fail explicitly without sleeping or issuing a retry storm',asy
 });
 
 function backgroundHarness({stored = {}} = {}) {
-  const snapshots=[],fetches=[],alarms=new Map();let cached;let windowCount=0;let clock=Date.now();let latest=roster();let archive={};
+  const snapshots=[],fetches=[],alarms=new Map(),allTimeFetches=[];let cached;let windowCount=0;let clock=Date.now();let latest=roster();let archive={};
+  let allTimeStatsResponses={};
   class Clock extends Date { static now(){return clock;} }
-  const c=context({Date:Clock, getApiCooldown:()=>undefined,restoreApiCooldown:()=>{},
+  const c=context({Date:Clock, getApiCooldown:()=>undefined,restoreApiCooldown:()=>{},queueTeamIconRefresh:()=>Promise.resolve(),
     browser:{storage:{local:{get:async key=>({[key]:stored[key]}),set:async value=>Object.assign(stored,structuredClone(value)),remove:async key=>{delete stored[key];}}},
       alarms:{clear:async name=>alarms.delete(name),create:async(name,info)=>alarms.set(name,info)},tabs:{query:async()=>[{id:1,active:true,url:'https://drafter.uma.guide/spectate/ROOM01'}]},scripting:{executeScript:async()=>{}},runtime:{getURL:p=>p},windows:{create:async()=>({id:++windowCount}),update:async()=>{}}},
     getLobbyLockState:async()=>undefined,setLatestPrematchRoster:async()=>{},getLatestPrematchRoster:async()=>latest,
@@ -247,10 +252,15 @@ function backgroundHarness({stored = {}} = {}) {
     setPlayerProfileSummaries:async s=>{cached=structuredClone(s);snapshots.push(cached);},
     isHashedUmaAssetUrl:()=>false,
     fetchPlayerProfileSummaries:async (p,options)=>{const gate=deferred();fetches.push({players:p,options,gate});return await gate.promise ?? {};},
+    fetchPlayerAllTimeStats:async discordId=>{allTimeFetches.push(discordId);return allTimeStatsResponses[discordId] ?? {
+      wins:null,losses:null,winRate:null,matches:null,points:null,pointsPerGame:null,podiums:null,mvpMatches:null,
+      topUmas:[],bestUmas:[],allUmas:[],recentMatches:[]
+    };},
     sendRoomDomScanRequest:async()=>{await c.handlePrematchRosterDetected(roster());return{activeLobby:true,matchCode:'ROOM01'};}
   });
   evaluate(c,'profileConstants');evaluate(c,'rosterDisplay');evaluate(c,'profileCache');evaluate(c,'background');
-  return {c,snapshots,fetches,alarms,stored,advance(ms){clock+=ms;},get now(){return clock;},get windowCount(){return windowCount;},set cached(s){cached=s;},set latest(r){latest=r;}};
+  return {c,snapshots,fetches,alarms,stored,allTimeFetches,advance(ms){clock+=ms;},get now(){return clock;},get windowCount(){return windowCount;},
+    set cached(s){cached=s;},set latest(r){latest=r;},set allTimeStatsResponses(v){allTimeStatsResponses=v;}};
 }
 
 test('scout window opens before profiles resolve and rapid clicks create one window',async()=>{
@@ -267,13 +277,52 @@ test('same membership and team/phase changes share one enrichment run',async()=>
   h.fetches[0].gate.resolve();await p;
 });
 
-test('background skips batch settling only when both team rosters have five slots',async()=>{
+test('background marks a roster complete only when both sides have five slots',async()=>{
   for(const [count,expected] of [[9,false],[10,true]]) {
     const h=backgroundHarness();const pending=h.c.enrichRosterProfiles(roster('ROOM01',count));
     await waitUntil(()=>h.fetches.length===1);
     assert.equal(h.fetches[0].options.rosterComplete,expected);
     h.fetches[0].gate.resolve();await pending;
   }
+});
+
+function summaryFor(player,overrides={}) {
+  return {discordId:player.discordId,displayName:player.displayName,fetchedAt:Date.now(),profileUrl:'',statsScope:'currentSeason',
+    rank:null,rating:null,ratingDeviation:null,conservativeRating:null,wins:null,losses:null,winRate:null,
+    matches:null,points:null,pointsPerGame:null,podiums:null,mvpMatches:null,
+    topUmas:[],bestUmas:[],allUmas:[],recentMatches:[],statsPrivate:false,
+    currentSeasonStats:{matches:null},allTimeStats:{matches:null},...overrides};
+}
+
+test('newcomer badge support: no all-time request when season matches already meet the threshold',async()=>{
+  const h=backgroundHarness();const r=roster();const pending=h.c.enrichRosterProfiles(r);
+  await waitUntil(()=>h.fetches.length===1);
+  h.fetches[0].gate.resolve(Object.fromEntries(r.players.map(p=>[p.discordId,summaryFor(p,{matches:10})])));
+  await pending;
+  assert.equal(h.allTimeFetches.length,0,'season matches >=10 needs no all-time lookup');
+});
+
+test('newcomer badge support: fetches all-time stats in the background for players under 10 season games',async()=>{
+  const h=backgroundHarness();const r=roster();
+  h.allTimeStatsResponses=Object.fromEntries(r.players.map(p=>[p.discordId,
+    {wins:2,losses:2,winRate:0.5,matches:4,points:8,pointsPerGame:2,podiums:1,mvpMatches:0,topUmas:[],bestUmas:[],allUmas:[],recentMatches:[]}]));
+  const pending=h.c.enrichRosterProfiles(r);
+  await waitUntil(()=>h.fetches.length===1);
+  h.fetches[0].gate.resolve(Object.fromEntries(r.players.map(p=>[p.discordId,summaryFor(p,{matches:5})])));
+  await pending;
+  assert.equal(h.allTimeFetches.length,r.players.length,'every under-threshold player gets exactly one background lookup');
+  const finalSnapshot=h.snapshots[h.snapshots.length-1];
+  for(const p of r.players) assert.equal(finalSnapshot.profiles[p.discordId].allTimeStats.matches,4);
+});
+
+test('newcomer badge support: no all-time request when the lobby itself is already showing all-time stats',async()=>{
+  const h=backgroundHarness();vm.runInContext("selectedStatsScope = 'allTime';",h.c);
+  const r=roster();const pending=h.c.enrichRosterProfiles(r);
+  await waitUntil(()=>h.fetches.length===1);
+  assert.equal(h.fetches[0].options.scope,'allTime');
+  h.fetches[0].gate.resolve(Object.fromEntries(r.players.map(p=>[p.discordId,summaryFor(p,{matches:3,statsScope:'allTime'})])));
+  await pending;
+  assert.equal(h.allTimeFetches.length,0,'all-time scope already has the real numbers, no extra request needed');
 });
 
 test('a roster missing team2 loads with the settling wait',async()=>{
@@ -492,7 +541,7 @@ test('a background restart restores the cooldown and schedules recovery for the 
   assert.equal(restored.fetches.length,1);restored.fetches[0].gate.resolve();await retry;
 });
 
-test('returning to an earlier lobby restores its profiles without another API batch',async()=>{
+test('returning to an earlier lobby restores its profiles without new API requests',async()=>{
   const api=apiHarness();const profiles=await api.c.fetchPlayerProfileSummaries(players());
   const h=backgroundHarness();h.cached={matchCode:'ROOM01',profiles};
   const other={matchCode:'ROOM02',players:players().map(p=>({...p,userId:'9'+p.userId,discordId:'9'+p.discordId}))};
@@ -552,7 +601,7 @@ test('a 429 increases request spacing and the cooldown persists that spacing',as
   assert.equal(vm.runInContext('requestStartIntervalMs',next.c),h.c.getApiCooldown().startIntervalMs);
 });
 
-test('a cold 10-player public lobby makes 12 requests, no profile/history/batch, and stats lead the leaderboard',async()=>{
+test('a cold 10-player lobby makes 12 requests, no profile/history/batch, and stats lead the leaderboard',async()=>{
   const h=apiHarness();
   const result=await h.c.fetchPlayerProfileSummaries(players(10),{scope:'currentSeason'});
   assert.equal(Object.keys(result).length,10);
@@ -586,32 +635,18 @@ test('pacing recovers toward the base interval after sustained success following
   assert(afterRecovery>=base,'recovery can never go below the base interval');
 });
 
-test('setBaseRequestInterval is bounded to at least 250 ms and the public build never calls it',async()=>{
-  const h=apiHarness();
-  h.c.setBaseRequestInterval(50);
-  assert.equal(vm.runInContext('baseRequestIntervalMs',h.c),250);
-  assert.equal(vm.runInContext('requestStartIntervalMs',h.c),250);
-  h.c.setBaseRequestInterval(900);
-  assert.equal(vm.runInContext('baseRequestIntervalMs',h.c),900);
-  assert.equal(vm.runInContext('requestStartIntervalMs',h.c),900);
-  const background=readModule('background');
-  assert(!background.includes('setBaseRequestInterval'),'the public build never overrides the default pace');
-});
 
-test('private and public caches are separate and public mode rejects private/legacy private data',async()=>{
+test('new cache keys do not restore older ranked-stat snapshots',async()=>{
   const stored={};const storage={get:async key=>({[key]:stored[key]}),set:async values=>Object.assign(stored,values)};
-  function storageContext(privateBuild) {
-    const c=context({__UMALYTICS_PRIVATE_PROFILE_DATA__:privateBuild,browser:{storage:{local:storage}}});
+  function storageContext() {
+    const c=context({browser:{storage:{local:storage}}});
     evaluate(c,'profileCache');evaluate(c,'profileStorage');return c;
   }
-  const privateContext=storageContext(true);const secret={discordId:'1',fetchedAt:Date.now(),statsPrivate:true,matches:40};
-  await privateContext.rememberCachedPlayerProfiles({'1':secret});
-  await privateContext.setPlayerProfileSummaries({profiles:{'1':secret},loadingDiscordIds:[]});
-  const publicContext=storageContext(false);
-  assert.equal(Object.keys(await publicContext.getCachedPlayerProfiles()).length,0);
-  assert.equal(await publicContext.getPlayerProfileSummaries(),undefined);
-  const legacy=publicContext.filterSnapshotForBuild({profiles:{'1':secret,'2':{discordId:'2',fetchedAt:Date.now()}},loadingDiscordIds:[]});
-  assert.equal(legacy.profiles['1'],undefined);assert(legacy.profiles['2']);
+  stored['profileArchiveV1']={'1':{discordId:'1',fetchedAt:Date.now(),statsPrivate:true,matches:40}};
+  stored['playerProfileSummaries']={profiles:stored['profileArchiveV1'],loadingDiscordIds:[]};
+  const current=storageContext();
+  assert.equal(Object.keys(await current.getCachedPlayerProfiles()).length,0);
+  assert.equal(await current.getPlayerProfileSummaries(),undefined);
 });
 
 test('unscoped or foreign socket/storage rosters cannot replace the M95Z2Z team',()=>{
@@ -760,15 +795,22 @@ test('new room starts a new version sequence and rejects late old-room events',(
 });
 
 test('confirmed draft snapshots ignore preview/history duplicates and accept a newer undo',()=>{
-  const {state,c}=roomHarness();const event=matchEvent({phase:'complete',rules:{map:{picksPerTeam:3},uma:{teamSize:5,preBansPerTeam:0,postBansPerTeam:0}}});
+  const {state,c}=roomHarness();const event=matchEvent({phase:'complete',rules:{map:{picksPerTeam:3,bansPerTeam:2},uma:{teamSize:5,preBansPerTeam:0,postBansPerTeam:0}}});
   event.state.team1.pickedUmas=[{id:'100101',name:'Outfit A'}];
   event.state.availableUmas=[{id:'100102',name:'Not picked'}];event.state.draftActionHistory=[{uma:{id:'100103',name:'Undone'}}];
   event.state.pendingSelection={uma:{id:'100104',name:'Preview'}};
   const clean=c.decodeRoomEvent('42'+JSON.stringify(['server:event',event]));
   const result=state.apply(clean,'M95Z2Z');assert.equal(result.draft.teams.team1.umas.length,1);assert.equal(result.draft.rules.picks,5);assert.equal(result.draft.rules.bans,0);
+  assert.equal(result.draft.rules.mapVetoes,2,'the map veto count is read from rules.map.bansPerTeam');
   const undo=matchEvent({phase:'uma-pick',version:2});state.apply(undo,'M95Z2Z');
   assert.equal(state.draft.phase,'uma-pick');assert.equal(state.draft.teams.team1.umas.length,0);
   assert.equal(state.apply(event,'M95Z2Z').reason,'old-version');
+});
+
+test('map veto count defaults to 1 when rules.map.bansPerTeam is absent',()=>{
+  const {state}=roomHarness();
+  const result=state.apply(matchEvent({phase:'complete',rules:{map:{picksPerTeam:4},uma:{teamSize:6,preBansPerTeam:2,postBansPerTeam:1}}}),'M95Z2Z');
+  assert.equal(result.draft.rules.mapVetoes,1);
 });
 
 test('event decoding ignores chat and removes unrelated sensitive fields',()=>{
@@ -789,13 +831,11 @@ test('selected stats scope reduces ten-player cold request count from 22 to 12',
   }
 });
 
-test('selected-scope public requests never reconstruct private stats',async()=>{
-  for(const privateBuild of [false,true]){
-    const h=apiHarness({privateBuild,responder:url=>url.pathname.endsWith('/stats')?{status:403}:undefined});
-    await h.c.fetchPlayerProfileSummaries(players(1),{scope:'allTime'});
-    assert.equal(h.calls.filter(p=>p.includes('/history?')).length,0);
-    assert(!h.calls.some(p=>p.includes('&season=')));
-  }
+test('selected-scope requests never reconstruct hidden stats',async()=>{
+  const h=apiHarness({responder:url=>url.pathname.endsWith('/stats')?{status:403}:undefined});
+  await h.c.fetchPlayerProfileSummaries(players(1),{scope:'allTime'});
+  assert.equal(h.calls.filter(p=>p.includes('/history?')).length,0);
+  assert(!h.calls.some(p=>p.includes('&season=')));
 });
 
 test('scope merge retains timestamps, and an unfetched scope is not considered fresh',()=>{
@@ -870,7 +910,6 @@ test('unknown and private experience are never labelled as zero games',()=>{
   assert.equal(c.missingUmaHistoryLabel(undefined,'allTime'),'Stats not loaded yet');
   assert.equal(c.missingUmaHistoryLabel({scopeFetchedAt:{currentSeason:1}},'allTime'),'Stats not loaded for this scope');
   assert.equal(c.missingUmaHistoryLabel({statsPrivate:true},'allTime'),'Stats are private');
-  assert.equal(c.missingUmaHistoryLabel({historyDerived:true},'allTime'),'No games in available history sample');
   assert.equal(c.missingUmaHistoryLabel({},'allTime'),'No recorded games');
 });
 
@@ -915,12 +954,21 @@ test('manual refresh cooldown survives restart and is not extended by roster upd
 
 test('confirmed maps use the drafter combined order and preserve distinct course identities',()=>{
   const {state}=roomHarness(); const event=matchEvent();
-  for(const team of ['team1','team2']) event.state[team].pickedMaps=[1,2,3].map(n=>({id:`${team}-${n}`,track:'Nakayama',distance:2000+n*100}));
+  for(const team of ['team1','team2']) event.state[team].pickedMaps=[1,2,3].map(n=>({id:`${team}-${n}`,track:'Nakayama',distance:2000+n*100,
+    surface:'Turf',variant:'Inner',direction:'Right',conditions:{season:'Spring',weather:'Sunny',ground:'Good'}}));
   event.state.team1.bannedMaps=[{id:'veto',track:'Nakayama',distance:2500}];
+  event.state.wildcardMap={id:'wild',track:'Hanshin',distance:2200,surface:'Dirt',conditions:{season:'Winter',weather:'Rain',ground:'Heavy'}};
   const {draft}=state.apply(event,'M95Z2Z');
   assert.deepEqual(Array.from(draft.teams.team1.maps,m=>m.order),[1,3,5,undefined]);
   assert.deepEqual(Array.from(draft.teams.team2.maps,m=>m.order),[2,4,6]);
   assert.equal(new Set(draft.teams.team1.maps.map(m=>m.mapId)).size,4);
+  assert.deepEqual({ ...draft.teams.team1.maps[0] }, {team:'team1',mapId:'team1-1',name:'Nakayama',
+    details:'2100m • Turf • Inner • Right • Spring • Sunny • Good',track:'Nakayama',distance:2100,
+    surface:'Turf',variant:'Inner',direction:'Right',season:'Spring',weather:'Sunny',ground:'Good',order:1,status:'selected'});
+  assert.equal(draft.teams.team1.maps[3].distance,2500);
+  assert.equal(draft.tiebreakerMap.track,'Hanshin');
+  assert.equal(draft.tiebreakerMap.season,'Winter');
+  assert.equal(draft.tiebreakerMap.ground,'Heavy');
 });
 
 test('page hook startup never reads site localStorage or sessionStorage',()=>{

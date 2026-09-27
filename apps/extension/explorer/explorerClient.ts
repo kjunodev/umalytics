@@ -1,5 +1,6 @@
 import { browser } from 'wxt/browser';
 import type { PlayerProfileSummary, PlayerStatsScope, PrematchPlayer } from '@umalytics/shared';
+import type { SeasonLeaderboard } from '../profiles/playerProfileApi';
 import { EXPLORER_PORT, type ExplorerRequest, type ExplorerReply, type HistoricalMatch, type PlayerSearchResult } from './explorerTypes';
 
 function request<T>(message: ExplorerRequest, signal: AbortSignal, onProgress?: (profiles: Record<string, PlayerProfileSummary>) => void): Promise<T> {
@@ -39,6 +40,9 @@ export function loadHistoricalMatch(input: string, signal: AbortSignal) {
 }
 export function searchPlayers(input: string, page: number, signal: AbortSignal) {
   return request<PlayerSearchResult>({ kind: 'search', input, page }, signal);
+}
+export function loadSeasonLeaderboard(signal: AbortSignal) {
+  return request<SeasonLeaderboard>({ kind: 'leaderboard' }, signal);
 }
 export function loadExplorerProfiles(players: PrematchPlayer[], scope: PlayerStatsScope,
   onProgress: (profiles: Record<string, PlayerProfileSummary>) => void, signal: AbortSignal) {

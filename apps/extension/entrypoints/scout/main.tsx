@@ -1,10 +1,18 @@
+import { initializeUiSize, applyUiSize, initialUiSize } from '../../ui/common/uiSize';
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App';
-import './styles.css';
+import '../../ui/common/base.css';
 
-createRoot(document.getElementById('root') as HTMLElement).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>
-);
+function mount() {
+  createRoot(document.getElementById('root') as HTMLElement).render(
+    <React.StrictMode>
+      <App />
+    </React.StrictMode>
+  );
+}
+
+void initializeUiSize(window.innerHeight).catch((error: unknown) => {
+  console.error('Unable to load UI size', error);
+  applyUiSize(initialUiSize(window.innerHeight));
+}).then(mount);

@@ -41,18 +41,6 @@ export interface PlayerHistorySummary {
   mvpAwards: number;
 }
 
-export interface PlayerRecentFormSummary {
-  matches: number;
-  scoredMatches: number;
-  scoringRate: number | null;
-  wins: number;
-  winRate: number | null;
-  points: number;
-  pointsPerGame: number | null;
-  podiums: number;
-  mvpMatches: number;
-}
-
 export type PlayerStatsScope = 'currentSeason' | 'allTime';
 
 export interface PlayerProfileStatsSummary {
@@ -71,7 +59,6 @@ export interface PlayerProfileStatsSummary {
   recentMatches?: PlayerRecentMatchSummary[];
   historyTotal?: number;
   historySummary?: PlayerHistorySummary;
-  recentForm?: PlayerRecentFormSummary;
   unresolvedUmaMatches?: number;
   disqualifiedMatches?: number;
   bestUmaScoreVersion?: number;
@@ -83,7 +70,6 @@ export interface PlayerProfileSummary {
   /** Initial usable data, while remaining endpoints are still loading. */
   isPartial?: boolean;
   scopeFetchedAt?: Partial<Record<PlayerStatsScope, number>>;
-  historyDerived?: boolean;
   discordId: string;
   displayName?: string;
   discordUsername?: string;
@@ -106,7 +92,6 @@ export interface PlayerProfileSummary {
   recentMatches?: PlayerRecentMatchSummary[];
   historyTotal?: number;
   historySummary?: PlayerHistorySummary;
-  recentForm?: PlayerRecentFormSummary;
   unresolvedUmaMatches?: number;
   disqualifiedMatches?: number;
   bestUmaScoreVersion?: number;
