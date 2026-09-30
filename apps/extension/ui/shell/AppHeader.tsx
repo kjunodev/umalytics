@@ -93,201 +93,208 @@ export function AppHeader({
     };
   }, [menuOpen]);
 
+  const statusCode = isLive && matchCode !== undefined ? matchCode : mode === 'history' && historicalMatchCode ? historicalMatchCode : undefined;
   const statusLabel = isLive ? (hasRoster ? 'Live' : 'Waiting') : mode === 'history' && historicalMatchCode ? 'Past match' : mode === 'history' ? 'History' : 'Players';
+  // The compact header shows only the dot and room code, so the label and the
+  // profile-check detail stay reachable here.
+  const statusTitle = isLive ? `${statusLabel} - ${profileStatusLabel ?? 'Waiting for lobby data'}` : statusLabel;
 
   return (
     <header className="app-header">
-      <div className="app-logo">
-        <svg width="26" height="26" viewBox="0 0 26 26" fill="none" aria-hidden="true">
-          <rect x="1" y="1" width="24" height="24" rx="7" stroke="#6a9bff" strokeWidth="2" />
-          <path d="M8 17V9m5 8v-5m5 5v-8" stroke="#f0a05a" strokeWidth="2.2" strokeLinecap="round" />
-        </svg>
-        <span>UmaLytics</span>
-      </div>
+      <div className="app-header-grid">
+        <div className="app-header-lead">
+          <div className="app-logo" title="UmaLytics">
+            <svg width="26" height="26" viewBox="0 0 26 26" fill="none" aria-hidden="true">
+              <rect x="1" y="1" width="24" height="24" rx="7" stroke="#6a9bff" strokeWidth="2" />
+              <path d="M8 17V9m5 8v-5m5 5v-8" stroke="#f0a05a" strokeWidth="2.2" strokeLinecap="round" />
+            </svg>
+            <span className="app-logo-word">UmaLytics</span>
+          </div>
 
-      <nav className="seg" aria-label="UmaLytics mode">
-        {MODES.map(({ value, label }) => (
-          <button
-            key={value}
-            type="button"
-            aria-pressed={mode === value}
-            className={mode === value ? 'on' : ''}
-            onClick={() => {
-              onModeChange(value);
-            }}
-          >
-            {label}
-          </button>
-        ))}
-      </nav>
-
-      <nav
-        className={sceneDimmed ? 'seg scene-toggle dimmed' : 'seg scene-toggle'}
-        aria-label="UmaLytics scene"
-        aria-hidden={sceneDimmed}
-        inert={sceneDimmed}
-      >
-        {SCENES.map(({ value, label }) => (
-          <button
-            key={value}
-            type="button"
-            aria-pressed={visibleScene === value}
-            className={visibleScene === value ? 'on' : ''}
-            onClick={() => {
-              onSceneChange(value);
-            }}
-          >
-            {label}
-          </button>
-        ))}
-      </nav>
-
-      <div className="app-header-spacer" />
-
-      <div className="seg" role="group" aria-label="Stats time window">
-        <button
-          type="button"
-          aria-pressed={visibleScope === 'currentSeason'}
-          className={visibleScope === 'currentSeason' ? 'on' : ''}
-          title="Show current season records, scoring, and Uma stats."
-          onClick={() => {
-            onScopeChange('currentSeason');
-          }}
-        >
-          Season
-        </button>
-        <button
-          type="button"
-          aria-pressed={visibleScope === 'allTime'}
-          className={visibleScope === 'allTime' ? 'on' : ''}
-          title="Show all-time ranked records, scoring, and Uma stats. Rank still uses the active season leaderboard."
-          onClick={() => {
-            onScopeChange('allTime');
-          }}
-        >
-          All-time
-        </button>
-      </div>
-
-      <div
-        className={isLive && hasRoster ? 'status-pill' : 'status-pill idle'}
-        title={isLive ? profileStatusLabel ?? 'Waiting for lobby data' : undefined}
-      >
-        <span className="status-pill-dot" aria-hidden="true" />
-        <span>{statusLabel}</span>
-        {isLive && matchCode !== undefined ? <span className="status-pill-code">{matchCode}</span> : null}
-        {mode === 'history' && historicalMatchCode ? <span className="status-pill-code">{historicalMatchCode}</span> : null}
-      </div>
-
-      <div className="app-menu-wrap" ref={menuRef}>
-        <button
-          type="button"
-          className={menuOpen ? 'iconbtn active' : 'iconbtn'}
-          aria-label="Open menu"
-          aria-expanded={menuOpen}
-          onClick={() => {
-            setMenuOpen((open) => !open);
-          }}
-        >
-          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-            <path d="M3 5h14M3 10h14M3 15h14" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-          </svg>
-        </button>
-        {menuOpen ? (
-          <div className="app-menu" role="menu">
-            <div className="app-menu-header">
-              <span>UmaLytics</span>
-              <span className="app-menu-badge">
-                v{APP_VERSION_LABEL}
-              </span>
-            </div>
-            <div className="ui-size-control" role="group" aria-label="UI size">
-              <span>UI size</span>
-              <div className="seg">
-                {(['small', 'default', 'large'] as const).map((size) => (
-                  <button key={size} type="button" aria-pressed={uiSize === size}
-                    className={uiSize === size ? 'on' : ''}
-                    onClick={() => {
-                      void saveUiSize(size).then(() => {
-                        setUiSize(size);
-                        setSizeError(false);
-                      }).catch(() => setSizeError(true));
-                    }}>
-                    {size.charAt(0).toUpperCase() + size.slice(1)}
-                  </button>
-                ))}
-              </div>
-              {sizeError ? <span role="alert">Could not save UI size. Try again.</span> : null}
-            </div>
-            {hasRoster ? (
+          <nav className="seg mode-toggle" aria-label="UmaLytics mode">
+            {MODES.map(({ value, label }) => (
               <button
+                key={value}
                 type="button"
-                className="menuitem"
-                role="menuitem"
-                disabled={!canRefresh}
+                aria-pressed={mode === value}
+                className={mode === value ? 'on' : ''}
                 onClick={() => {
-                  onRefresh();
-                  setMenuOpen(false);
+                  onModeChange(value);
                 }}
               >
-                Refresh profiles
-                {isRefreshing ? (
-                  <span className="menuitem-hint">Refreshing</span>
-                ) : refreshCooldownSeconds > 0 ? (
-                  <span className="menuitem-hint">Wait {refreshCooldownSeconds}s</span>
-                ) : null}
+                {label}
               </button>
-            ) : null}
-            {hasRoster ? (
-              <button
-                type="button"
-                className="menuitem"
-                role="menuitem"
-                onClick={() => {
-                  onToggleLobbyLock();
-                }}
-                title={
-                  isLobbyLocked
-                    ? 'Unlock live lobby player updates.'
-                    : 'Freeze the current players while draft data keeps updating.'
-                }
-              >
-                {isLobbyLocked ? 'Unlock lobby' : 'Lock lobby'}
-                <span className="menuitem-hint">{lobbyPlayerCount}/10</span>
-              </button>
-            ) : null}
+            ))}
+          </nav>
+        </div>
+
+        <nav
+          className={sceneDimmed ? 'seg scene-toggle dimmed' : 'seg scene-toggle'}
+          aria-label="UmaLytics scene"
+          aria-hidden={sceneDimmed}
+          inert={sceneDimmed}
+        >
+          {SCENES.map(({ value, label }) => (
             <button
+              key={value}
               type="button"
-              className="menuitem"
-              role="menuitem"
+              aria-pressed={visibleScene === value}
+              className={visibleScene === value ? 'on' : ''}
               onClick={() => {
-                onCopyDiagnostics();
+                onSceneChange(value);
               }}
             >
-              {diagnosticsCopied ? 'Copied' : 'Copy diagnostics'}
+              {label}
             </button>
-            <a
-              className="menuitem"
-              role="menuitem"
-              href="https://github.com/kjunodev/umalytics/issues/new"
-              target="_blank"
-              rel="noreferrer"
+          ))}
+        </nav>
+
+        <div className="app-header-tail">
+          <div className="seg scope-toggle" role="group" aria-label="Stats time window">
+            <button
+              type="button"
+              aria-pressed={visibleScope === 'currentSeason'}
+              className={visibleScope === 'currentSeason' ? 'on' : ''}
+              title="Show current season records, scoring, and Uma stats."
+              onClick={() => {
+                onScopeChange('currentSeason');
+              }}
             >
-              Report a bug
-            </a>
-            <div className="app-menu-footer">
-              UmaLytics by{' '}
-              <a href="https://github.com/kjunodev/umalytics" target="_blank" rel="noreferrer">
-                k.juno
-              </a>
-              <br />
-              Uma Drafter by{' '}
-              <a href="https://drafter.uma.guide" target="_blank" rel="noreferrer">
-                Terumi
-              </a>
-            </div>
+              Season
+            </button>
+            <button
+              type="button"
+              aria-pressed={visibleScope === 'allTime'}
+              className={visibleScope === 'allTime' ? 'on' : ''}
+              title="Show all-time ranked records, scoring, and Uma stats. Rank still uses the active season leaderboard."
+              onClick={() => {
+                onScopeChange('allTime');
+              }}
+            >
+              All-time
+            </button>
           </div>
-        ) : null}
+
+          <div
+            className={[isLive && hasRoster ? 'status-pill' : 'status-pill idle', statusCode !== undefined ? 'has-code' : ''].filter(Boolean).join(' ')}
+            title={statusTitle}
+          >
+            <span className="status-pill-dot" aria-hidden="true" />
+            <span className="status-pill-label">{statusLabel}</span>
+            {statusCode !== undefined ? <span className="status-pill-code">{statusCode}</span> : null}
+          </div>
+        </div>
+
+        <div className="app-menu-wrap" ref={menuRef}>
+          <button
+            type="button"
+            className={menuOpen ? 'iconbtn active' : 'iconbtn'}
+            aria-label="Open menu"
+            aria-expanded={menuOpen}
+            onClick={() => {
+              setMenuOpen((open) => !open);
+            }}
+          >
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+              <path d="M3 5h14M3 10h14M3 15h14" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+            </svg>
+          </button>
+          {menuOpen ? (
+            <div className="app-menu" role="menu">
+              <div className="app-menu-header">
+                <span>UmaLytics</span>
+                <span className="app-menu-badge">
+                  v{APP_VERSION_LABEL}
+                </span>
+              </div>
+              <div className="ui-size-control" role="group" aria-label="UI size">
+                <span>UI size</span>
+                <div className="seg">
+                  {(['small', 'default', 'large'] as const).map((size) => (
+                    <button key={size} type="button" aria-pressed={uiSize === size}
+                      className={uiSize === size ? 'on' : ''}
+                      onClick={() => {
+                        void saveUiSize(size).then(() => {
+                          setUiSize(size);
+                          setSizeError(false);
+                        }).catch(() => setSizeError(true));
+                      }}>
+                      {size.charAt(0).toUpperCase() + size.slice(1)}
+                    </button>
+                  ))}
+                </div>
+                {sizeError ? <span role="alert">Could not save UI size. Try again.</span> : null}
+              </div>
+              {hasRoster ? (
+                <button
+                  type="button"
+                  className="menuitem"
+                  role="menuitem"
+                  disabled={!canRefresh}
+                  onClick={() => {
+                    onRefresh();
+                    setMenuOpen(false);
+                  }}
+                >
+                  Refresh profiles
+                  {isRefreshing ? (
+                    <span className="menuitem-hint">Refreshing</span>
+                  ) : refreshCooldownSeconds > 0 ? (
+                    <span className="menuitem-hint">Wait {refreshCooldownSeconds}s</span>
+                  ) : null}
+                </button>
+              ) : null}
+              {hasRoster ? (
+                <button
+                  type="button"
+                  className="menuitem"
+                  role="menuitem"
+                  onClick={() => {
+                    onToggleLobbyLock();
+                  }}
+                  title={
+                    isLobbyLocked
+                      ? 'Unlock live lobby player updates.'
+                      : 'Freeze the current players while draft data keeps updating.'
+                  }
+                >
+                  {isLobbyLocked ? 'Unlock lobby' : 'Lock lobby'}
+                  <span className="menuitem-hint">{lobbyPlayerCount}/10</span>
+                </button>
+              ) : null}
+              <button
+                type="button"
+                className="menuitem"
+                role="menuitem"
+                onClick={() => {
+                  onCopyDiagnostics();
+                }}
+              >
+                {diagnosticsCopied ? 'Copied' : 'Copy diagnostics'}
+              </button>
+              <a
+                className="menuitem"
+                role="menuitem"
+                href="https://github.com/kjunodev/umalytics/issues/new"
+                target="_blank"
+                rel="noreferrer"
+              >
+                Report a bug
+              </a>
+              <div className="app-menu-footer">
+                UmaLytics by{' '}
+                <a href="https://github.com/kjunodev/umalytics" target="_blank" rel="noreferrer">
+                  k.juno
+                </a>
+                <br />
+                Uma Drafter by{' '}
+                <a href="https://drafter.uma.guide" target="_blank" rel="noreferrer">
+                  Terumi
+                </a>
+              </div>
+            </div>
+          ) : null}
+        </div>
       </div>
     </header>
   );

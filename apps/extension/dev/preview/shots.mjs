@@ -2,7 +2,8 @@
 // screenshot of every scene/state at all supported viewport sizes and UI sizes into
 // dev/preview/.shots (git-ignored). Dev-only: never run as part of a build.
 //
-// --concurrency=N   worker pool size (default: CPU count - 1)
+// --concurrency=N   worker pool size (default: CPU count - 1, at most 6; more parallel
+//                   Chrome windows starve the dev server and time out)
 // --scenes=a,b,...  only run these scenes (see SCENES below for names)
 // --sizes=WxH,...   only run these viewport sizes (see SIZES below for names)
 // --interactions-only  skip the screenshot matrix, only run verifyInteractions
@@ -13,13 +14,14 @@ import fs from 'node:fs';
 import assert from 'node:assert/strict';
 import { createServer } from 'vite';
 import { chromium } from 'playwright';
-import { checkGeometry, checkTeamIconTooltip } from './geometry.mjs';
+import { checkGeometry, checkHeader, checkOpenMenu, checkTeamIconTooltip } from './geometry.mjs';
+import { HEADER_COMPACT_MIN_WIDTH, HEADER_FULL_MIN_WIDTH, HEADER_ROW_HEIGHT, HEADER_MIN_SLACK, UI_SCALES } from '../../ui/common/headerLayout.ts';
 
 const dirname = path.dirname(fileURLToPath(import.meta.url));
 const outDir = path.join(dirname, '.shots');
 
 const SIZES = [
-  [1024, 768], [1100, 900], [1265, 1100], [1280, 720],
+  [1000, 800], [1024, 768], [1100, 900], [1140, 1000], [1265, 1100], [1280, 720],
   [1366, 768], [1625, 1360], [1920, 1080], [2560, 1300]
 ].map(([width, height]) => ({ name: `${width}x${height}`, width, height }));
 const UI_SIZES = ['small', 'default', 'large'];
@@ -55,7 +57,13 @@ function filterByName(all, requestedCsv, label) {
 
 const scenes = filterByName(SCENES, argValue('scenes'), 'scene');
 const sizes = filterByName(SIZES, argValue('sizes'), 'size');
-const concurrency = Math.max(1, Number(argValue('concurrency')) || Math.max(1, os.cpus().length - 1));
+const concurrency = Math.max(1, Number(argValue('concurrency')) || Math.max(1, Math.min(6, os.cpus().length - 1)));
+
+// Natural widths of the header states live in ui/common/headerLayout.ts; the
+// page-side check re-derives the expected state from the measured width.
+const HEADER_LIMITS = {
+  fullMin: HEADER_FULL_MIN_WIDTH, compactMin: HEADER_COMPACT_MIN_WIDTH, rowHeight: HEADER_ROW_HEIGHT, minSlack: HEADER_MIN_SLACK
+};
 
 let activeBrowser;
 let activeServer;
@@ -86,6 +94,8 @@ async function runCase(page, baseUrl, { uiSize, scene, size }) {
   }
   await page.waitForTimeout(50);
   const geometry = await page.evaluate(checkGeometry);
+  const header = await page.evaluate(checkHeader, HEADER_LIMITS);
+  geometry.failures.push(...header.failures.map(failure => `${failure} at ${size.name} ${uiSize}`));
   if (scene.name === 'lobby' || scene.name === 'history-lobby') {
     const heights = await page.locator('.player-row:not(.empty-player-row)').evaluateAll(
       elements => elements.map(el => el.getBoundingClientRect().height)
@@ -102,13 +112,24 @@ async function runCase(page, baseUrl, { uiSize, scene, size }) {
   }
   const fileName = `${scene.name}_${size.name}_${uiSize}.png`;
   await page.screenshot({ path: path.join(outDir, fileName) });
-  return { scene: scene.name, size: size.name, uiSize, fileName, ...geometry };
+  // The drawer's backdrop covers the header, so its menu is checked in the other scenes.
+  if (scene.name !== 'drawer') {
+    await page.getByRole('button', { name: 'Open menu', exact: true }).click();
+    const menu = await page.evaluate(checkOpenMenu);
+    geometry.failures.push(...menu.failures.map(failure => `${failure} at ${size.name} ${uiSize} ${scene.name}`));
+    await page.keyboard.press('Escape');
+  }
+  return {
+    scene: scene.name, size: size.name, uiSize, fileName,
+    headerState: header.state, headerWidth: Number(header.width?.toFixed(1)), headerSlack: Number(header.slack?.toFixed(1)),
+    ...geometry
+  };
 }
 
 async function main() {
   fs.mkdirSync(outDir, { recursive: true });
 
-  const server = await createServer({ configFile: path.join(dirname, 'vite.config.ts'), root: dirname });
+  const server = await createServer({ configFile: path.join(dirname, 'vite.config.ts'), root: dirname, server: { strictPort: false } });
   activeServer = server;
   await server.listen();
   const address = server.httpServer?.address();
@@ -116,12 +137,15 @@ async function main() {
   if (port === undefined) throw new Error('Preview dev server did not report a port.');
   const baseUrl = `http://localhost:${port}`;
 
-  const browser = await chromium.launch({ channel: process.env.PREVIEW_BROWSER ?? 'chrome' });
+  // Headless Chromium hides scrollbars by default, which hid the real page
+  // scrollbar and its reserved gutter from every layout check.
+  const browser = await chromium.launch({ channel: process.env.PREVIEW_BROWSER ?? 'chrome', ignoreDefaultArgs: ['--hide-scrollbars'] });
   activeBrowser = browser;
   try {
     if (process.argv.includes('--interactions-only')) {
       const page = await newPage(browser);
       await verifyInteractions(page, baseUrl);
+      await verifyHeaderStates(page, baseUrl);
       await verifyTeamIconTooltips(page, baseUrl);
       return;
     }
@@ -161,6 +185,7 @@ async function main() {
 
     const interactionsPage = await newPage(browser);
     await verifyInteractions(interactionsPage, baseUrl);
+    await verifyHeaderStates(interactionsPage, baseUrl);
     await verifyTeamIconTooltips(interactionsPage, baseUrl);
   } finally {
     await browser.close();
@@ -172,6 +197,12 @@ async function main() {
 
 async function verifyInteractions(page, baseUrl) {
   await page.goto(baseUrl);
+  // First run on a tall but narrow window: height alone says Large, but Large's
+  // header would need two rows at 960px, so the width steps it down to Default.
+  await page.evaluate(() => localStorage.clear());
+  await page.setViewportSize({ width: 960, height: 1300 });
+  await page.reload();
+  await page.locator('html[data-ui-size="default"] .app-header').waitFor();
   await page.evaluate(() => localStorage.clear());
   await page.setViewportSize({ width: 1280, height: 720 });
   await page.reload();
@@ -275,6 +306,54 @@ async function verifyInteractions(page, baseUrl) {
     'surface chip keeps its text');
   await narrow.evaluate(el => el.remove());
   console.log('PASS draft column alignment, single-line race chips, and icon-only weather fallback');
+}
+
+// Sweeps the window width across both header thresholds at every UI size, for
+// the widest status pill variants (live code, past match + code, no code), with
+// the menu open: each state must fit, stay in its own height and keep the open
+// menu inside the viewport. The exact-threshold widths are the tightest cases.
+async function verifyHeaderStates(page, baseUrl) {
+  const variants = ['mode=live&scene=lobby', 'mode=history&scene=lobby', 'mode=profiles'];
+  let checked = 0;
+  const seen = new Set();
+  for (const uiSize of UI_SIZES) {
+    const scale = UI_SCALES[uiSize];
+    const exact = [HEADER_FULL_MIN_WIDTH, HEADER_COMPACT_MIN_WIDTH]
+      .flatMap(threshold => [0, -1].map(offset => Math.ceil((threshold + offset) * scale + 74 * scale + 15)));
+    // From a 640px layout width (the two-row header needs about 620) to 1500px.
+    const first = Math.ceil(640 * scale + 15);
+    const widths = [...new Set([...Array.from({ length: Math.ceil((1500 - first) / 5) }, (_, i) => first + i * 5), ...exact])].sort((a, b) => a - b);
+    for (const variant of variants) {
+      await page.setViewportSize({ width: 1400, height: 900 });
+      await page.goto(`${baseUrl}/?${variant}&uiSize=${uiSize}`, { waitUntil: 'domcontentloaded' });
+      await page.locator('.app-header').waitFor();
+      await page.evaluate(() => document.fonts.ready);
+      await page.getByRole('button', { name: 'Open menu', exact: true }).click();
+      for (const width of widths) {
+        await page.setViewportSize({ width, height: 900 });
+        const header = await page.evaluate(checkHeader, HEADER_LIMITS);
+        const menu = await page.evaluate(checkOpenMenu);
+        const where = `${variant} at ${width}px ${uiSize}`;
+        assert.deepEqual([...header.failures, ...menu.failures], [], `header states, ${where}`);
+        seen.add(`${uiSize} ${header.state}`);
+        checked++;
+      }
+    }
+  }
+  assert.equal(seen.size, 9, `every UI size reaches all three header states; saw ${[...seen].join(', ')}`);
+
+  // Negative control: a menu button dropped onto a second row at the far left
+  // (what the wrapping flex header did) must be caught.
+  await page.setViewportSize({ width: 1000, height: 800 });
+  await page.goto(`${baseUrl}/?mode=live&scene=lobby&uiSize=large`, { waitUntil: 'domcontentloaded' });
+  await page.locator('.app-header').waitFor();
+  await page.addStyleTag({ content: '.app-menu-wrap { grid-area: 2 / 1; justify-self: start; }' });
+  await page.getByRole('button', { name: 'Open menu', exact: true }).click();
+  const broken = await page.evaluate(checkHeader, HEADER_LIMITS);
+  assert.ok(broken.failures.some(failure => /right-most|Header is|height/.test(failure)), 'header check must catch a menu button that is not top-right');
+  assert.ok((await page.evaluate(checkOpenMenu)).failures.some(failure => /outside the viewport/.test(failure)),
+    'menu check must catch a menu that opens off-screen');
+  console.log(`PASS header states: ${checked} width/UI size/pill combinations with the menu open, plus a wrapped-header negative control`);
 }
 
 const pageScrollSize = page => page.evaluate(() => ({

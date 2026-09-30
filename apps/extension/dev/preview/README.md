@@ -37,10 +37,20 @@ pnpm --filter @umalytics/extension preview:shots
 Starts the harness headlessly (Playwright + the same Vite config) and saves
 one PNG per scene, viewport, and UI size into `.shots/` (git-ignored):
 lobby, drawer, draft (mid and complete), Umas, Players (leaderboard), and
-History (lobby and draft), each at 1024x768, 1100x900, 1265x1100,
-1280x720, 1366x768, 1625x1360, 1920x1080, and 2560x1300, in Small,
-Default, and Large. The 192 cases also run `geometry.mjs`, checking component
-containment, sibling overlap, text overflow, and horizontal page overflow.
+History (lobby and draft), each at 1000x800, 1024x768, 1100x900, 1140x1000,
+1265x1100, 1280x720, 1366x768, 1625x1360, 1920x1080, and 2560x1300, in Small,
+Default, and Large. The 240 cases run with visible scrollbars (Chromium's
+headless `--hide-scrollbars` is turned off) and also run `geometry.mjs`,
+checking component containment, sibling overlap, text overflow, and horizontal
+page overflow. Every case also checks the header: children inside the header
+box and never overlapping, the menu button right-most on the first row, the
+state expected from the measured width (full, compact or two rows, recorded as
+`headerState` in `geometry.json`), a fixed height per state, no clipped tab
+labels, and, with "Open menu" clicked, the menu fully inside the viewport. A
+separate sweep runs widths from a 640px layout to 1500px viewport (plus the
+exact threshold widths) at every UI size with three status pill variants and
+the menu open, and a negative control confirms the checks catch a menu button
+that is not top-right.
 Draft scenes also check that the three column panels end on the same line
 and that each race card's chips stay on one line. After the matrix it runs
 interaction checks: a drawer match code opening History, the Players season

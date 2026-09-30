@@ -18,6 +18,7 @@ export const MODULES = {
   scoutApp: 'entrypoints/scout/App.tsx',
   uiCommonTokensCss: 'ui/common/tokens.css',
   uiCommonBaseCss: 'ui/common/base.css',
+  uiCommonHeaderLayout: 'ui/common/headerLayout.ts',
   uiCommonUiSize: 'ui/common/uiSize.ts',
   uiShellCss: 'ui/shell/shell.css',
   uiLobbyCss: 'ui/lobby/lobby.css',
@@ -108,6 +109,7 @@ const PRELOADS = {
   rosterDisplay: ['teams', 'rosterIdentity'],
   uiCommonRoster: ['teams'],
   uiCommonBadges: ['uiCommonFormat', 'profileConstants'],
+  uiCommonUiSize: ['uiCommonHeaderLayout'],
 };
 
 function resolvePath(name) {

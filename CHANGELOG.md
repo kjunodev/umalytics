@@ -2,6 +2,7 @@
 
 ## 0.5.1
 
+- Fit the header in narrow and display-scaled windows: it switches to a compact or two-row layout instead of wrapping, the menu always opens on-screen, and new installs pick a UI size that fits the window.
 - Keep every player visible when they join or rejoin long-lived casual rooms. Never show internal IDs as names; show "Profile unavailable" for players without a Discord account.
 - Open a match in History by clicking its code in a player's match history, with a link to Uma Drafter.
 - Show the season name on the Players page and use consistent ratings throughout UmaLytics.
