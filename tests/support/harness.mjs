@@ -69,6 +69,7 @@ export const MODULES = {
   uiLobbyTeamSection: 'ui/lobby/TeamSection.tsx',
   uiLobbyBadgeChip: 'ui/lobby/BadgeChip.tsx',
   uiCommonTeamIcon: 'ui/common/TeamIcon.tsx',
+  uiCommonTooltipPlacement: 'ui/common/tooltipPlacement.ts',
   uiPlayerDrawer: 'ui/player/PlayerDrawer.tsx',
   uiPlayerDrawerCss: 'ui/player/playerDrawer.css',
   uiDraftScene: 'ui/draft/DraftScene.tsx',

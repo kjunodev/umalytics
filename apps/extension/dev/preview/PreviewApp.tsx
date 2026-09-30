@@ -44,6 +44,10 @@ export default function PreviewApp() {
   const [statsScope, setStatsScope] = useState<PlayerStatsScope>('currentSeason');
   const [draftVariant, setDraftVariant] = useState<'mid' | 'complete'>(initial.draftVariant);
   const [selectedPlayerKey, setSelectedPlayerKey] = useState<string | undefined>(initial.selectedPlayerKey);
+  // The harness has no History input box; a clicked match code just switches
+  // to History mode and shows that code in the header, like the real app.
+  const [openedMatchCode, setOpenedMatchCode] = useState<string>();
+  const openMatch = (code: string) => { setOpenedMatchCode(code); setSelectedPlayerKey(undefined); setMode('history'); };
   const draftSnapshot = draftVariant === 'mid' ? PREVIEW_DRAFT_MID : PREVIEW_DRAFT_COMPLETE;
 
   const teams = [PREVIEW_ROSTER.teams!.team1, PREVIEW_ROSTER.teams!.team2];
@@ -61,7 +65,7 @@ export default function PreviewApp() {
         visibleScope={statsScope}
         onScopeChange={setStatsScope}
         matchCode={PREVIEW_ROSTER.matchCode}
-        historicalMatchCode={mode === 'history' ? 'PVW999' : undefined}
+        historicalMatchCode={mode === 'history' ? openedMatchCode ?? 'PVW999' : undefined}
         hasRoster
         isLive={mode === 'live'}
         profileStatusLabel="Latest stats check just now"
@@ -91,7 +95,7 @@ export default function PreviewApp() {
 
       <div className="app-scene-area">
         {mode === 'profiles' ? (
-          <PlayersView roster={PREVIEW_ROSTER} statsScope={statsScope} active teamIcons={PREVIEW_TEAM_ICONS} />
+          <PlayersView roster={PREVIEW_ROSTER} statsScope={statsScope} active teamIcons={PREVIEW_TEAM_ICONS} onOpenMatch={openMatch} />
         ) : mode === 'history' ? (
           <HistoricalScene
             snapshot={draftSnapshot}
@@ -101,6 +105,7 @@ export default function PreviewApp() {
             scene={scene}
             loading={false}
             navigation={0}
+            onOpenMatch={openMatch}
             teamIcons={PREVIEW_TEAM_ICONS}
           />
         ) : scene === 'draft' ? (
@@ -132,7 +137,8 @@ export default function PreviewApp() {
                 onClose={() => setSelectedPlayerKey(undefined)}
                 context={{
                   team: selectedContext.team, statsScope, isProfileLoading: false, now: Date.now(), inLobby: true,
-                  teamIcon: PREVIEW_TEAM_ICONS[selectedContext.player.discordId]
+                  teamIcon: PREVIEW_TEAM_ICONS[selectedContext.player.discordId],
+                  onOpenMatch: openMatch
                 }}
               />
             )}

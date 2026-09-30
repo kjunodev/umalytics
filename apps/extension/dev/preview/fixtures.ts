@@ -185,7 +185,10 @@ export const PREVIEW_PROFILES: Record<string, PlayerProfileSummary> = {
     topUmas: [],
     allUmas: []
   }),
-  [discordId(7)]: baseProfile(discordId(7), { displayName: 'Twin Crown', rank: 88, topUmas: topUmasFor(3), allUmas: topUmasFor(3) }),
+  // Worst-case W-L: a triple-digit record with a 100% win rate must stay on
+  // one line and keep this card the same height as the others. (Player 8 is
+  // the no-Discord-ID guest.)
+  [discordId(7)]: baseProfile(discordId(7), { displayName: 'Twin Crown', rank: 88, wins: 999, losses: 999, winRate: 1, matches: 1998, topUmas: topUmasFor(3), allUmas: topUmasFor(3) }),
   [discordId(9)]: baseProfile(discordId(9), { displayName: 'Last Furlong', rank: 512, matches: 0, wins: 0, losses: 0, winRate: 0, points: 0, pointsPerGame: 0, podiums: 0, mvpMatches: 0, topUmas: [], allUmas: [] })
 };
 
@@ -283,6 +286,7 @@ export const PREVIEW_DRAFT_COMPLETE: DraftSnapshot = {
 
 export const PREVIEW_LEADERBOARD: SeasonLeaderboard = {
   activeSeasonId: 'season-4',
+  activeSeasonName: 'Season 4 (Preview Series)',
   // Rank 1 reuses player 0's discordId so it renders the same mapped Uma
   // League team icon as the lobby card and drawer.
   entries: Array.from({ length: 18 }, (_, i): SeasonLeaderboardEntry => ({

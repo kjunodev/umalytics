@@ -326,6 +326,7 @@ function leaderboardRowHarness() {
     TeamIcon: 'TeamIcon',
     rankTintClass: () => undefined,
     formatNumber: () => '-',
+    leaderboardDisplayRating: () => undefined,
     formatLeaderboardRecord: () => '-',
     formatLeaderboardWinRate: () => '-',
     formatLeaderboardGames: () => '-'

@@ -37,6 +37,22 @@ export function classifyPlayerQuery(query: string): PlayerQueryClassification {
   }
 }
 
+/**
+ * The rating shown everywhere (cards, drawer, leaderboard) and the one Uma
+ * Drafter's own leaderboard ranks by: the conservative rating, rating - RD,
+ * rounded. Falls back to the raw rating when the RD is unknown.
+ */
+export function leaderboardDisplayRating(entry: SeasonLeaderboardEntry): number | undefined {
+  if (entry.rating === undefined) return undefined;
+  return Math.round(entry.rd === undefined ? entry.rating : entry.rating - entry.rd);
+}
+
+/** Header label for the leaderboard's season: the season's own display name, or a neutral fallback. */
+export function formatSeasonLabel(seasonName: string | undefined): string {
+  const name = seasonName?.trim();
+  return name === undefined || name === '' ? 'Current season' : name;
+}
+
 export function leaderboardWinRate(entry: SeasonLeaderboardEntry): number | null {
   const games = (entry.wins ?? 0) + (entry.losses ?? 0);
   return games > 0 ? (entry.wins ?? 0) / games : null;
@@ -68,7 +84,7 @@ export function sortLeaderboardEntries(entries: SeasonLeaderboardEntry[], sortKe
   const value = (entry: SeasonLeaderboardEntry): number => {
     switch (sortKey) {
       case 'rank': return entry.rank;
-      case 'rating': return entry.rating === undefined ? Infinity : -entry.rating;
+      case 'rating': { const rating = leaderboardDisplayRating(entry); return rating === undefined ? Infinity : -rating; }
       case 'win': { const rate = leaderboardWinRate(entry); return rate === null ? Infinity : -rate; }
       case 'games': return -leaderboardGames(entry);
     }

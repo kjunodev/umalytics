@@ -183,9 +183,6 @@
   border-bottom: 1px solid var(--border-subtle);
 }
 
-/* Positioning context for .team-icon-tooltip: spans this row's own width,
-   so it can never extend past the row regardless of where in it the icon
-   sits (mirrors .card-badges/.chip-tooltip). */
 .players-row {
   background: transparent;
   text-align: left;
@@ -193,14 +190,6 @@
   color: var(--text-primary);
   cursor: pointer;
   position: relative;
-}
-
-.players-row .team-icon-tooltip {
-  left: 16px;
-  right: 16px;
-  text-align: left;
-  top: calc(100% - 4px);
-  white-space: normal;
 }
 
 .players-row:hover {

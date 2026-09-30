@@ -14,10 +14,11 @@ export interface SelectedPlayerContext {
   player: PrematchPlayer;
 }
 
-export function HistoricalScene({ snapshot, roster, profiles, statsScope, scene, loading, navigation, onOpenPlayer, teamIcons = {} }: {
+export function HistoricalScene({ snapshot, roster, profiles, statsScope, scene, loading, navigation, onOpenPlayer, onOpenMatch, teamIcons = {} }: {
   snapshot: DraftSnapshot; roster: PrematchRoster; profiles: Record<string, PlayerProfileSummary>;
   statsScope: PlayerStatsScope; scene: AppScene; loading: boolean; navigation: number;
   onOpenPlayer?: (player: PrematchPlayer | undefined) => void;
+  onOpenMatch?: (matchCode: string) => void;
   teamIcons?: EsportsTeamIconMap;
 }) {
   const [selected, setSelected] = useState<string>();
@@ -32,7 +33,7 @@ export function HistoricalScene({ snapshot, roster, profiles, statsScope, scene,
   if (scene === 'umas') return <UmaPlannerScene roster={roster} profiles={profiles} statsScope={statsScope} />;
   return <>
     <section className="team-list" aria-label="Historical lobby teams">{teams.map(team => <TeamSection key={team.id} team={team} profiles={profiles} loadingDiscordIds={loading ? roster.players.filter(player => !profiles[player.discordId]).map(player => player.discordId) : []} statsScope={statsScope} teamIcons={teamIcons} selectedPlayerKey={selected} onSelectPlayer={selectPlayer} />)}</section>
-    {context && <PlayerDrawer player={context.player} profile={profiles[context.player.discordId]} onClose={() => { setSelected(undefined); onOpenPlayer?.(undefined); }} context={{ team: context.team, statsScope, isProfileLoading: loading && !profiles[context.player.discordId], now: Date.now(), inLobby: false, teamIcon: teamIcons[context.player.discordId] }} />}
+    {context && <PlayerDrawer player={context.player} profile={profiles[context.player.discordId]} onClose={() => { setSelected(undefined); onOpenPlayer?.(undefined); }} context={{ team: context.team, statsScope, isProfileLoading: loading && !profiles[context.player.discordId], now: Date.now(), inLobby: false, teamIcon: teamIcons[context.player.discordId], onOpenMatch }} />}
   </>;
 }
 

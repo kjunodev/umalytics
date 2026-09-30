@@ -16,6 +16,8 @@ import {
   formatLeaderboardGames,
   formatLeaderboardRecord,
   formatLeaderboardWinRate,
+  formatSeasonLabel,
+  leaderboardDisplayRating,
   leaderboardEntryToPlayer,
   pushRecentPlayer,
   rankTintClass,
@@ -86,8 +88,9 @@ function usePlayerProfile(player: PrematchPlayer | undefined, statsScope: Player
   return { profile, loading };
 }
 
-export function PlayersView({ roster, statsScope, active, teamIcons = {} }: {
+export function PlayersView({ roster, statsScope, active, teamIcons = {}, onOpenMatch }: {
   roster: PrematchRoster | undefined; statsScope: PlayerStatsScope; active: boolean; teamIcons?: EsportsTeamIconMap;
+  onOpenMatch?: (matchCode: string) => void;
 }) {
   const [leaderboardState, setLeaderboardState] = useState<LeaderboardState>({ loading: false });
   const [attempt, setAttempt] = useState(0);
@@ -216,7 +219,7 @@ export function PlayersView({ roster, statsScope, active, teamIcons = {} }: {
           <span className="players-count">{countLabel}</span>
           <div className="players-board-head-spacer" />
           {leaderboardState.data?.activeSeasonId !== undefined && (
-            <span className="players-season">Season {leaderboardState.data.activeSeasonId}</span>
+            <span className="players-season">{formatSeasonLabel(leaderboardState.data.activeSeasonName)}</span>
           )}
         </div>
 
@@ -301,7 +304,8 @@ export function PlayersView({ roster, statsScope, active, teamIcons = {} }: {
             isProfileLoading: selectedProfileLoading,
             now: Date.now(),
             inLobby: rosterTeam !== undefined,
-            teamIcon: teamIcons[selectedPlayer.discordId]
+            teamIcon: teamIcons[selectedPlayer.discordId],
+            onOpenMatch
           }}
         />
       )}
@@ -325,7 +329,7 @@ function LeaderboardRow({ entry, teamIcon, selected, onOpen }: {
         {teamIcon === undefined ? null : <TeamIcon icon={teamIcon} />}
         <span className="players-name-text">{entry.displayName ?? entry.userId}</span>
       </span>
-      <span className="players-num">{formatNumber(entry.rating ?? null)}</span>
+      <span className="players-num">{formatNumber(leaderboardDisplayRating(entry) ?? null)}</span>
       <span className="players-num players-num-muted">{formatLeaderboardRecord(entry)}</span>
       <span className="players-num">{formatLeaderboardWinRate(entry)}</span>
       <span className="players-num players-num-muted">{formatLeaderboardGames(entry)}</span>

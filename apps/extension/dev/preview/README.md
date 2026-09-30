@@ -41,6 +41,12 @@ History (lobby and draft), each at 1024x768, 1100x900, 1265x1100,
 1280x720, 1366x768, 1625x1360, 1920x1080, and 2560x1300, in Small,
 Default, and Large. The 192 cases also run `geometry.mjs`, checking component
 containment, sibling overlap, text overflow, and horizontal page overflow.
+Draft scenes also check that the three column panels end on the same line
+and that each race card's chips stay on one line. After the matrix it runs
+interaction checks: a drawer match code opening History, the Players season
+name and rating, and the team-icon tooltip staying inside its card, row or
+drawer (hover and keyboard focus, every UI size) without covering a
+neighbour or scrolling the page.
 Failures make the command exit unsuccessfully; per-case results and element
 counts are saved in `.shots/geometry.json`. Intentional overlays (tooltips,
 card hit targets, and the drawer backdrop) are excluded from sibling checks.
