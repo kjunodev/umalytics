@@ -1,6 +1,7 @@
-import type { DraftSnapshot, PrematchRoster, TeamId } from '@umalytics/shared';
+import type { DraftSnapshot, PrematchPlayer, PrematchRoster, TeamId } from '@umalytics/shared';
 import { normalizeMatchCode } from './matchDetection';
 import { normalizePrematchRosterFromPlayers } from './playerExtraction';
+import { UNKNOWN_PLAYER_NAME } from './rosterIdentity';
 import { getUmaDisplayName, normalizeUmaOutfitId } from '../umas/umaPortraits';
 
 type RoomRecord = Record<string, any>;
@@ -154,11 +155,21 @@ export class RoomEventState {
       if (!this.roster || (!this.authoritativeRoster && (!this.draft || this.draft.phase === 'lobby'))) this.roster = incoming;
       else {
         // Presence decorates known members; it never removes or reassigns them.
-        const byId = new Map(incoming.players.map(player => [player.discordId, player]));
-        this.roster = this.normalize(this.roster.players.map(player => {
-          const update = byId.get(player.discordId);
-          return update ? { ...player, displayName: update.displayName } : player;
-        }));
+        const known = this.roster.players;
+        const decorated = known.map(player => {
+          const update = incoming.players.find(candidate => sameRoomMember(candidate, player));
+          if (!update) return player;
+          return { ...player,
+            ...(update.displayName !== UNKNOWN_PLAYER_NAME ? { displayName: update.displayName } : {}),
+            ...(!isDiscordSnowflake(player.discordId) && isDiscordSnowflake(update.discordId) ? { discordId: update.discordId } : {}) };
+        });
+        // Outside ranked rooms presence is the only membership source for people who
+        // join after the first snapshot (long-lived casual rooms), so seated players
+        // are added at any phase. normalize() has already dropped spectators and
+        // unassigned users. Ranked rooms keep rankedQueueRoster as the only source.
+        const added = this.rankedRosterSeen ? [] :
+          incoming.players.filter(candidate => !known.some(player => sameRoomMember(candidate, player)));
+        this.roster = this.normalize([...decorated, ...added]);
       }
     } else return { reason: 'presence-without-roster' };
     return { roster: this.roster, reason: 'presence-update' };
@@ -172,6 +183,39 @@ export class RoomEventState {
         team2: { id: 'team2', name: this.draft?.teams.team2.name ?? 'Team 2', players: result.players.filter(p => p.team === 'team2') }
       } };
   }
+}
+
+/** Members are keyed by Discord ID, or by user ID when the Discord ID is missing. */
+function sameRoomMember(a: PrematchPlayer, b: PrematchPlayer): boolean {
+  return a.discordId === b.discordId || a.userId === b.userId;
+}
+function isDiscordSnowflake(value: string): boolean { return /^\d{16,20}$/.test(value); }
+
+const ROOM_EVENT_LABELS: Record<string, string> = { 'match.snapshot': 'snapshot', 'room.presence.updated': 'presence',
+  'participant.uma-assignments.snapshot': 'assignment', 'room.captain.changed': 'captain' };
+
+/** Counts-only summary of a decoded room event for diagnostics: which roster
+ * sources were present and how many entries lacked identity fields. Never
+ * includes names, IDs, tokens or chat. */
+export function summarizeRoomEvent(event: RoomRecord | null): Record<string, string | number> {
+  if (event === null) return {};
+  const summary: Record<string, string | number> = { event: ROOM_EVENT_LABELS[event.type] ?? 'other' };
+  const ranked = event.type === 'match.snapshot' ? event.state?.multiplayer?.rankedQueueRoster : event.rankedQueueRoster;
+  if (Array.isArray(ranked)) summary.rankedRoster = ranked.length;
+  if (Array.isArray(event.participants)) summary.participants = event.participants.length;
+  if (event.type === 'participant.uma-assignments.snapshot') {
+    summary.revision = event.revision;
+    summary.assignmentRoster = event.roster.length;
+  }
+  const entries: RoomRecord[] = [...(Array.isArray(ranked) ? ranked : []), ...(event.participants ?? []), ...(event.roster ?? [])];
+  if (entries.length === 0) return summary;
+  const seated = (p: RoomRecord) => p.team !== null && [p.team, p.finalTeam, p.initialTeam].some(isRoomTeam);
+  const spectator = (p: RoomRecord) => [p.role, p.roomRole].some(role => typeof role === 'string' && ['spectator', 'staff'].includes(role.toLowerCase()));
+  summary.missingDiscordId = entries.filter(p => typeof p.discordId !== 'string' || !isDiscordSnowflake(p.discordId)).length;
+  summary.missingTeam = entries.filter(p => !seated(p)).length;
+  summary.missingDisplayName = entries.filter(p => typeof p.displayName !== 'string' || p.displayName.trim() === '').length;
+  summary.spectators = entries.filter(spectator).length;
+  return summary;
 }
 
 function draftFromRoomState(state: RoomRecord, matchCode: string, version: number): DraftSnapshot {

@@ -1,5 +1,20 @@
 import type { PrematchPlayer, PrematchRoster } from '@umalytics/shared';
 
+export const UNKNOWN_PLAYER_NAME = 'Unknown player';
+
+/** Internal account IDs (UUIDs, Discord snowflakes, or the player's own ID
+ * fields) are never shown as a player name. */
+export function isRawPlayerIdentifier(name: string, identityKeys: readonly (string | undefined)[] = []): boolean {
+  const trimmed = name.trim();
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(trimmed) ||
+    /^\d{16,20}$/.test(trimmed) || identityKeys.includes(trimmed);
+}
+
+export function readablePlayerName(candidates: readonly (string | undefined)[], identityKeys: readonly (string | undefined)[] = []): string {
+  return candidates.find((name): name is string => name !== undefined && name.trim().length > 0 &&
+    !isRawPlayerIdentifier(name, identityKeys)) ?? UNKNOWN_PLAYER_NAME;
+}
+
 /** An unnumbered starting room is identified by its visible team slots, never by
  * guessing a Discord ID from a name or accepting an unrelated room's payload. */
 export function matchesVisibleTeamSlots(synced: PrematchRoster, visible: PrematchRoster): boolean {

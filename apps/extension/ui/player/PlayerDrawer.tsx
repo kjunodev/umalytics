@@ -238,8 +238,12 @@ export function PlayerDrawer({
                   <span aria-hidden="true">&middot;</span>
                 </>
               )}
-              <span>{formatRank(profile, isProfileLoading && discordId !== undefined)}</span>
-              <span>{rating === undefined || rating === null ? 'Rating unknown' : `${rating} rating`}</span>
+              {discordId === undefined ? <span>Profile unavailable</span> : (
+                <>
+                  <span>{formatRank(profile, isProfileLoading)}</span>
+                  <span>{rating === undefined || rating === null ? 'Rating unknown' : `${rating} rating`}</span>
+                </>
+              )}
               {displayedProfile?.matches === undefined || displayedProfile.matches === null ? null : (
                 <>
                   <span aria-hidden="true">&middot;</span>

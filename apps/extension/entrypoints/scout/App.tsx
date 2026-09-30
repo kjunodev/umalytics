@@ -39,6 +39,7 @@ import { PlayerDrawer } from '../../ui/player/PlayerDrawer';
 import { PlayersView } from '../../ui/players/PlayersView';
 import {
   formatDiagnosticsForClipboard,
+  formatRoomEventSummary,
   getDiagnostics,
   getLoadingDiscordIdsForDisplay,
   getLoadingProfileCount,
@@ -48,7 +49,8 @@ import {
   isProfileLoading,
   isProfileSnapshot,
   normalizeLobbyLockForDisplay,
-  normalizeProfileSnapshotForDisplay
+  normalizeProfileSnapshotForDisplay,
+  ROOM_EVENT_SUMMARY_LIMIT
 } from '../../ui/scoutData';
 import { AppHeader, type AppMode } from '../../ui/shell/AppHeader';
 import { UmaPlannerScene } from '../../ui/umas/UmaPlannerScene';
@@ -272,7 +274,9 @@ export default function App() {
 
   const copyDiagnostics = () => {
     void browser.runtime.sendMessage({ type: 'diagnostic-trace-requested' }).then(trace => {
-    const text = formatDiagnosticsForClipboard(diagnostics) + '\n\nRecent event trace (no tokens or chat):\n' + JSON.stringify(trace ?? [], null, 2);
+    const text = formatDiagnosticsForClipboard(diagnostics) +
+      `\n\nRoom events, last ${ROOM_EVENT_SUMMARY_LIMIT} (counts only; no names, IDs, tokens or chat):\n` + formatRoomEventSummary(trace) +
+      '\n\nRecent event trace (no tokens or chat):\n' + JSON.stringify(trace ?? [], null, 2);
 
     void navigator.clipboard.writeText(text).then(() => {
       setDiagnosticsCopied(true);

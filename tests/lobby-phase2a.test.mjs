@@ -23,10 +23,33 @@ function cardStateHarness() {
 const emptyDisplay = { topUmas: [] };
 const withUmas = { topUmas: [{ umaId: 'a', name: 'A' }] };
 
-test('a card with no linked Discord ID never shows loading, private or error chrome', () => {
+test('a card with no linked Discord ID shows Profile unavailable, never loading, private or error chrome', () => {
   const c = cardStateHarness();
-  assert.equal(c.getCardState(undefined, undefined, true, undefined), 'loaded');
-  assert.equal(c.getCardState({ discordId: 'x' }, emptyDisplay, true, undefined), 'loaded');
+  assert.equal(c.getCardState(undefined, undefined, true, undefined), 'unavailable');
+  assert.equal(c.getCardState({ discordId: 'x' }, emptyDisplay, true, undefined), 'unavailable');
+  assert.equal(c.getCardState({ discordId: 'x', statsPrivate: true, error: 'HTTP 503' }, emptyDisplay, false, undefined), 'unavailable');
+});
+
+test('the Profile unavailable card replaces the rank and rating line and the stat grid', () => {
+  const c = vm.createContext({
+    element: (type, props, ...children) => ({ type, props, children }),
+    React: { Fragment: 'Fragment' }, BadgeChipRow: 'Badges', StatCell: 'Stat',
+    TopUmasList: 'Umas', UmaResolutionNote: 'Resolution', CaptainCrown: 'Crown', TeamIcon: 'TeamIcon',
+    formatRecord: () => '-', formatPercent: () => '-', formatDecimal: () => '-', formatNumber: () => '-',
+    formatRank: () => 'Unranked', getCardProfile: () => undefined, getPlayerDisplayRating: () => undefined,
+    getPlayerNote: () => undefined, getStatsMessage: () => undefined, getNotableBadges: () => [],
+    getPlayerRowClassName: () => 'player-row', getLookupDiscordId: p => /^\d{16,20}$/.test(p.discordId) ? p.discordId : undefined,
+    hasDisplayableProfileLists: () => false
+  });
+  for (const name of ['getCardState', 'CardBody', 'PlayerRow']) loadFunction(c, teamSectionSyntax, name);
+  const player = { userId: 'user-without-discord', discordId: 'user-without-discord', displayName: 'Unknown player', team: 'team1' };
+  const row = c.PlayerRow({ player, isProfileLoading: false, statsScope: 'currentSeason', onShowDetails: () => {} });
+  const text = JSON.stringify(row);
+  assert(text.includes('Profile unavailable'));
+  assert(!text.includes('Unranked') && !text.includes('Rating unknown'));
+  const body = c.CardBody({ state: 'unavailable', player, displayedProfile: undefined, notableBadges: [], canRetryProfile: false });
+  assert.equal(body.props.className, 'card-message-box');
+  assert(JSON.stringify(body).includes('No Discord account'));
 });
 
 test('an unfetched profile shows the skeleton only while a fetch is in flight', () => {

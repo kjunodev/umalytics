@@ -286,3 +286,35 @@ export function formatDiagnosticTeamCounts(teams: PrematchTeam[]): string {
 export function formatDiagnosticsForClipboard(diagnostics: DiagnosticRow[]): string {
   return diagnostics.map((item) => `${item.label}: ${item.value}`).join('\n');
 }
+
+export const ROOM_EVENT_SUMMARY_LIMIT = 30;
+
+/** One line per recent room event, built only from the recorder's sanitized
+ * enum and count fields: no room codes, names, IDs, tokens or chat. */
+export function formatRoomEventSummary(trace: unknown, limit = ROOM_EVENT_SUMMARY_LIMIT): string {
+  const entries = (Array.isArray(trace) ? trace : [])
+    .filter((entry): entry is Record<string, unknown> => entry !== null && typeof entry === 'object' && entry.kind === 'room')
+    .slice(-limit);
+  if (entries.length === 0) return 'none';
+  const count = (entry: Record<string, unknown>, field: string) =>
+    typeof entry[field] === 'number' && Number.isFinite(entry[field]) ? String(entry[field]) : undefined;
+  const text = (entry: Record<string, unknown>, field: string) => typeof entry[field] === 'string' ? entry[field] : undefined;
+  return entries.map((entry) => {
+    const at = typeof entry.at === 'number' && Number.isFinite(entry.at) ? new Date(entry.at).toISOString().slice(11, 19) : '--:--:--';
+    const sources = [['rankedRoster', 'rankedQueueRoster'], ['participants', 'participants'], ['assignmentRoster', 'assignment roster']]
+      .flatMap(([field, label]) => count(entry, field!) === undefined ? [] : [`${label} ${count(entry, field!)}`]);
+    const missing = [['missingDiscordId', 'discordId'], ['missingTeam', 'team'], ['missingDisplayName', 'displayName']]
+      .flatMap(([field, label]) => count(entry, field!) === undefined ? [] : [`${label} ${count(entry, field!)}`]);
+    return [
+      at,
+      text(entry, 'event') ?? 'event?',
+      text(entry, 'reason') ?? 'reason?',
+      `phase ${text(entry, 'phase') ?? '?'}`,
+      count(entry, 'revision') === undefined ? `v${count(entry, 'version') ?? '?'}` : `v${count(entry, 'version') ?? '?'} rev ${count(entry, 'revision')}`,
+      `team1 ${count(entry, 'team1') ?? '-'} team2 ${count(entry, 'team2') ?? '-'}`,
+      `sources: ${sources.length === 0 ? 'none' : sources.join(', ')}`,
+      ...(missing.length === 0 ? [] : [`missing: ${missing.join(', ')}`]),
+      ...(count(entry, 'spectators') === undefined ? [] : [`spectators ${count(entry, 'spectators')}`])
+    ].join(' | ');
+  }).join('\n');
+}
