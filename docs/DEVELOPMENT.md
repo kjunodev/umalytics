@@ -42,7 +42,7 @@ Requests start at least 350 ms apart. A 429 doubles the pacing interval, capped 
 
 ## Release checks
 
-The release workflow (`.github/workflows/release.yml`) publishes automatically: on a push to `main` in `skimuic/UmaLytics` that changes `package.json` or `scripts/publish-release.mjs`, it reruns `pnpm test`, `pnpm typecheck` and `pnpm build:all`, then packages and uploads the Chromium/Firefox ZIPs and `SHA256SUMS.txt` to a GitHub release for that version. It never runs against the mirror repository. Before changing download links, build and verify the exact ZIPs; preserve older versioned assets. Update README, docs/INSTALL.md and CHANGELOG together. Candidate release objects, if created later, should be marked as pre-releases.
+The release workflow (`.github/workflows/release.yml`) publishes automatically: on a push to `main` in either `skimuic/UmaLytics` or `kjunodev/umalytics` that changes `package.json` or `scripts/publish-release.mjs`, it reruns `pnpm test`, `pnpm typecheck` and `pnpm build:all`, then packages and uploads the Chromium/Firefox ZIPs and `SHA256SUMS.txt` to a GitHub release in that repository for that version. Other repositories cannot publish through this workflow. Before changing download links, build and verify the exact ZIPs; preserve older versioned assets. Update README, docs/INSTALL.md and CHANGELOG together. Candidate release objects, if created later, should be marked as pre-releases.
 
 Firefox currently emits a data-collection declaration warning. Permanent/store distribution requires an accurate declaration and signing work; do not suppress the warning and describe the result as store-ready.
 

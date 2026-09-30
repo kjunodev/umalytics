@@ -23,7 +23,8 @@ test('extension source displays history without converting it to ranked statisti
   }
   const config = fs.readFileSync(path.join(ROOT, 'wxt.config.ts'), 'utf8');
   assert.match(config, /name: 'UmaLytics'/);
-  assert.match(config, /version_name: '0\.5\.0'/);
+  const { version } = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
+  assert.equal(config.match(/version_name: '([^']+)'/)?.[1], version);
   assert.match(config, /id: 'umalytics@kjunodev'/);
 });
 
