@@ -63,10 +63,25 @@ test('release requires notes when neither the new nor legacy path exists',()=>{
   let error;try{vm.runInNewContext(source,context);}catch(e){error=e;}
   assert.match(error.message,/Release notes are required/);
 });
-test('mirror cannot publish releases and workflow is restricted to the community repository',()=>{
-  const r=run({repository:'kjunodev/umalytics'});assert.match(r.error.message,/Unexpected release repository/);assert.equal(r.calls.length,0);
+test('both release repositories publish to their own repository',()=>{
+  for(const repository of ['skimuic/UmaLytics','kjunodev/umalytics']) {
+    const r=run({repository});assert.equal(r.error,undefined);
+    const releaseCalls=r.calls.filter(c=>c[0]==='gh' && c[1]==='release');
+    assert(releaseCalls.some(c=>c[2]==='create'));
+    assert(releaseCalls.some(c=>c[2]==='edit'));
+    for(const call of releaseCalls) assert.equal(call[call.indexOf('--repo')+1],repository);
+    for(const call of r.calls.filter(c=>c[0]==='gh' && c[1]==='api')) assert(call[2].startsWith(`repos/${repository}/`));
+  }
+});
+
+test('release rejects repositories outside the allowlist before any commands',()=>{
+  const r=run({repository:'example/umalytics'});assert.match(r.error.message,/Unexpected release repository/);assert.equal(r.calls.length,0);
+});
+
+test('release workflow allows both repositories on main with write permission',()=>{
   const workflow=fs.readFileSync(new URL('../.github/workflows/release.yml',import.meta.url),'utf8');
-  assert(workflow.includes("if: github.repository == 'skimuic/UmaLytics' && github.ref == 'refs/heads/main'"));
+  assert(workflow.includes("if: (github.repository == 'skimuic/UmaLytics' || github.repository == 'kjunodev/umalytics') && github.ref == 'refs/heads/main'"));
+  assert.match(workflow,/permissions:\s*\n\s+contents: write/);
   assert(workflow.includes('tag="v${version}"'));
 });
 

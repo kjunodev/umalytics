@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.5.1
+
+- Keep every player visible when they join or rejoin long-lived casual rooms. Never show internal IDs as names; show "Profile unavailable" for players without a Discord account.
+- Open a match in History by clicking its code in a player's match history, with a link to Uma Drafter.
+- Show the season name on the Players page and use consistent ratings throughout UmaLytics.
+- Keep team-icon tooltips from covering other rows or cards.
+- Keep long W-L records from stretching lobby cards.
+- Align Draft columns and keep race conditions on one line.
+- Include an anonymous room-event summary in Copy diagnostics for bug reports.
+
 ## 0.5.0
 
 - Redesign the scouting window with a slim header: Live / History / Players, Lobby / Draft / Umas scenes and Season / All-time.

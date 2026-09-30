@@ -11,7 +11,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   release:
-    if: github.repository == 'skimuic/UmaLytics' && github.ref == 'refs/heads/main'
+    if: (github.repository == 'skimuic/UmaLytics' || github.repository == 'kjunodev/umalytics') && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       contents: write
