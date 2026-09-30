@@ -1,5 +1,6 @@
 import type { PrematchRoster, PrematchPlayer, PrematchTeam, TeamId } from '@umalytics/shared';
 import { TEAM_IDS } from './teams';
+import { readablePlayerName } from './rosterIdentity';
 
 export function getTeamGroups(roster: PrematchRoster | undefined): PrematchTeam[] {
   if (roster === undefined) {
@@ -24,7 +25,9 @@ export function getTeamGroups(roster: PrematchRoster | undefined): PrematchTeam[
 export function normalizeRosterForDisplay(roster: PrematchRoster | undefined): PrematchRoster | undefined {
   if (roster === undefined) return undefined;
   const players = dedupePlayersByIdentity(roster.players).map(player => ({
-    ...player, team: player.team === null ? undefined : player.team ?? player.finalTeam ?? player.initialTeam
+    ...player, team: player.team === null ? undefined : player.team ?? player.finalTeam ?? player.initialTeam,
+    // Stored or locked rosters from older versions may still carry an ID as a name.
+    displayName: readablePlayerName([player.displayName], [player.userId, player.discordId])
   })).filter(player => (player.team === 'team1' || player.team === 'team2') &&
     !['spectator', 'staff'].includes(player.role?.toLowerCase() ?? ''));
   // Apply the same slot selection to fetching, counts, locks and all scouting scenes.

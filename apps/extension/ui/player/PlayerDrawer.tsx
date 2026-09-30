@@ -53,6 +53,8 @@ export interface PlayerDrawerContext {
   now: number;
   inLobby?: boolean;
   teamIcon?: EsportsTeamIcon;
+  /** Opens a match code in History mode. When absent, codes link out to Uma Drafter instead. */
+  onOpenMatch?: (matchCode: string) => void;
 }
 
 interface HistoryApiPage {
@@ -94,7 +96,7 @@ export function PlayerDrawer({
   onClose: () => void;
   context: PlayerDrawerContext;
 }) {
-  const { team, statsScope, isProfileLoading, now, teamIcon } = context;
+  const { team, statsScope, isProfileLoading, now, teamIcon, onOpenMatch } = context;
   const inLobby = context.inLobby ?? team !== undefined;
   const displayedProfile = getDisplayedProfileStats(profile, statsScope);
   const rating = profile?.conservativeRating ?? profile?.rating ?? player.displayRatingSnapshot ?? player.ratingSnapshot;
@@ -211,6 +213,7 @@ export function PlayerDrawer({
     ? currentApiPage.matches.slice(apiPageRowOffset(currentPage), apiPageRowOffset(currentPage) + HISTORY_PAGE_SIZE)
     : [];
   const showRatingColumn = historyRows.some((match) => (match.eloDelta !== null && match.eloDelta !== undefined) || match.eloPlacement === true);
+  const getMatchPageUrl = (matchCode: string) => `https://drafter.uma.guide/matches/${encodeURIComponent(matchCode)}`;
   const historyGridStyle = { gridTemplateColumns: showRatingColumn ? '36px 88px minmax(0, 1fr) 64px 64px' : '36px 88px minmax(0, 1fr) 64px' };
   const pagerSlots = getPagerSlots(currentPage, totalPages);
 
@@ -238,8 +241,12 @@ export function PlayerDrawer({
                   <span aria-hidden="true">&middot;</span>
                 </>
               )}
-              <span>{formatRank(profile, isProfileLoading && discordId !== undefined)}</span>
-              <span>{rating === undefined || rating === null ? 'Rating unknown' : `${rating} rating`}</span>
+              {discordId === undefined ? <span>Profile unavailable</span> : (
+                <>
+                  <span>{formatRank(profile, isProfileLoading)}</span>
+                  <span>{rating === undefined || rating === null ? 'Rating unknown' : `${rating} rating`}</span>
+                </>
+              )}
               {displayedProfile?.matches === undefined || displayedProfile.matches === null ? null : (
                 <>
                   <span aria-hidden="true">&middot;</span>
@@ -400,14 +407,36 @@ export function PlayerDrawer({
               historyRows.map((match) => (
                 <div key={match.matchId} className="drawer-history-row" style={historyGridStyle}>
                   <span className={`recent-result ${getRecentResultTone(match)}`}>{formatRecentResult(match)}</span>
-                  <a
-                    href={`https://drafter.uma.guide/matches/${encodeURIComponent(match.matchId)}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="recent-match-code"
-                  >
-                    {match.matchId}
-                  </a>
+                  <span className="recent-match-cell">
+                    {onOpenMatch === undefined ? (
+                      <a href={getMatchPageUrl(match.matchId)} target="_blank" rel="noreferrer" className="recent-match-code">
+                        {match.matchId}
+                      </a>
+                    ) : (
+                      <>
+                        <button
+                          type="button"
+                          className="recent-match-code"
+                          title="Open in History"
+                          onClick={() => { onOpenMatch(match.matchId); onClose(); }}
+                        >
+                          {match.matchId}
+                        </button>
+                        <a
+                          href={getMatchPageUrl(match.matchId)}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="recent-match-external"
+                          title="Open on Uma Drafter"
+                          aria-label={`Open ${match.matchId} on Uma Drafter`}
+                        >
+                          <svg width="11" height="11" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+                            <path d="M7 1.5h3.5V5M10.5 1.5L5.5 6.5M9 7v2.5a1 1 0 0 1-1 1H2.5a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1H5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+                          </svg>
+                        </a>
+                      </>
+                    )}
+                  </span>
                   <span className="uma-table-name">
                     <span className="uma-mono" aria-hidden="true">
                       <UmaImage imageUrl={match.umaId === null ? undefined : getFallbackUmaImageUrl(match.umaId)} name={match.umaName} />

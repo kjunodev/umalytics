@@ -129,10 +129,7 @@
    its own text still wraps within the reserved space via overflow-wrap.
    --row-md (not the shorter --row-sm) so a name that wraps to two lines in
    the narrowest tested card width still fits alongside a Duo chip and the
-   team icon. Positioning context for .team-icon-tooltip: left:0/right:0
-   span this row's own width, so the tooltip can never extend past the card
-   regardless of where the icon sits in the row (mirrors
-   .card-badges/.chip-tooltip). */
+   team icon. */
 .card-name-row {
   flex-wrap: nowrap;
   align-items: center;
@@ -143,12 +140,11 @@
   position: relative;
 }
 
-.card-name-row .team-icon-tooltip {
-  bottom: calc(100% + 8px);
-  left: 0;
-  right: 0;
-  text-align: left;
-  white-space: normal;
+/* The team-icon tooltip opens below the name row, over the badges/stats that
+   come later in the card; later siblings share this row's z-index, so lift
+   the row while its icon is hovered or focused. */
+.card-name-row:has(.team-icon:hover, .team-icon:focus-visible) {
+  z-index: 6;
 }
 
 .card-name {

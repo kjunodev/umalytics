@@ -14,6 +14,12 @@ function harness(globals = {}) {
   return context;
 }
 
+test('historical participants keep the captain flag so past-match cards show the crown', () => {
+  const players = harness().parseHistoricalMatch(fixture, 'FX1A2B').roster.players;
+  assert.equal(players.filter(player => player.isCaptain).length, 2);
+  assert.equal(players.filter(player => player.isCaptain && player.team === 'team1').length, 1);
+});
+
 test('history input accepts code, hyphen, and exact match URL; rejects foreign URLs and paths', () => {
   const h = harness();
   for (const value of ['fx1a2b', ' FX1-A2B ', 'https://drafter.uma.guide/matches/FX1A2B?view=1']) assert.equal(h.parseHistoryInput(value), 'FX1A2B');

@@ -26,6 +26,35 @@
 .recent-result.loss { background: var(--status-loss-bg); color: var(--status-loss-fg); }
 .recent-result.pending { background: var(--border-default); color: var(--text-secondary); }
 .recent-match-code { color: var(--text-link-hover); font-size: 10px; font-weight: 800; text-decoration: none; }
+button.recent-match-code {
+  background: none;
+  border: 0;
+  cursor: pointer;
+  font-family: inherit;
+  line-height: 1.4;
+  min-width: 0;
+  padding: 0;
+}
+button.recent-match-code:hover { text-decoration: underline; }
+button.recent-match-code:focus-visible,
+.recent-match-external:focus-visible {
+  outline: 2px solid var(--accent-blue);
+  outline-offset: 2px;
+}
+/* The external-link icon is always present at a fixed size, so the code
+   never shifts when it is hovered or focused. */
+.recent-match-cell { align-items: center; display: flex; gap: 4px; min-width: 0; }
+.recent-match-external {
+  align-items: center;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  display: inline-flex;
+  flex-shrink: 0;
+  height: 14px;
+  justify-content: center;
+  width: 14px;
+}
+.recent-match-external:hover { color: var(--text-link-hover); }
 
 /* The whole drawer scrolls when its paged sections exceed the window height. */
 .player-drawer {
@@ -72,14 +101,6 @@
 
 .player-drawer-title-row .team-icon { width: 40px; height: 40px; }
 
-.player-drawer-title-row .team-icon-tooltip {
-  left: 0;
-  right: 0;
-  text-align: left;
-  top: calc(100% + 8px);
-  white-space: normal;
-}
-
 .player-drawer-title-row h2 {
   color: var(--text-primary);
   font-size: 26px;
@@ -122,7 +143,7 @@
   border-radius: var(--radius-lg);
   display: grid;
   flex-grow: 1;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 0.8fr);
   min-width: 0;
 }
 
@@ -146,6 +167,19 @@
 
 .drawer-stat-panel .stat-cell strong {
   font-size: 20px;
+  white-space: nowrap;
+}
+
+/* W-L only: steps down (never below 85%) if a very narrow drawer could not
+   fit a triple-digit record such as "999-999" at full size. */
+.drawer-stat-panel .record-stat-cell {
+  container-type: inline-size;
+}
+
+@container (max-width: 84px) {
+  .drawer-stat-panel .record-stat-cell strong {
+    font-size: 17px;
+  }
 }
 
 .drawer-section {

@@ -103,11 +103,14 @@ function player(index: number, team: 'team1' | 'team2', name: string, extra: Par
 }
 
 const TEAM1_NAMES = ['Rose Tempest', 'Nightfall Duo', 'Amber Sprint', 'Blue Comet', 'Iron Hoof'];
-const TEAM2_NAMES = ['literally 1984', 'Silver Gale', 'Twin Crown', 'Echo Drift', 'Last Furlong'];
+const TEAM2_NAMES = ['literally 1984', 'Silver Gale', 'Twin Crown', 'Unknown player', 'Last Furlong'];
 
 export const PREVIEW_PLAYERS: PrematchPlayer[] = [
   ...TEAM1_NAMES.map((name, i) => player(i, 'team1', name, i < 2 ? { partyId: 'fixture-duo' } : {})),
-  ...TEAM2_NAMES.map((name, i) => player(i + 5, 'team2', name))
+  // Player 8 is a casual-room guest with no Discord ID or readable name: keyed by
+  // user ID, shown as "Unknown player" with the Profile unavailable card.
+  ...TEAM2_NAMES.map((name, i) => player(i + 5, 'team2', name, i + 5 === 8
+    ? { discordId: 'user-8', ratingSnapshot: undefined, displayRatingSnapshot: undefined } : {}))
 ];
 
 export const PREVIEW_ROSTER: PrematchRoster = {
@@ -131,7 +134,8 @@ function topUmasFor(count: number): PlayerTopUmaSummary[] {
 // player 4: error loading the profile.
 // player 5: captain, rich profile (mirrors player 0 on team 2).
 // player 6: another player with restricted ranked stats.
-// player 7-8: rich profiles with varied ranks for a filled-out second team.
+// player 7: rich profile for a filled-out second team.
+// player 8: no Discord ID, so no profile and no request (Profile unavailable).
 // player 9: loaded profile with zero ranked Umas — the "no ranked Uma data
 // found" message state, distinct from the private/error card states.
 export const PREVIEW_PROFILES: Record<string, PlayerProfileSummary> = {
@@ -181,8 +185,10 @@ export const PREVIEW_PROFILES: Record<string, PlayerProfileSummary> = {
     topUmas: [],
     allUmas: []
   }),
-  [discordId(7)]: baseProfile(discordId(7), { displayName: 'Twin Crown', rank: 88, topUmas: topUmasFor(3), allUmas: topUmasFor(3) }),
-  [discordId(8)]: baseProfile(discordId(8), { displayName: 'Echo Drift', rank: 205, topUmas: topUmasFor(3), allUmas: topUmasFor(3) }),
+  // Worst-case W-L: a triple-digit record with a 100% win rate must stay on
+  // one line and keep this card the same height as the others. (Player 8 is
+  // the no-Discord-ID guest.)
+  [discordId(7)]: baseProfile(discordId(7), { displayName: 'Twin Crown', rank: 88, wins: 999, losses: 999, winRate: 1, matches: 1998, topUmas: topUmasFor(3), allUmas: topUmasFor(3) }),
   [discordId(9)]: baseProfile(discordId(9), { displayName: 'Last Furlong', rank: 512, matches: 0, wins: 0, losses: 0, winRate: 0, points: 0, pointsPerGame: 0, podiums: 0, mvpMatches: 0, topUmas: [], allUmas: [] })
 };
 
@@ -280,6 +286,7 @@ export const PREVIEW_DRAFT_COMPLETE: DraftSnapshot = {
 
 export const PREVIEW_LEADERBOARD: SeasonLeaderboard = {
   activeSeasonId: 'season-4',
+  activeSeasonName: 'Season 4 (Preview Series)',
   // Rank 1 reuses player 0's discordId so it renders the same mapped Uma
   // League team icon as the lobby card and drawer.
   entries: Array.from({ length: 18 }, (_, i): SeasonLeaderboardEntry => ({

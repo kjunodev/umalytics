@@ -1,0 +1,44 @@
+{
+  "description": "Long-lived casual custom room: the draft finished long ago (phase complete, no rankedQueueRoster) and players drop in and out. Presence grows from 1 to 6 seated players across both teams. One seated player has no Discord ID and a raw user ID as its display name; a spectator and a player who left the slots are online too. All IDs and names are synthetic.",
+  "room": "CAS7R1",
+  "expected": {
+    "team1": ["100000000000000201", "100000000000000202", "100000000000000203"],
+    "team2": ["0f0e0d0c-0000-4000-8000-00000000000a", "100000000000000204", "100000000000000205"],
+    "names": {
+      "100000000000000201": "Fixture Captain A",
+      "100000000000000202": "Fixture Nick B",
+      "100000000000000203": "fixture_user_c",
+      "0f0e0d0c-0000-4000-8000-00000000000a": "Unknown player",
+      "100000000000000204": "Fixture Captain D",
+      "100000000000000205": "Fixture Player E"
+    },
+    "excluded": ["100000000000000209", "100000000000000210"]
+  },
+  "participants": {
+    "guest": { "userId": "0f0e0d0c-0000-4000-8000-00000000000a", "displayName": "0f0e0d0c-0000-4000-8000-00000000000a", "team": "team2", "role": "player", "isCaptain": false },
+    "captainA": { "userId": "0f0e0d0c-0000-4000-8000-0000000000a1", "discordId": "100000000000000201", "displayName": "Fixture Captain A", "team": "team1", "role": "captain", "isCaptain": true },
+    "captainAOnTeam2": { "userId": "0f0e0d0c-0000-4000-8000-0000000000a1", "discordId": "100000000000000201", "displayName": "Fixture Captain A", "team": "team2", "role": "captain", "isCaptain": true },
+    "playerB": { "userId": "0f0e0d0c-0000-4000-8000-0000000000b2", "discordId": "100000000000000202", "nickname": "Fixture Nick B", "team": "team1", "role": "player" },
+    "playerC": { "userId": "0f0e0d0c-0000-4000-8000-0000000000c3", "discordId": "100000000000000203", "discordUsername": "fixture_user_c", "finalTeam": "team1", "role": "player" },
+    "captainD": { "userId": "0f0e0d0c-0000-4000-8000-0000000000d4", "discordId": "100000000000000204", "displayName": "Fixture Captain D", "team": "team2", "role": "captain", "isCaptain": true },
+    "playerE": { "userId": "0f0e0d0c-0000-4000-8000-0000000000e5", "discordId": "100000000000000205", "displayName": "Fixture Player E", "initialTeam": "team2", "role": "player" },
+    "spectator": { "userId": "0f0e0d0c-0000-4000-8000-0000000000f9", "discordId": "100000000000000209", "displayName": "Fixture Spectator", "team": "team1", "roomRole": "spectator", "role": "spectator" },
+    "leftSlots": { "userId": "0f0e0d0c-0000-4000-8000-0000000000fa", "discordId": "100000000000000210", "displayName": "Fixture Lurker", "team": null, "initialTeam": "team1", "role": "player" }
+  },
+  "timeline": [
+    { "kind": "snapshot", "version": 49 },
+    { "kind": "presence", "online": ["guest"] },
+    { "kind": "assignment", "team": "team2", "revision": 7, "roster": ["guest"] },
+    { "kind": "assignment", "team": "team1", "revision": 3, "roster": [] },
+    { "kind": "presence", "online": ["guest"] },
+    { "kind": "assignment", "team": "team2", "revision": 7, "roster": ["guest"] },
+    { "kind": "assignment", "team": "team2", "revision": 6, "roster": ["guest"] },
+    { "kind": "snapshot", "version": 49 },
+    { "kind": "presence", "online": ["guest", "captainA", "spectator"] },
+    { "kind": "presence", "online": ["guest", "captainA", "captainD", "spectator", "leftSlots"] },
+    { "kind": "presence", "online": ["guest", "captainA", "captainD", "playerB", "playerC", "spectator", "leftSlots"] },
+    { "kind": "presence", "online": ["captainAOnTeam2", "captainD", "playerB", "playerC", "playerE", "spectator"] },
+    { "kind": "snapshot", "version": 48 },
+    { "kind": "presence", "online": ["guest", "captainA", "captainD", "playerB", "playerC", "playerE", "spectator", "leftSlots"] }
+  ]
+}

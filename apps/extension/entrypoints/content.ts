@@ -1,4 +1,4 @@
-import { decodeRoomEvent, RoomEventState } from '../room/roomEvents';
+import { decodeRoomEvent, RoomEventState, summarizeRoomEvent } from '../room/roomEvents';
 import { canReuseSyncedRoster } from '../room/rosterIdentity';
 import { browser } from 'wxt/browser';
 import { injectScript } from '#imports';
@@ -173,7 +173,7 @@ async function processWindowMessage(message: unknown, matchCode?: string): Promi
     }
     const update = roomEvents.apply(message.payload, activeRoomDomMatchCode);
     void sendDiagnosticEvent({ kind: 'room', reason: update.reason, room: activeRoomDomMatchCode,
-      version: roomEvents.version, phase: update.draft?.phase,
+      ...summarizeRoomEvent(event), version: roomEvents.version, phase: update.draft?.phase ?? roomEvents.draft?.phase,
       team1: update.roster?.players.filter(p => p.team === 'team1').length,
       team2: update.roster?.players.filter(p => p.team === 'team2').length }).catch(() => {});
     if (update.draft) await publishDraftSnapshot(update.draft);

@@ -13,7 +13,7 @@ import fs from 'node:fs';
 import assert from 'node:assert/strict';
 import { createServer } from 'vite';
 import { chromium } from 'playwright';
-import { checkGeometry } from './geometry.mjs';
+import { checkGeometry, checkTeamIconTooltip } from './geometry.mjs';
 
 const dirname = path.dirname(fileURLToPath(import.meta.url));
 const outDir = path.join(dirname, '.shots');
@@ -96,6 +96,10 @@ async function runCase(page, baseUrl, { uiSize, scene, size }) {
       geometry.failures.push(`lobby cards do not share one height at ${size.name} ${uiSize}: ${heights.join(', ')}`);
     }
   }
+  if (scene.name === 'lobby' || scene.name === 'history-lobby') {
+    const crowns = await page.locator('.player-row .captain-crown').count();
+    if (crowns !== 2) geometry.failures.push(`expected 2 captain crowns in ${scene.name} at ${size.name} ${uiSize}, found ${crowns}`);
+  }
   const fileName = `${scene.name}_${size.name}_${uiSize}.png`;
   await page.screenshot({ path: path.join(outDir, fileName) });
   return { scene: scene.name, size: size.name, uiSize, fileName, ...geometry };
@@ -118,6 +122,7 @@ async function main() {
     if (process.argv.includes('--interactions-only')) {
       const page = await newPage(browser);
       await verifyInteractions(page, baseUrl);
+      await verifyTeamIconTooltips(page, baseUrl);
       return;
     }
 
@@ -156,6 +161,7 @@ async function main() {
 
     const interactionsPage = await newPage(browser);
     await verifyInteractions(interactionsPage, baseUrl);
+    await verifyTeamIconTooltips(interactionsPage, baseUrl);
   } finally {
     await browser.close();
     await server.close();
@@ -218,6 +224,100 @@ async function verifyInteractions(page, baseUrl) {
   await page.goto(`${baseUrl}/?mode=live&scene=lobby&uiSize=default&player=100000000000000006:user-6`);
   await page.locator('.drawer-history-row').first().waitFor();
   console.log('PASS UI size initialization, resize stability, menu persistence, paging, point pluralization, and geometry negative control');
+
+  // A match code in the drawer opens History with that code (and closes the
+  // drawer); the small icon next to it still opens the Uma Drafter page.
+  await page.goto(`${baseUrl}/?mode=live&scene=lobby&uiSize=default&player=100000000000000000:user-0`);
+  await page.locator('.drawer-history-row').first().waitFor();
+  const firstCode = (await page.locator('.recent-match-code').first().textContent()).trim();
+  const external = page.locator('.recent-match-external').first();
+  assert.equal(await external.getAttribute('title'), 'Open on Uma Drafter');
+  assert.equal(await external.getAttribute('target'), '_blank');
+  assert.equal(await external.getAttribute('href'), `https://drafter.uma.guide/matches/${firstCode}`);
+  const before = await page.locator('.recent-match-cell').first().boundingBox();
+  await page.locator('.recent-match-code').first().hover();
+  assert.deepEqual(await page.locator('.recent-match-cell').first().boundingBox(), before, 'hovering a match code must not shift layout');
+  await page.locator('.recent-match-code').first().click();
+  await page.locator('.player-drawer').waitFor({ state: 'detached' });
+  assert.match(await page.locator('nav[aria-label="UmaLytics mode"] button[aria-pressed="true"]').textContent(), /History/,
+    'clicking a match code must switch to History mode');
+  assert.match(await page.locator('.app-header').innerText(), new RegExp(firstCode));
+  console.log('PASS match code opens History and closes the drawer; external icon links to Uma Drafter');
+
+  // Players: the season header shows the season's display name, and the rating
+  // column shows rating - RD and sorts by it.
+  await page.goto(`${baseUrl}/?mode=profiles&uiSize=default`);
+  await page.locator('.players-row').first().waitFor();
+  assert.equal((await page.locator('.players-season').textContent()).trim(), 'Season 4 (Preview Series)');
+  assert.equal((await page.locator('.players-row').first().locator('.players-num').first().textContent()).trim(), '2,055');
+  console.log('PASS Players season name and rating - RD');
+
+  // Draft balance negative controls: the geometry check must catch uneven
+  // column bottoms and wrapped chips, and a too-narrow race card must collapse
+  // only the weather chip to an icon (its label stays as the tooltip).
+  await page.setViewportSize({ width: 1280, height: 1100 });
+  await page.goto(`${baseUrl}/?mode=live&scene=draft&draft=complete&uiSize=default`);
+  await page.locator('.draft-race-card .draft-mod').first().waitFor();
+  assert.deepEqual((await page.evaluate(checkGeometry)).failures, []);
+  const unbalanced = await page.addStyleTag({ content: '.draft-columns { align-items: start; }' });
+  assert((await page.evaluate(checkGeometry)).failures.some(failure => failure.includes('end at different heights')),
+    'geometry checker must catch uneven draft column bottoms');
+  await unbalanced.evaluate(el => el.remove());
+  const wrapped = await page.addStyleTag({ content: '.draft-race-mods { flex-wrap: wrap; width: 120px; }' });
+  assert((await page.evaluate(checkGeometry)).failures.some(failure => failure.includes('chips wrap')),
+    'geometry checker must catch wrapped race chips');
+  await wrapped.evaluate(el => el.remove());
+  const narrow = await page.addStyleTag({ content: '.draft-race-mods { width: 200px; }' });
+  const label = page.locator('.draft-mod[data-tone^="weather-"] .draft-mod-label').first();
+  assert.equal(await label.evaluate(el => el.getBoundingClientRect().width <= 1), true, 'narrow race cards show the weather chip as an icon only');
+  assert.match(await page.locator('.draft-mod[data-tone^="weather-"]').first().getAttribute('title'), /\S/, 'icon-only weather chip keeps its label as a tooltip');
+  assert.equal(await page.locator('.draft-mod[data-tone^="surface-"] .draft-mod-label').first().evaluate(el => el.getBoundingClientRect().width > 10), true,
+    'surface chip keeps its text');
+  await narrow.evaluate(el => el.remove());
+  console.log('PASS draft column alignment, single-line race chips, and icon-only weather fallback');
+}
+
+const pageScrollSize = page => page.evaluate(() => ({
+  width: document.documentElement.scrollWidth, height: document.documentElement.scrollHeight
+}));
+
+// Every place a team icon appears: hover (and once keyboard focus) must show a
+// compact tooltip next to the icon that stays inside its card, row or drawer,
+// covers no neighbouring card or row, and never causes page scroll.
+async function verifyTeamIconTooltips(page, baseUrl) {
+  const contexts = [
+    { name: 'lobby card', query: 'mode=live&scene=lobby', icon: '.player-row .team-icon', boundsSelector: '.player-row', siblingSelector: '.player-row' },
+    { name: 'history card', query: 'mode=history&scene=lobby', icon: '.player-row .team-icon', boundsSelector: '.player-row', siblingSelector: '.player-row' },
+    { name: 'players row', query: 'mode=profiles', icon: '.players-row .team-icon', boundsSelector: '.players-row', siblingSelector: '.players-row', compact: true },
+    { name: 'drawer header', query: 'mode=live&scene=lobby&player=100000000000000000:user-0', icon: '.player-drawer .team-icon', boundsSelector: '.player-drawer', siblingSelector: '.no-neighbours' }
+  ];
+  const sizes = SIZES.filter(size => ['1024x768', '1280x720', '1625x1360', '2560x1300'].includes(size.name));
+  let checked = 0;
+  for (const uiSize of UI_SIZES) for (const size of sizes) for (const context of contexts) {
+    await page.setViewportSize({ width: size.width, height: size.height });
+    await page.goto(`${baseUrl}/?${context.query}&uiSize=${uiSize}`, { waitUntil: 'domcontentloaded' });
+    await page.locator(context.icon).first().waitFor();
+    await page.evaluate(() => document.fonts.ready);
+    const baseline = await pageScrollSize(page);
+    await page.locator(context.icon).first().hover();
+    await page.waitForTimeout(200);
+    const result = await page.evaluate(checkTeamIconTooltip, { ...context, baseline });
+    const where = `${context.name} at ${size.name} ${uiSize}`;
+    assert.deepEqual(result.failures, [], `team icon tooltip, ${where}: ${result.failures.join('; ')}`);
+    if (context.compact) assert.ok(result.width < result.containerWidth / 2, `team icon tooltip spans the whole row, ${where}`);
+    await page.mouse.move(0, 0);
+    checked++;
+  }
+  // Keyboard focus shows it too (Tab from the page start to the first icon).
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.goto(`${baseUrl}/?mode=live&scene=lobby&uiSize=default`);
+  await page.locator('.player-row .team-icon').first().waitFor();
+  const focusBaseline = await pageScrollSize(page);
+  for (let i = 0; i < 60 && !(await page.evaluate(() => document.activeElement?.classList.contains('team-icon'))); i++) await page.keyboard.press('Tab');
+  await page.waitForTimeout(200);
+  const focused = await page.evaluate(checkTeamIconTooltip, { ...contexts[0], baseline: focusBaseline });
+  assert.deepEqual(focused.failures, [], `team icon tooltip on keyboard focus: ${focused.failures.join('; ')}`);
+  console.log(`PASS team icon tooltips: ${checked} hover placements across lobby/history cards, Players rows and the drawer, plus keyboard focus`);
 }
 
 main()

@@ -49,11 +49,6 @@ if(packageOnly) {
 const gh=(...args)=>execFileSync('gh',args,{cwd:root,encoding:'utf8'}).trim();
 const refs=JSON.parse(gh('api',`repos/${repo}/git/matching-refs/tags/${tag}`));
 const ref=refs.find(r=>r.ref===`refs/tags/${tag}`);
-if(ref) {
-  let object=ref.object;
-  for(let depth=0;object.type==='tag' && depth<8;depth++) object=JSON.parse(gh('api',`repos/${repo}/git/tags/${object.sha}`)).object;
-  if(object.type!=='commit' || object.sha!==sha) throw Error('Existing tag points to a different commit');
-}
 const verifyAssets=release=>{
   const expected=assets.map(file=>path.basename(file));
   if(release.assets?.length!==expected.length || !expected.every(name=>release.assets.some(asset=>asset.name===name && asset.size>0))) throw Error('Published asset set is incomplete or unexpected');
@@ -74,8 +69,15 @@ if(existing && !existing.draft) {
     existing.assets.push({name:'SHA256SUMS.txt',size:fs.readFileSync(publishedSums).length});
   }
   verifyAssets(existing);
-  console.log(`Release already published: ${existing.html_url}`);
+  // A published release for this version is final, whichever commit the tag points at
+  // (for example a later package.json-only change such as a new npm script).
+  console.log(`${tag} already released; nothing to publish (${existing.html_url})`);
 } else {
+  if(ref) {
+    let object=ref.object;
+    for(let depth=0;object.type==='tag' && depth<8;depth++) object=JSON.parse(gh('api',`repos/${repo}/git/tags/${object.sha}`)).object;
+    if(object.type!=='commit' || object.sha!==sha) throw Error('Existing tag points to a different commit');
+  }
   if(existing && existing.target_commitish!==sha) throw Error('Existing draft belongs to a different commit');
   if(!existing) gh('release','create',tag,'--repo',repo,'--target',sha,'--title',`UmaLytics ${version}`,'--notes-file',notes,'--draft');
   gh('release','upload',tag,...assets,'--repo',repo,'--clobber');
