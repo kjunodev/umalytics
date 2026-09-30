@@ -2,6 +2,7 @@ import { readPayloadRoomCode } from './syncPayload';
 import type { MatchCode, PrematchPlayer, PrematchRoster, PrematchTeam, TeamId } from '@umalytics/shared';
 import { isRecord, readOptionalNumber, readOptionalString, readOptionalTeamId } from './recordReaders';
 import { cleanTeamName } from './textCleanup';
+import { readablePlayerName } from './rosterIdentity';
 
 export function normalizePrematchRosterFromPlayers(
   value: unknown,
@@ -86,14 +87,17 @@ export function normalizePrematchPlayer(
     ?? readOptionalString(value.id);
   const identityKeys = [userId, discordId, readOptionalString(value.actorUserId), readOptionalString(value.id)]
     .filter((key): key is string => key !== undefined);
-  const displayName = readContextString(context, identityKeys, ['participantNicknames', 'playerNicknames', 'nicknames'])
-    ?? readOptionalString(value.nickname)
-    ?? readOptionalString(value.displayName)
-    ?? readOptionalString(value.username)
-    ?? readOptionalString(value.discordUsername)
-    ?? readOptionalString(value.playerName)
-    ?? readOptionalString(value.name)
-    ?? readContextString(context, identityKeys, [
+  // A room nickname beats the account name. Raw IDs are skipped, and a player
+  // with no readable name is still a member, shown as "Unknown player".
+  const displayName = readablePlayerName([
+    readContextString(context, identityKeys, ['participantNicknames', 'playerNicknames', 'nicknames']),
+    readOptionalString(value.nickname),
+    readOptionalString(value.displayName),
+    readOptionalString(value.username),
+    readOptionalString(value.discordUsername),
+    readOptionalString(value.playerName),
+    readOptionalString(value.name),
+    readContextString(context, identityKeys, [
       'participantNicknames',
       'participantDisplayNames',
       'participantNames',
@@ -102,7 +106,8 @@ export function normalizePrematchPlayer(
       'playerNames',
       'nicknames',
       'displayNames'
-    ]);
+    ])
+  ], identityKeys);
   const partyId = readOptionalString(value.partyId) ?? null;
   const partyRatingBonus = readOptionalNumber(value.partyRatingBonus) ?? 0;
   const excludedRole = [value.roomRole, value.role, value.type].some(role =>
@@ -112,11 +117,7 @@ export function normalizePrematchPlayer(
     return null;
   }
 
-  if (
-    userId === undefined ||
-    discordId === undefined ||
-    displayName === undefined
-  ) {
+  if (userId === undefined || discordId === undefined) {
     return null;
   }
 

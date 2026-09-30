@@ -11,7 +11,7 @@ import { TeamIcon } from '../common/TeamIcon';
 import { StatCell, getDisplayedProfileStats, getLookupDiscordId, getPlayerNote, getStatsMessage } from '../player/playerProfileDisplay';
 import { TopUmasList, UmaResolutionNote } from '../player/TopUmasList';
 
-export type CardState = 'loading' | 'private' | 'error' | 'loaded';
+export type CardState = 'loading' | 'private' | 'error' | 'unavailable' | 'loaded';
 
 export function TeamSection({
   team,
@@ -129,6 +129,10 @@ export function PlayerRow({
         <span className="player-rank-line" aria-hidden="true">
           <span className="card-skel card-skel-line" />
         </span>
+      ) : cardState === 'unavailable' ? (
+        <span className="player-rank-line">
+          <span>Profile unavailable</span>
+        </span>
       ) : (
         <span className="player-rank-line">
           <span>{formatRank(profile, isProfileLoading && discordId !== undefined)}</span>
@@ -206,6 +210,16 @@ function CardBody({
     );
   }
 
+  if (state === 'unavailable') {
+    // No Discord ID in the room data, so there is nothing to look up (and no request is made).
+    return (
+      <div className="card-message-box">
+        <span className="card-message-title">No Discord account</span>
+        <span className="card-message-subtitle">Stats can&apos;t be looked up for this player</span>
+      </div>
+    );
+  }
+
   if (state === 'error') {
     return (
       <div className="card-message-box">
@@ -253,7 +267,7 @@ export function getCardState(
   discordId: string | undefined
 ): CardState {
   if (discordId === undefined) {
-    return 'loaded';
+    return 'unavailable';
   }
 
   if (profile === undefined) {

@@ -102,9 +102,9 @@ const PRELOADS = {
   content: ['roomEvents', 'rosterIdentity', 'recordReaders'],
   domLobbyExtraction: ['recordReaders', 'teams'],
   draftExtraction: ['recordReaders', 'teams'],
-  playerExtraction: ['recordReaders'],
+  playerExtraction: ['recordReaders', 'rosterIdentity'],
   recordReaders: ['teams'],
-  rosterDisplay: ['teams'],
+  rosterDisplay: ['teams', 'rosterIdentity'],
   uiCommonRoster: ['teams'],
   uiCommonBadges: ['uiCommonFormat', 'profileConstants'],
 };
