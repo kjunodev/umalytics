@@ -96,6 +96,10 @@ async function runCase(page, baseUrl, { uiSize, scene, size }) {
       geometry.failures.push(`lobby cards do not share one height at ${size.name} ${uiSize}: ${heights.join(', ')}`);
     }
   }
+  if (scene.name === 'lobby' || scene.name === 'history-lobby') {
+    const crowns = await page.locator('.player-row .captain-crown').count();
+    if (crowns !== 2) geometry.failures.push(`expected 2 captain crowns in ${scene.name} at ${size.name} ${uiSize}, found ${crowns}`);
+  }
   const fileName = `${scene.name}_${size.name}_${uiSize}.png`;
   await page.screenshot({ path: path.join(outDir, fileName) });
   return { scene: scene.name, size: size.name, uiSize, fileName, ...geometry };
