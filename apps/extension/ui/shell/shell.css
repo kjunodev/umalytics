@@ -14,18 +14,34 @@
   min-width: 0;
 }
 
+/* The header picks one of three layouts from its own width (container query,
+   so it sees zoomed pixels): full, compact (icon logo, dot + room code,
+   tighter tabs) and two rows. The thresholds are the measured natural widths
+   of each one-row layout plus headroom; dev/preview/geometry.mjs checks them. */
 .app-header {
-  align-items: center;
   background: var(--bg-surface-1);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
-  display: flex;
-  gap: 16px;
-  min-height: var(--header-height);
-  flex-wrap: wrap;
+  container: header / inline-size;
   padding: 10px 16px;
   margin-bottom: 18px;
   flex-shrink: 0;
+}
+
+.app-header-grid {
+  align-items: center;
+  column-gap: 16px;
+  display: grid;
+  grid-auto-rows: var(--header-row-height);
+  grid-template-areas: "logo modes scenes . scope pill menu";
+  grid-template-columns: auto auto auto minmax(0, 1fr) auto auto auto;
+  row-gap: 10px;
+}
+
+/* One-row layouts place the logo, tabs and status directly on the grid. */
+.app-header-lead,
+.app-header-tail {
+  display: contents;
 }
 
 .app-scene-area {
@@ -38,6 +54,7 @@
   align-items: center;
   gap: 10px;
   flex-shrink: 0;
+  grid-area: logo;
 }
 
 .app-logo span {
@@ -57,6 +74,10 @@
   border-radius: var(--radius-lg);
   flex-shrink: 0;
 }
+
+.mode-toggle { grid-area: modes; }
+.scene-toggle { grid-area: scenes; justify-self: start; }
+.scope-toggle { grid-area: scope; justify-self: end; }
 
 .seg button {
   min-height: 34px;
@@ -85,10 +106,6 @@
   opacity: 0.4;
 }
 
-.app-header-spacer {
-  flex-grow: 1;
-}
-
 .status-pill {
   display: flex;
   align-items: center;
@@ -100,6 +117,8 @@
   color: var(--status-live-fg);
   font-size: 13px;
   flex-shrink: 0;
+  grid-area: pill;
+  justify-self: end;
   white-space: nowrap;
 }
 
@@ -158,8 +177,9 @@
 }
 
 .app-menu-wrap {
+  grid-area: menu;
+  justify-self: end;
   position: relative;
-  flex-shrink: 0;
 }
 
 .app-menu {
@@ -167,6 +187,7 @@
   top: calc(100% + 8px);
   right: 0;
   width: 300px;
+  max-width: 100cqw;
   padding: 8px;
   background: var(--bg-surface-2);
   border: 1px solid var(--border-strong);
@@ -267,17 +288,55 @@
   font-size: 13px;
 }
 
-@media (max-width: 1040px) {
-  .surface-scout {
-    min-width: 0;
+/* Compact: one row, icon-only logo, dot + room code, tighter tabs. */
+@container header (width < 985px) {
+  .app-logo-word,
+  .status-pill.has-code .status-pill-label {
+    clip-path: inset(50%);
+    height: 1px;
+    position: absolute;
+    white-space: nowrap;
+    width: 1px;
+  }
+
+  .mode-toggle button,
+  .scene-toggle button,
+  .scope-toggle button {
+    padding: 0 10px;
   }
 }
 
-@media (max-width: 900px) {
-  .app-header {
+/* Two rows: logo, modes and menu above scenes, scope and status. */
+@container header (width < 760px) {
+  .app-header-grid {
+    grid-template-areas:
+      "lead menu"
+      "scenes tail";
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .app-header-lead,
+  .app-header-tail {
+    align-items: center;
+    display: flex;
+    gap: 16px;
+  }
+
+  .app-header-lead { grid-area: lead; }
+  .app-header-tail { grid-area: tail; justify-self: end; }
+
+  .app-logo-word,
+  .status-pill.has-code .status-pill-label {
+    clip-path: none;
     height: auto;
-    flex-wrap: wrap;
-    padding: 12px 16px;
+    position: static;
+    width: auto;
+  }
+
+  .mode-toggle button,
+  .scene-toggle button,
+  .scope-toggle button {
+    padding: 0 14px;
   }
 }
 

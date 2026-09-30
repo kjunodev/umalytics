@@ -3,7 +3,7 @@
 // are intentionally layered; hidden tooltips have no visible footprint.
 export function checkGeometry() {
   const selectors = [
-    '.app-header', '.team-list', '.team-section', '.player-list', '.player-row',
+    '.app-header', '.app-header-grid', '.team-list', '.team-section', '.player-list', '.player-row',
     '.card-name-row', '.card-badges', '.scouting-grid', '.stat-cell', '.top-umas', '.top-umas-rows',
     '.card-message-box', '.player-rank-line', '.player-badge-row',
     '.top-umas-rows li', '.draft-phase-bar', '.draft-columns', '.draft-team-panel',
@@ -111,6 +111,93 @@ export function checkGeometry() {
     });
   }
   return { counts, dimensions, failures: [...new Set(failures)] };
+}
+
+// Runs in the page. The header picks full, compact or two-row from its own
+// width, so this derives the expected state from the measured container width
+// and the thresholds passed in, then checks what that state must guarantee:
+// every child inside the header box, no overlaps, the menu button right-most
+// on the first row, a fixed height per state, and (one-row states) that the
+// children fit with `slack` px to spare rather than by shrinking. `rect`
+// values are viewport px; dividing by the UI scale gives layout px.
+export function checkHeader({ fullMin, compactMin, rowHeight, minSlack }) {
+  const tolerance = 1.1;
+  const failures = [];
+  const header = document.querySelector('.app-header');
+  const grid = header.querySelector('.app-header-grid');
+  const scale = { small: 0.875, default: 1, large: 1.15 }[document.documentElement.dataset.uiSize];
+  const box = header.getBoundingClientRect();
+  // The lead and tail groups only wrap these controls in the two-row layout.
+  const children = [...grid.querySelectorAll('.app-logo, .mode-toggle, .scene-toggle, .scope-toggle, .status-pill, .app-menu-wrap')]
+    .map(el => ({ el, box: el.getBoundingClientRect(), name: el.className.split(' ').find(name => name !== 'seg') }))
+    .filter(({ box }) => box.width > 0 && box.height > 0);
+  const menu = children.find(child => child.name === 'app-menu-wrap');
+  const button = menu?.el.querySelector('.iconbtn').getBoundingClientRect();
+  if (button === undefined) return { state: 'unknown', failures: ['Header has no menu button'] };
+
+  for (const { box: b, name } of children) {
+    if (b.left < box.left - tolerance || b.right > box.right + tolerance || b.top < box.top - tolerance || b.bottom > box.bottom + tolerance) {
+      failures.push(`Header child ${name} extends past the header box`);
+    }
+  }
+  for (let i = 0; i < children.length; i++) {
+    for (let j = i + 1; j < children.length; j++) {
+      const a = children[i].box, b = children[j].box;
+      if (Math.min(a.right, b.right) - Math.max(a.left, b.left) > tolerance && Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > tolerance) {
+        failures.push(`Header children ${children[i].name} and ${children[j].name} overlap`);
+      }
+    }
+  }
+  const firstRow = children.filter(({ box: b }) => b.top < button.bottom - tolerance && b.bottom > button.top + tolerance);
+  if (firstRow.some(({ box: b }) => b.right > button.right + tolerance) || children.some(({ box: b }) => b.right > button.right + tolerance)) {
+    failures.push('The menu button is not the right-most header element');
+  }
+  if (!firstRow.some(child => child.name === 'app-logo')) failures.push('The menu button is not on the first header row');
+
+  const rows = children.filter(({ box: b }) => b.top >= button.bottom - tolerance).length > 0 ? 2 : 1;
+  const word = header.querySelector('.app-logo-word');
+  const wordHidden = getComputedStyle(word).position === 'absolute';
+  const state = rows === 2 ? 'two-row' : wordHidden ? 'compact' : 'full';
+  const width = grid.getBoundingClientRect().width / scale;
+  const expected = width >= fullMin ? 'full' : width >= compactMin ? 'compact' : 'two-row';
+  if (state !== expected) failures.push(`Header is ${state} at ${width.toFixed(1)}px; expected ${expected}`);
+  const height = box.height / scale;
+  const expectedHeight = 2 + 20 + rowHeight * (rows === 2 ? 2 : 1) + (rows === 2 ? 10 : 0);
+  if (Math.abs(height - expectedHeight) > tolerance) failures.push(`Header height ${height.toFixed(1)} in ${state}; expected ${expectedHeight}`);
+  if (state !== 'full' && word.getBoundingClientRect().width > 2 && rows === 1) failures.push('Compact header still shows the wordmark');
+  if (header.querySelector('.app-logo').title !== 'UmaLytics') failures.push('Logo has no UmaLytics title');
+  const tabs = [...header.querySelectorAll('.mode-toggle button, .scene-toggle button, .scope-toggle button')];
+  if (tabs.length !== 8 || tabs.some(tab => tab.scrollWidth > tab.clientWidth + tolerance || tab.getBoundingClientRect().width < 30)) {
+    failures.push('A header tab label is clipped or missing');
+  }
+  const pill = header.querySelector('.status-pill');
+  if (!pill.title) failures.push('Status pill has no title');
+  if (!/\S/.test(pill.textContent)) failures.push('Status pill has no accessible text');
+  if (rows === 1 && state !== 'two-row') {
+    const used = children.reduce((sum, child) => sum + child.box.width, 0) / scale + 16 * 6;
+    const slack = width - used;
+    if (slack < minSlack) failures.push(`Header ${state} has only ${slack.toFixed(1)}px of slack at ${width.toFixed(1)}px`);
+    return { state, width, slack, failures };
+  }
+  return { state, width, failures };
+}
+
+// Runs in the page with the menu open: the menu must sit fully inside the
+// viewport (excluding the scrollbar) without scrolling the page sideways.
+export function checkOpenMenu() {
+  const tolerance = 1.1;
+  const failures = [];
+  const menu = document.querySelector('.app-menu');
+  if (menu === null) return { failures: ['The menu did not open'] };
+  const box = menu.getBoundingClientRect();
+  const root = document.documentElement;
+  if (box.left < -tolerance || box.top < -tolerance || box.right > root.clientWidth + tolerance || box.bottom > innerHeight + tolerance) {
+    failures.push(`Open menu is outside the viewport: ${[box.left, box.top, box.right, box.bottom].map(Math.round).join(', ')} in ${root.clientWidth}x${innerHeight}`);
+  }
+  const button = document.querySelector('.app-menu-wrap .iconbtn').getBoundingClientRect();
+  if (Math.abs(box.right - button.right) > tolerance && box.width > tolerance) failures.push('Open menu is not right-anchored to its button');
+  if (root.scrollWidth > root.clientWidth + tolerance) failures.push('Opening the menu causes horizontal page overflow');
+  return { failures };
 }
 
 // Runs in the page while a team-icon tooltip is open (hovered or focused).

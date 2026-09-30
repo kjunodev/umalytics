@@ -11,7 +11,7 @@ function mount() {
   );
 }
 
-void initializeUiSize(window.innerHeight).catch((error: unknown) => {
+void initializeUiSize(window.innerHeight, window.innerWidth).catch((error: unknown) => {
   console.error('Unable to load UI size', error);
-  applyUiSize(initialUiSize(window.innerHeight));
+  applyUiSize(initialUiSize(window.innerHeight, window.innerWidth));
 }).then(mount);
