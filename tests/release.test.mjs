@@ -7,14 +7,14 @@ import {createHash} from 'node:crypto';
 const root=path.resolve('release-fixture');
 const source=fs.readFileSync(new URL('../scripts/publish-release.mjs',import.meta.url),'utf8').replace(/^import .*;\r?\n/gm,'').replace(/const root=.*;/,'');
 function run({invalidManifestName=false, existing, uploadFails=false, listFails=false, wrongTag=false, noTag=false, wrongSource=false, wrongVersion=false, repository='skimuic/UmaLytics', packageOnly=false, platform='linux', legacyNotes=false}={}) {
-  const sha='a'.repeat(40), calls=[], files=new Map(); let uploaded=false;
+  const sha='a'.repeat(40), calls=[], logs=[], files=new Map(); let uploaded=false;
   const set=(file,value)=>files.set(path.join(root,file),typeof value==='string'?value:JSON.stringify(value));
   set('package.json',{version:'0.4.1'});
   set(legacyNotes?'RELEASE-0.4.1.md':'.github/release-notes/0.4.1.md','Notes');
   const builds=['chromium','firefox'].map(family=>({family,path:path.join(root,'.releases/build/'+family)}));
   set('.releases/latest.json',{version:'0.4.1',builds});
   for(const b of builds){files.set(path.join(b.path,'manifest.json'),JSON.stringify({version:'0.4.1',name:invalidManifestName?'Other Extension':'UmaLytics'}));files.set(path.join(b.path,'background.js'),'display');}
-  const context={root,path,createHash,console:{log(){}},process:{argv:packageOnly?['node','script','--package-only']:[],platform,env:{GITHUB_REPOSITORY:repository,GITHUB_SHA:sha,RELEASE_VERSION:wrongVersion?'0.3.9':'0.4.1'}},
+  const context={root,path,createHash,console:{log:message=>logs.push(message)},process:{argv:packageOnly?['node','script','--package-only']:[],platform,env:{GITHUB_REPOSITORY:repository,GITHUB_SHA:sha,RELEASE_VERSION:wrongVersion?'0.3.9':'0.4.1'}},
     fs:{readFileSync:file=>{if(!files.has(file))throw Error('Missing '+file);return files.get(file);},existsSync:file=>files.has(file),mkdirSync(){},writeFileSync:(file,value)=>files.set(file,value)},
     execFileSync:(cmd,args,options)=>{if(cmd==='git')return wrongSource?'b'.repeat(40):sha;calls.push([cmd,...args]);if(cmd==='zip'){files.set(args[1],'ZIP');return '';}
       if(cmd==='pwsh'){files.set(options.env.UMALYTICS_ZIP_DESTINATION,'ZIP');return '';}
@@ -28,7 +28,7 @@ function run({invalidManifestName=false, existing, uploadFails=false, listFails=
       if(args[1]==='download') {files.set(path.join(args[args.indexOf('--dir')+1],args[args.indexOf('--pattern')+1]),'ORIGINAL_PUBLISHED_ZIP');return '';}
       if(args[1]==='upload'){if(uploadFails)throw Error('Upload failed');uploaded=true;}return '';}};
   let error;try{vm.runInNewContext(source,context);}catch(e){error=e;}
-  return {calls,error,sha,files};
+  return {calls,error,sha,files,logs};
 }
 test('release publishes only two browser ZIPs and checksums after draft creation',()=>{
   const r=run();assert.equal(r.error,undefined);
@@ -57,7 +57,7 @@ test('release requires notes when neither the new nor legacy path exists',()=>{
   const builds=['chromium','firefox'].map(family=>({family,path:path.join(root,'.releases/build/'+family)}));
   set('.releases/latest.json',{version:'0.4.1',builds});
   for(const b of builds){files.set(path.join(b.path,'manifest.json'),JSON.stringify({version:'0.4.1',name:'UmaLytics'}));files.set(path.join(b.path,'background.js') ,'display');}
-  const context={root,path,createHash,console:{log(){}},process:{argv:[],platform:'linux',env:{GITHUB_REPOSITORY:'skimuic/UmaLytics',GITHUB_SHA:sha,RELEASE_VERSION:'0.4.1'}},
+  const context={root,path,createHash,console:{log:message=>logs.push(message)},process:{argv:[],platform:'linux',env:{GITHUB_REPOSITORY:'skimuic/UmaLytics',GITHUB_SHA:sha,RELEASE_VERSION:'0.4.1'}},
     fs:{readFileSync:file=>{if(!files.has(file))throw Error('Missing '+file);return files.get(file);},existsSync:file=>files.has(file),mkdirSync(){},writeFileSync:(file,value)=>files.set(file,value)},
     execFileSync:(cmd)=>{if(cmd==='git')return sha;throw Error('Unexpected call: '+cmd);}};
   let error;try{vm.runInNewContext(source,context);}catch(e){error=e;}
@@ -82,6 +82,14 @@ test('local packaging uses the canonical ZIP names without any GitHub calls on e
 test('release rejects an unexpected extension name before any GitHub mutation',()=>{const r=run({invalidManifestName:true});assert.match(r.error.message,/Manifest version or name mismatch/);assert.equal(r.calls.length,0);});
 test('release does not publish when asset upload fails',()=>{const r=run({uploadFails:true});assert.match(r.error.message,/Upload failed/);assert(!r.calls.some(c=>c[2]==='edit'));});
 test('release leaves an already-published version unchanged',()=>{const r=run({existing:{tag_name:'v0.4.1',draft:false,assets:['umalytics-chromium-0.4.1.zip','umalytics-firefox-0.4.1.zip','SHA256SUMS.txt'].map(name=>({name,size:3}))}});assert.equal(r.error,undefined);assert(!r.calls.some(c=>c[1]==='release'));});
+test('release is a no-op when the version is already published, even if the tag points at another commit',()=>{
+  const r=run({wrongTag:true,existing:{tag_name:'v0.4.1',draft:false,assets:['umalytics-chromium-0.4.1.zip','umalytics-firefox-0.4.1.zip','SHA256SUMS.txt'].map(name=>({name,size:3}))}});
+  assert.equal(r.error,undefined);
+  assert(r.logs.some(line=>/^v0\.4\.1 already released; nothing to publish/.test(line)));
+  assert(!r.calls.some(c=>c[1]==='release'));
+});
+test('release still fails loudly for a published version whose assets do not match, even on another commit',()=>{const r=run({wrongTag:true,existing:{tag_name:'v0.4.1',draft:false,assets:[]}});assert.match(r.error.message,/asset set/);});
+test('release still refuses a draft on a tag that points at another commit',()=>{const r=run({wrongTag:true,existing:{tag_name:'v0.4.1',draft:true,target_commitish:'a'.repeat(40)}});assert.match(r.error.message,/tag points to a different commit/);assert(!r.calls.some(c=>c[1]==='release'));});
 test('release refuses a draft created for a different commit',()=>{const r=run({existing:{tag_name:'v0.4.1',draft:true,target_commitish:'b'.repeat(40)}});assert.match(r.error.message,/different commit/);assert(!r.calls.some(c=>c[1]==='release'));});
 test('release API failure is not interpreted as a missing release',()=>{const r=run({listFails:true});assert.match(r.error.message,/API unavailable/);assert(!r.calls.some(c=>c[1]==='release'));});
 test('release rejects an existing tag pointing at another commit',()=>{const r=run({wrongTag:true});assert.match(r.error.message,/tag points to a different commit/);assert(!r.calls.some(c=>c[1]==='release'));});
