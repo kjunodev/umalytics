@@ -97,11 +97,13 @@
   width: 16px;
 }
 
+/* The three panels stretch to the tallest one so their bottom edges line up;
+   each panel's own content stays top-aligned. */
 .draft-columns {
   display: grid;
-  align-items: start;
+  align-items: stretch;
   gap: 16px;
-  grid-template-columns: minmax(0, 1fr) 300px minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(360px, 1.15fr) minmax(0, 1fr);
   min-height: 0;
 }
 
@@ -489,22 +491,36 @@
   margin: 0;
 }
 
-.draft-races-header-spacer {
-  flex-grow: 1;
+/* One entry per team on its own line under the title; a long team name wraps
+   inside its own entry and never pushes into the other one. */
+.draft-races-legend {
+  display: grid;
+  flex-shrink: 0;
+  gap: 4px 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .draft-team-legend {
-  align-items: center;
+  align-items: flex-start;
   color: var(--text-muted);
-  display: inline-flex;
+  display: flex;
   font-size: 12px;
   gap: 5px;
+  line-height: 1.35;
+  min-width: 0;
 }
 
 .draft-team-legend-dot {
   border-radius: 2px;
+  flex-shrink: 0;
   height: 8px;
+  margin-top: 0.3em;
   width: 8px;
+}
+
+.draft-team-legend-name {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .draft-team-legend.team1 .draft-team-legend-dot {
@@ -614,10 +630,14 @@
   flex-grow: 1;
 }
 
+/* Chips never wrap. If they still do not fit, the weather chip drops to
+   icon-only (see .draft-mod-label below) before anything would wrap. */
 .draft-race-mods {
+  container-type: inline-size;
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 4px;
+  min-width: 0;
 }
 
 .draft-race-details {
@@ -632,13 +652,29 @@
   align-items: center;
   border-radius: 10px;
   display: inline-flex;
-  font-size: 10px;
+  flex-shrink: 0;
+  font-size: var(--font-step-xs);
   font-weight: 700;
-  gap: 4px;
+  gap: 3px;
   height: 20px;
-  letter-spacing: 0.05em;
-  padding: 0 7px;
+  letter-spacing: 0.03em;
+  padding: 0 6px;
+  position: relative;
   text-transform: uppercase;
+  white-space: nowrap;
+}
+
+@container (max-width: 235px) {
+  .draft-mod[data-tone^="weather-"] .draft-mod-label {
+    border: 0;
+    clip-path: inset(50%);
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    padding: 0;
+    position: absolute;
+    width: 1px;
+  }
 }
 
 .draft-mod[data-tone="surface-turf"],

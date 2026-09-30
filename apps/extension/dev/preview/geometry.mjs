@@ -11,7 +11,8 @@ export function checkGeometry() {
     '.draft-ban-veto-rows', '.draft-ban-veto-row', '.draft-ban-veto-slot',
     '.draft-experience-panel', '.draft-experience-row', '.draft-races-panel',
     '.draft-race-list', '.draft-race-card', '.draft-vetoed-map-row',
-    '.draft-team-header', '.draft-races-header', '.draft-race-title', '.draft-race-mods',
+    '.draft-team-header', '.draft-races-header', '.draft-races-legend', '.draft-team-legend',
+    '.draft-race-title', '.draft-race-mods',
     '.player-drawer', '.player-drawer-head', '.player-drawer-identity',
     '.player-drawer-title-row', '.drawer-stat-row', '.drawer-stat-panel',
     '.drawer-section', '.drawer-section-head', '.uma-table-rows', '.uma-table-row',
@@ -74,6 +75,27 @@ export function checkGeometry() {
   if (document.documentElement.scrollWidth > document.documentElement.clientWidth + tolerance) {
     failures.push('Page horizontal overflow');
   }
+  // Draft scene balance: side by side, the three column panels end on the same
+  // line, and every race card's chips (surface, season, weather, ground) are
+  // one line. Stacked single-column layouts (narrow scene) have no shared edge.
+  const draftPanels = [...document.querySelectorAll('.draft-columns > .draft-team-panel, .draft-columns > .draft-races-panel')].filter(visible);
+  if (draftPanels.length === 3) {
+    const boxes = draftPanels.map(el => el.getBoundingClientRect());
+    const sideBySide = boxes.every(box => Math.abs(box.top - boxes[0].top) <= tolerance);
+    counts['draft column panels side by side'] = sideBySide ? 1 : 0;
+    if (sideBySide && Math.max(...boxes.map(box => box.bottom)) - Math.min(...boxes.map(box => box.bottom)) > tolerance) {
+      failures.push(`Draft column panels end at different heights: ${boxes.map(box => box.bottom.toFixed(1)).join(', ')}`);
+    }
+  }
+  const modRows = [...document.querySelectorAll('.draft-race-mods')].filter(visible);
+  counts['.draft-race-mods single line'] = modRows.length;
+  for (const row of modRows) {
+    const chips = [...row.querySelectorAll('.draft-mod')].filter(visible).map(el => el.getBoundingClientRect());
+    if (chips.some(chip => Math.abs(chip.top - chips[0].top) > tolerance)
+      || row.getBoundingClientRect().height > Math.max(...chips.map(chip => chip.height)) + tolerance) {
+      failures.push('Race card chips wrap onto a second line');
+    }
+  }
   const scale = { small: 0.875, default: 1, large: 1.15 }[document.documentElement.dataset.uiSize];
   const dimensions = {};
   for (const [selector, expected] of [
@@ -89,4 +111,47 @@ export function checkGeometry() {
     });
   }
   return { counts, dimensions, failures: [...new Set(failures)] };
+}
+
+// Runs in the page while a team-icon tooltip is open (hovered or focused).
+// `boundsSelector` is the card, row or drawer the tooltip has to stay inside;
+// `siblingSelector` matches the neighbouring cards/rows it must not cover;
+// `baseline` is the page's scroll size measured before the hover, so a page
+// that already scrolls for other reasons is not blamed on the tooltip.
+export function checkTeamIconTooltip({ boundsSelector, siblingSelector, baseline }) {
+  const tolerance = 1.1;
+  const failures = [];
+  const icon = [...document.querySelectorAll('.team-icon')]
+    .find(el => el.matches(':hover') || el.matches(':focus-visible'));
+  if (icon === undefined) return { failures: ['No team icon is hovered or focused'] };
+  const tooltip = icon.querySelector('.team-icon-tooltip');
+  const css = getComputedStyle(tooltip);
+  if (css.visibility !== 'visible' || Number(css.opacity) < 1) failures.push('Tooltip is not visible on hover/focus');
+  const box = tooltip.getBoundingClientRect();
+  const anchor = icon.getBoundingClientRect();
+  const container = icon.closest(boundsSelector);
+  if (container === null) return { failures: [`Icon is not inside ${boundsSelector}`] };
+  const bounds = container.getBoundingClientRect();
+  if (box.left < bounds.left - tolerance || box.right > bounds.right + tolerance
+    || box.top < bounds.top - tolerance || box.bottom > bounds.bottom + tolerance) {
+    failures.push(`Tooltip leaves ${boundsSelector}`);
+  }
+  // Anchored to the icon: touching it on at least one axis, within a small gap.
+  const gapX = Math.max(anchor.left - box.right, box.left - anchor.right, 0);
+  const gapY = Math.max(anchor.top - box.bottom, box.top - anchor.bottom, 0);
+  if (gapX > 12 || gapY > 12) failures.push(`Tooltip is not next to its icon (${gapX.toFixed(1)}, ${gapY.toFixed(1)})`);
+  for (const other of document.querySelectorAll(siblingSelector)) {
+    if (other === container) continue;
+    const rect = other.getBoundingClientRect();
+    if (Math.min(box.right, rect.right) - Math.max(box.left, rect.left) > tolerance
+      && Math.min(box.bottom, rect.bottom) - Math.max(box.top, rect.top) > tolerance) {
+      failures.push(`Tooltip covers a neighbouring ${siblingSelector}`);
+      break;
+    }
+  }
+  const root = document.documentElement;
+  if (root.scrollWidth > baseline.width + tolerance || root.scrollHeight > baseline.height + tolerance) {
+    failures.push(`Tooltip caused page scroll (${baseline.width}x${baseline.height} -> ${root.scrollWidth}x${root.scrollHeight})`);
+  }
+  return { failures, width: box.width, containerWidth: bounds.width, side: tooltip.dataset.side };
 }

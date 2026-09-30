@@ -32,7 +32,7 @@ import { getTeamIconSnapshot, TEAM_ICON_MAP_STORAGE_KEY } from '../../storage/te
 import { sendLobbyReconnectRequest, sendProfileRefreshRequest } from '../../runtime/messaging';
 import { formatRelativeAge } from '../../ui/common/format';
 import { DraftScene } from '../../ui/draft/DraftScene';
-import { HistoryView } from '../../ui/history/ExplorerViews';
+import { HistoryView, type RequestedMatch } from '../../ui/history/ExplorerViews';
 import { HistoricalScene, getSelectedPlayerContext, type AppScene } from '../../ui/history/HistoricalScene';
 import { TeamSection } from '../../ui/lobby/TeamSection';
 import { PlayerDrawer } from '../../ui/player/PlayerDrawer';
@@ -63,6 +63,7 @@ export default function App() {
   const [historyNavigation, setHistoryNavigation] = useState(0);
   const [historyScope, setHistoryScope] = useState<PlayerStatsScope>('currentSeason');
   const [historicalMatchCode, setHistoricalMatchCode] = useState<string>();
+  const [requestedMatch, setRequestedMatch] = useState<RequestedMatch>();
   const [lookupScope, setLookupScope] = useState<PlayerStatsScope>('currentSeason');
   const [roster, setRoster] = useState<PrematchRoster | undefined>();
   const [draftSnapshot, setDraftSnapshot] = useState<DraftSnapshot | undefined>();
@@ -285,6 +286,14 @@ export default function App() {
     }).catch(caught => console.warn('[UmaLytics] Unable to read diagnostics:', caught));
   };
 
+  // A match code clicked in a player's details: switch to History with that
+  // code loaded, exactly as if it had been typed into the History box.
+  const openMatchInHistory = (code: string) => {
+    setRequestedMatch(previous => ({ code, nonce: (previous?.nonce ?? 0) + 1 }));
+    setSelectedPlayerKey(undefined);
+    setMode('history');
+  };
+
   const visibleScene = mode === 'history' ? historyScene : activeScene;
   const visibleScope = mode === 'live' ? statsScope : mode === 'history' ? historyScope : lookupScope;
   const changeScope = mode === 'live' ? selectStatsScope : mode === 'history' ? setHistoryScope : setLookupScope;
@@ -323,8 +332,8 @@ export default function App() {
         onCopyDiagnostics={copyDiagnostics}
       />
 
-      <div className="app-scene-area" hidden={mode !== 'history'}><HistoryView Scene={HistoricalScene} scene={historyScene} scope={historyScope} navigation={historyNavigation} onMatchCodeChange={setHistoricalMatchCode} teamIcons={teamIcons} /></div>
-      <div className="app-scene-area" hidden={mode !== 'profiles'}><PlayersView roster={displayedRoster} statsScope={lookupScope} active={mode === 'profiles'} teamIcons={teamIcons} /></div>
+      <div className="app-scene-area" hidden={mode !== 'history'}><HistoryView Scene={HistoricalScene} scene={historyScene} scope={historyScope} navigation={historyNavigation} onMatchCodeChange={setHistoricalMatchCode} teamIcons={teamIcons} requestedMatch={requestedMatch} /></div>
+      <div className="app-scene-area" hidden={mode !== 'profiles'}><PlayersView roster={displayedRoster} statsScope={lookupScope} active={mode === 'profiles'} teamIcons={teamIcons} onOpenMatch={openMatchInHistory} /></div>
       <div className="app-scene-area" hidden={mode !== 'live'}>
       {retryAt > 0 && (
         <p className="api-retry-notice" role="status">
@@ -382,7 +391,8 @@ export default function App() {
                 isProfileLoading: isProfileLoading(profileSnapshot, selectedPlayerContext.player.discordId),
                 now,
                 inLobby: true,
-                teamIcon: teamIcons[selectedPlayerContext.player.discordId]
+                teamIcon: teamIcons[selectedPlayerContext.player.discordId],
+                onOpenMatch: openMatchInHistory
               }}
             />
           )}

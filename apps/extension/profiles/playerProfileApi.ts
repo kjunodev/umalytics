@@ -105,6 +105,7 @@ interface ApiUmaEntry {
 
 interface ApiSeason {
   id?: string | null;
+  name?: string | null;
   active?: boolean;
 }
 
@@ -125,6 +126,7 @@ interface LeaderboardLookup {
   error?: string;
   ranksByDiscordId: Map<string, ApiLeaderboardEntry & { rank: number }>;
   activeSeasonId?: string;
+  activeSeasonName?: string;
 }
 
 export interface SeasonLeaderboardEntry {
@@ -139,10 +141,12 @@ export interface SeasonLeaderboardEntry {
 
 export interface SeasonLeaderboard {
   activeSeasonId?: string;
+  /** Display name from the same cached /api/seasons response, e.g. "Season 2 (Grand Concert)". */
+  activeSeasonName?: string;
   entries: SeasonLeaderboardEntry[];
 }
 
-interface SeasonLookup { activeSeasonId?: string; error?: string }
+interface SeasonLookup { activeSeasonId?: string; activeSeasonName?: string; error?: string }
 
 
 
@@ -492,7 +496,13 @@ function buildReleaseOrderUmaMetadata(): UmaMetadataLookup {
 function getActiveSeasonId(): Promise<SeasonLookup> {
   const budget = deadline(undefined, 15_000, 'Season request timed out.');
   return abortable(fetchJson<ApiSeason[]>('/api/seasons', budget.signal, 'shared'), budget.signal)
-    .then(seasons => ({ activeSeasonId: seasons.find(season => season.active === true && typeof season.id === 'string')?.id ?? undefined }))
+    .then((seasons): SeasonLookup => {
+      const active = seasons.find(season => season.active === true && typeof season.id === 'string');
+      return {
+        activeSeasonId: active?.id ?? undefined,
+        ...(typeof active?.name === 'string' && active.name.trim() !== '' ? { activeSeasonName: active.name.trim() } : {})
+      };
+    })
     .catch((caught): SeasonLookup => ({ error: getErrorMessage(caught) }))
     .finally(() => budget.dispose());
 }
@@ -512,6 +522,7 @@ export async function getSeasonLeaderboard(signal: AbortSignal): Promise<SeasonL
   signal.throwIfAborted();
   if (lookup.error || lookup.activeSeasonId === undefined) throw new Error(lookup.error ?? 'Active season unavailable.');
   return { activeSeasonId: lookup.activeSeasonId,
+    ...(lookup.activeSeasonName !== undefined ? { activeSeasonName: lookup.activeSeasonName } : {}),
     entries: Array.from(lookup.ranksByDiscordId, ([userId, entry]) => ({
       rank: entry.rank, userId,
       ...(typeof entry.displayName === 'string' ? { displayName: entry.displayName } : {}),
@@ -535,6 +546,7 @@ async function fetchActiveLeaderboard(seasonPromise: Promise<SeasonLookup>, sign
 
   return {
     activeSeasonId: season.activeSeasonId,
+    ...(season.activeSeasonName !== undefined ? { activeSeasonName: season.activeSeasonName } : {}),
     ...(!leaderboardResult.ok ? { error: getErrorMessage(leaderboardResult.error) } : {}),
     ranksByDiscordId: new Map(
       entries

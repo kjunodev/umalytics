@@ -1113,3 +1113,21 @@ test('idle host draft keeps ten members when lobby header vanishes and later syn
   h.c.window.location.href='https://drafter.uma.guide/';h.c.refreshActiveRoomDomMatchCode();
   assert.equal(vm.runInContext('activeRoomDomMatchCode',h.c),undefined);
 });
+
+test('season leaderboard carries the active season display name from the one cached /api/seasons response',async()=>{
+  const seasons=[{id:'S0',name:'Season 1 (Trackblazer)',active:false},{id:'S1',name:' Season 2 (Grand Concert) ',active:true}];
+  const h=apiHarness({responder:url=>url.pathname==='/api/seasons'?{body:seasons}:url.pathname==='/api/leaderboard'?{body:{entries:[{userId:'1',rating:1834,rd:123}]}}:undefined});
+  const board=await h.c.getSeasonLeaderboard(new AbortController().signal);
+  assert.equal(board.activeSeasonId,'S1');
+  assert.equal(board.activeSeasonName,'Season 2 (Grand Concert)');
+  assert.deepEqual(h.calls,['/api/seasons','/api/leaderboard?season=S1'],'no extra requests to learn the season name');
+});
+
+test('season leaderboard omits the season name when /api/seasons has none, leaving the UI fallback to apply',async()=>{
+  for (const body of [[{id:'S1',active:true}],[{id:'S1',name:'',active:true}],[{id:'S1',name:null,active:true}]]) {
+    const h=apiHarness({responder:url=>url.pathname==='/api/seasons'?{body}:undefined});
+    const board=await h.c.getSeasonLeaderboard(new AbortController().signal);
+    assert.equal(board.activeSeasonId,'S1');
+    assert.equal('activeSeasonName' in board,false);
+  }
+});

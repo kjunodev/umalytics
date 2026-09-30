@@ -450,11 +450,12 @@ export function DraftRacesPanel({
     <section className="draft-races-panel" aria-label="Races">
       <div className="draft-races-header">
         <h2>Races</h2>
-        <div className="draft-races-header-spacer" />
+      </div>
+      <div className="draft-races-legend">
         {TEAM_IDS.map((teamId) => (
           <span key={teamId} className={`draft-team-legend ${teamId}`}>
             <span className="draft-team-legend-dot" aria-hidden="true" />
-            {formatTeamName(teams[teamId])}
+            <span className="draft-team-legend-name">{formatTeamName(teams[teamId])}</span>
           </span>
         ))}
       </div>
@@ -553,10 +554,13 @@ export function DraftModChipView({
     return null;
   }
 
+  // The weather chip (the only one with an icon) collapses to icon-only when
+  // the race card is too narrow for every chip on one line; the label stays in
+  // the DOM for screen readers and as the hover tooltip.
   return (
-    <span className="draft-mod" data-tone={chip.tone}>
+    <span className="draft-mod" data-tone={chip.tone} title={iconKey === undefined ? undefined : chip.label}>
       {iconKey === undefined ? null : <DraftWeatherIcon iconKey={iconKey} />}
-      {chip.label}
+      <span className="draft-mod-label">{chip.label}</span>
     </span>
   );
 }

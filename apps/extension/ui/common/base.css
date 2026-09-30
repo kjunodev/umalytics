@@ -127,7 +127,7 @@ button {
 }
 
 .player-row .compact-scouting-grid {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: var(--stat-grid-columns);
 }
 
 .player-row .compact-scouting-grid .stat-cell {
@@ -135,8 +135,8 @@ button {
 }
 
 .player-row .compact-scouting-grid .stat-cell strong {
-  white-space: normal;
-  overflow-wrap: anywhere;
+  overflow-wrap: normal;
+  white-space: nowrap;
 }
 
 .player-meta {
@@ -272,8 +272,9 @@ button {
 }
 
 /* Shared by the lobby card, the drawer header and the Players rows. The
-   tooltip itself carries no position; each call site anchors it to that
-   context's own row (see TeamIcon.tsx), the same pattern .chip-tooltip uses. */
+   tooltip is anchored to the icon and sized to its text; TeamIcon.tsx sets
+   its left/top/max-width on hover and focus so it stays inside its card, row
+   or drawer (see tooltipPlacement.ts). */
 .team-icon {
   background: var(--bg-raised);
   border: 1px solid var(--border-subtle);
@@ -284,7 +285,7 @@ button {
   display: inline-flex;
   flex-shrink: 0;
   height: var(--icon-team-logo);
-  position: static;
+  position: relative;
   width: var(--icon-team-logo);
 }
 
@@ -308,13 +309,19 @@ button {
   color: var(--text-secondary);
   font-size: 12px;
   font-weight: 600;
+  left: 0;
+  line-height: 1.35;
   opacity: 0;
-  padding: 6px 10px;
+  overflow-wrap: anywhere;
+  padding: 5px 9px;
   pointer-events: none;
   position: absolute;
+  text-align: left;
+  top: 0;
   transition: opacity 0.12s;
   visibility: hidden;
-  white-space: nowrap;
+  white-space: normal;
+  width: max-content;
   z-index: 50;
 }
 
@@ -343,9 +350,12 @@ button {
   min-width: 0;
 }
 
+/* W-L is the widest value (up to "999-999"), so its column is wider than the
+   other three; values never wrap. */
 .compact-scouting-grid {
+  --stat-grid-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 0.9fr);
   gap: 4px;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: var(--stat-grid-columns);
   width: 100%;
 }
 
@@ -404,7 +414,23 @@ button {
 }
 
 .compact-scouting-grid .record-stat-cell {
+  container-type: inline-size;
   min-width: 0;
+}
+
+/* Last resort on very narrow cards: step only the W-L value down (never
+   below 85%) so a triple-digit record such as "999-999" still fits on one
+   line without clipping. */
+@container (max-width: 50px) {
+  .compact-scouting-grid .record-stat-cell strong {
+    font-size: calc(var(--font-step-sm) * 0.92);
+  }
+}
+
+@container (max-width: 45px) {
+  .compact-scouting-grid .record-stat-cell strong {
+    font-size: calc(var(--font-step-sm) * 0.85);
+  }
 }
 
 .profile-data-status {
