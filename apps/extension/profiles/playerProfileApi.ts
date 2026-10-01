@@ -1,126 +1,41 @@
-import { recordDiagnostic } from '../runtime/diagnosticRecorder';
 import type {
-  PlayerRecentMatchSummary,
   PlayerProfileStatsSummary,
   PlayerProfileSummary,
-  PlayerTopUmaSummary,
+  PlayerRecentMatchSummary,
   PrematchPlayer
 } from '@umalytics/shared';
 import {
-  BEST_UMA_MIN_MATCHES,
   BEST_UMA_SCORE_VERSION,
   RECENT_HISTORY_VERSION
 } from './profileConstants';
-import { abortable, deadline, RequestQueue } from './requestQueue';
-import type { RequestPriority } from './requestQueue';
-import { browser } from 'wxt/browser';
-import { releaseOrder } from '../umas/umaReleaseOrder';
-import { getUmaDisplayName, getUmaPortraitUrl, normalizeUmaOutfitId } from '../umas/umaPortraits';
+import { ApiRequestError, fetchJson, PROFILE_SUMMARY_TIMEOUT_MS } from './apiClient';
+import {
+  PROFILE_ORIGIN,
+  buildEmptyStatsSummary,
+  buildProfileStatsSummary,
+  buildReleaseOrderUmaMetadata,
+  getPreferredDisplayName,
+  getRecordFromUmaEntries,
+  mapHistoryEntry,
+  type ApiHistoryEntry,
+  type ApiLeaderboard,
+  type ApiLeaderboardEntry,
+  type ApiPlayerProfile,
+  type ApiPlayerStats,
+  type ApiSeason,
+  type UmaMetadataLookup
+} from './profileApiMapping';
+import { abortable, deadline } from './requestQueue';
+import { getErrorMessage } from '../room/recordReaders';
+import { isDiscordSnowflake } from '../room/rosterIdentity';
 
-const API_ORIGIN = 'https://drafter-api.uma.guide';
-const PROFILE_ORIGIN = 'https://drafter.uma.guide';
-const SHARED_CACHE_TTL_MS = 10 * 60 * 1000;
-const PROFILE_RESPONSE_TTL_MS = 24 * 60 * 60 * 1000;
-const STATS_RESPONSE_TTL_MS = 60 * 1000;
-const HISTORY_RESPONSE_TTL_MS = 5 * 60 * 1000;
-const RESPONSE_CACHE_STORAGE_KEY = 'profileApiResponsesV1';
-const API_RATE_LIMIT_BACKOFF_MS = 30 * 1000;
-const API_SERVER_ERROR_BACKOFF_MS = 10 * 1000;
-const API_REQUEST_TIMEOUT_MS = 10 * 1000;
-const PROFILE_SUMMARY_TIMEOUT_MS = 60 * 1000;
-const DEFAULT_REQUEST_INTERVAL_MS = 350;
-const PACING_RECOVERY_SUCCESS_STREAK = 20;
-const PACING_RECOVERY_FACTOR = 0.75;
-let baseRequestIntervalMs = DEFAULT_REQUEST_INTERVAL_MS;
-let requestStartIntervalMs = baseRequestIntervalMs;
-let consecutiveSuccessCount = 0;
-const requestQueue = new RequestQueue(3, requestStartIntervalMs);
-
-
-export interface ApiCooldown { until: number; status: number; path: string; startIntervalMs?: number }
-let apiCooldown: ApiCooldown | undefined;
-const responseCache = new Map<string, { value: unknown; expiresAt: number }>();
-const inFlightRequests = new Map<string, { promise: Promise<unknown>; controller: AbortController; consumers: number }>();
-let persistentCacheLoad: Promise<void> | undefined;
-let persistentCacheWriteTimer: ReturnType<typeof setTimeout> | undefined;
-let persistentCacheWriteInFlight = false;
-let persistentCacheDirty = false;
-
-export function getApiCooldown(): ApiCooldown | undefined { return apiCooldown; }
-export function restoreApiCooldown(value: ApiCooldown): void {
-  if (value.until > (apiCooldown?.until ?? 0)) apiCooldown = value;
-  requestStartIntervalMs = Math.max(requestStartIntervalMs, Math.min(2000, value.startIntervalMs ?? baseRequestIntervalMs));
-  consecutiveSuccessCount = 0;
-  requestQueue.setStartInterval(requestStartIntervalMs);
-}
-
-
-interface ApiPlayerProfile {
-  displayName?: string;
-  discordUsername?: string;
-  nickname?: string | null;
-  title?: string | null;
-}
-
-interface ApiPlayerStats {
-  umaEntries?: ApiUmaEntry[];
-  summary?: {
-    matchesIncluded?: number;
-    totalPointsScored?: number;
-    totalPodiumPlacements?: number;
-    totalMvpMatches?: number;
-  };
-}
-
-interface ApiHistoryEntry {
-  matchId: string;
-  reportedAt: string;
-  mode: string;
-  verificationState: string;
-  selectedUmaId: string | null;
-  isWinner: boolean | null;
-  pointsScored: number;
-  podiumPlacements: number;
-  isMvp: boolean;
-  eloDelta: number | null;
-  eloPlacement: boolean;
-  umaAssignments?: Array<{ ordinal: number; umaId?: string | null }>;
-}
+const PROFILE_ERROR_FALLBACK = 'Unable to load profile.';
 
 export interface PlayerHistoryPage { page: number; total: number; matches: PlayerRecentMatchSummary[]; summary?: PlayerProfileSummary['historySummary'] }
 
 type CapturedFetch<T> =
   | { ok: true; value: T }
   | { ok: false; error: unknown };
-
-interface ApiUmaEntry {
-  umaId?: string | null;
-  matches?: number;
-  wins?: number;
-  losses?: number;
-  pointsScored?: number;
-  podiumPlacements?: number;
-  mvpMatches?: number;
-}
-
-interface ApiSeason {
-  id?: string | null;
-  name?: string | null;
-  active?: boolean;
-}
-
-interface ApiLeaderboard {
-  entries?: ApiLeaderboardEntry[];
-}
-
-interface ApiLeaderboardEntry {
-  userId?: string;
-  displayName?: string | null;
-  rating?: number;
-  rd?: number;
-  wins?: number;
-  losses?: number;
-}
 
 interface LeaderboardLookup {
   error?: string;
@@ -147,15 +62,6 @@ export interface SeasonLeaderboard {
 }
 
 interface SeasonLookup { activeSeasonId?: string; activeSeasonName?: string; error?: string }
-
-
-
-interface UmaMetadata {
-  label: string;
-  imageUrl?: string;
-}
-
-type UmaMetadataLookup = Map<string, UmaMetadata>;
 
 let leaderboardRequest: Promise<LeaderboardLookup> | undefined;
 let bundledUmaMetadata: UmaMetadataLookup | undefined;
@@ -197,7 +103,7 @@ export async function fetchPlayerProfileSummaries(
         fetchPlayerProfileSummary(player, season, leaderboard, allTimeRequests[index]!, seasonRequests[index]!, umaMetadata, budget.signal, stage, async summary => {
           if (!options.signal?.aborted) await options.onProgress?.(summary);
         }, scope), budget.signal
-      ).catch((caught) => buildUnavailablePlayerSummary(player, getErrorMessage(caught)));
+      ).catch((caught) => buildUnavailablePlayerSummary(player, getErrorMessage(caught, PROFILE_ERROR_FALLBACK)));
       if (!options.signal?.aborted) await options.onSummary?.(summary);
       return summary;
     }));
@@ -261,21 +167,6 @@ async function captureFetch<T>(promise: Promise<T>): Promise<CapturedFetch<T>> {
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
-
-function mapHistoryEntry(entry: ApiHistoryEntry): PlayerRecentMatchSummary {
-  const umaId = entry.selectedUmaId;
-  return {
-    matchId: entry.matchId, reportedAt: entry.reportedAt, mode: entry.mode,
-    verificationState: entry.verificationState, umaId,
-    umaName: umaId === null ? 'Disqualified' : getUmaDisplayName(umaId),
-    isWinner: entry.isWinner, result: entry.isWinner === null ? 'unknown' : entry.isWinner ? 'win' : 'loss',
-    pointsScored: entry.pointsScored,
-    podiums: entry.podiumPlacements, isMvp: entry.isMvp,
-    eloDelta: entry.eloDelta, eloPlacement: entry.eloPlacement,
-    umaAssignments: entry.umaAssignments
-  };
-}
-
 export async function fetchPlayerHistoryPage(
   discordId: string, scope: 'allTime' | 'currentSeason', page: number,
   signal?: AbortSignal
@@ -369,7 +260,7 @@ async function fetchPlayerProfileSummary(
     allTimeStatsPrivate = true;
     statsPrivate = true;
   } else {
-    if (allTimeStatsResult !== undefined) error = error ?? getErrorMessage(allTimeStatsResult.error);
+    if (allTimeStatsResult !== undefined) error = error ?? getErrorMessage(allTimeStatsResult.error, PROFILE_ERROR_FALLBACK);
   }
 
   // Publish the first usable scope before waiting for the other scope/history.
@@ -392,7 +283,7 @@ async function fetchPlayerProfileSummary(
       currentSeasonStatsPrivate = true;
       statsPrivate = true;
     } else {
-      error = error ?? getErrorMessage(currentSeasonStatsResult.error);
+      error = error ?? getErrorMessage(currentSeasonStatsResult.error, PROFILE_ERROR_FALLBACK);
     }
   }
 
@@ -448,51 +339,6 @@ async function fetchPlayerProfileSummary(
   }
 }
 
-function getPreferredDisplayName(
-  leaderboardEntry: ApiLeaderboardEntry | undefined,
-  player: PrematchPlayer
-): string {
-  return [
-    leaderboardEntry?.displayName,
-    player.displayName
-  ].map(getUsableDisplayName).find((name) => name !== undefined) ?? player.displayName;
-}
-
-function getUsableDisplayName(value: unknown): string | undefined {
-  if (typeof value !== 'string') {
-    return undefined;
-  }
-
-  const trimmedValue = value.trim();
-
-  if (trimmedValue.length === 0 || isPlaceholderDisplayName(trimmedValue)) {
-    return undefined;
-  }
-
-  return trimmedValue;
-}
-
-function isPlaceholderDisplayName(value: string): boolean {
-  const normalizedValue = value
-    .toLowerCase()
-    .replace(/\s+/g, ' ')
-    .trim();
-
-  return normalizedValue === ', to view' || normalizedValue === 'to view' || normalizedValue === 'sign in to view';
-}
-
-function buildReleaseOrderUmaMetadata(): UmaMetadataLookup {
-  return new Map(
-    releaseOrder.map((entry) => {
-      const label = getUmaDisplayName(entry.outfitId, entry.name);
-      const imageUrl = getUmaPortraitUrl(entry.outfitId, PROFILE_ORIGIN);
-      const metadata: UmaMetadata = imageUrl === undefined ? { label } : { label, imageUrl };
-
-      return [entry.outfitId, metadata] as const;
-    })
-  );
-}
-
 function getActiveSeasonId(): Promise<SeasonLookup> {
   const budget = deadline(undefined, 15_000, 'Season request timed out.');
   return abortable(fetchJson<ApiSeason[]>('/api/seasons', budget.signal, 'shared'), budget.signal)
@@ -503,7 +349,7 @@ function getActiveSeasonId(): Promise<SeasonLookup> {
         ...(typeof active?.name === 'string' && active.name.trim() !== '' ? { activeSeasonName: active.name.trim() } : {})
       };
     })
-    .catch((caught): SeasonLookup => ({ error: getErrorMessage(caught) }))
+    .catch((caught): SeasonLookup => ({ error: getErrorMessage(caught, PROFILE_ERROR_FALLBACK) }))
     .finally(() => budget.dispose());
 }
 
@@ -511,7 +357,7 @@ function getActiveLeaderboard(seasonPromise: Promise<SeasonLookup>): Promise<Lea
   if (leaderboardRequest !== undefined) return leaderboardRequest;
   const budget = deadline(undefined, 15_000, 'Season/leaderboard request timed out.');
   leaderboardRequest = abortable(fetchActiveLeaderboard(seasonPromise, budget.signal), budget.signal)
-    .catch((caught): LeaderboardLookup => ({ ranksByDiscordId: new Map(), error: getErrorMessage(caught) }))
+    .catch((caught): LeaderboardLookup => ({ ranksByDiscordId: new Map(), error: getErrorMessage(caught, PROFILE_ERROR_FALLBACK) }))
     .finally(() => { budget.dispose(); leaderboardRequest = undefined; });
   return leaderboardRequest;
 }
@@ -547,7 +393,7 @@ async function fetchActiveLeaderboard(seasonPromise: Promise<SeasonLookup>, sign
   return {
     activeSeasonId: season.activeSeasonId,
     ...(season.activeSeasonName !== undefined ? { activeSeasonName: season.activeSeasonName } : {}),
-    ...(!leaderboardResult.ok ? { error: getErrorMessage(leaderboardResult.error) } : {}),
+    ...(!leaderboardResult.ok ? { error: getErrorMessage(leaderboardResult.error, PROFILE_ERROR_FALLBACK) } : {}),
     ranksByDiscordId: new Map(
       entries
         .map((entry, index) =>
@@ -558,230 +404,6 @@ async function fetchActiveLeaderboard(seasonPromise: Promise<SeasonLookup>, sign
         )
     )
   };
-}
-
-function buildStatsSummary(
-  stats: ApiPlayerStats | undefined,
-  umaMetadata: UmaMetadataLookup
-): PlayerProfileStatsSummary {
-  if (stats === undefined) {
-    return buildEmptyStatsSummary();
-  }
-
-  const record = getRecordFromUmaEntries(stats.umaEntries);
-  const wins = record.wins;
-  const losses = record.losses;
-  const matches = stats.summary?.matchesIncluded ?? addNullable(wins, losses);
-  const points = stats.summary?.totalPointsScored;
-  const recentMatches: PlayerRecentMatchSummary[] = [];
-  const resolutionSummary = { unresolvedUmaMatches: 0, disqualifiedMatches: 0 };
-
-  return {
-    wins,
-    losses,
-    winRate: wins !== null && losses !== null && wins + losses > 0 ? wins / (wins + losses) : null,
-    matches,
-    points: points ?? null,
-    pointsPerGame: points !== undefined && matches !== null && matches > 0 ? points / matches : null,
-    podiums: stats.summary?.totalPodiumPlacements ?? null,
-    mvpMatches: stats.summary?.totalMvpMatches ?? null,
-    topUmas: getTopPlayedUmas(stats.umaEntries, umaMetadata),
-    bestUmas: getBestPerformingUmas(stats.umaEntries, umaMetadata),
-    allUmas: getAllPlayedUmas(stats.umaEntries, umaMetadata),
-    recentMatches,
-    unresolvedUmaMatches: resolutionSummary.unresolvedUmaMatches,
-    disqualifiedMatches: resolutionSummary.disqualifiedMatches,
-    bestUmaScoreVersion: BEST_UMA_SCORE_VERSION,
-    recentHistoryVersion: RECENT_HISTORY_VERSION
-  };
-}
-
-function buildProfileStatsSummary(stats: ApiPlayerStats | undefined, umaMetadata: UmaMetadataLookup): PlayerProfileStatsSummary {
-  return stats === undefined ? buildEmptyStatsSummary() : buildStatsSummary(stats, umaMetadata);
-}
-
-function buildEmptyStatsSummary(
-
-): PlayerProfileStatsSummary {
-  const recentMatches: PlayerRecentMatchSummary[] = [];
-  const resolutionSummary = { unresolvedUmaMatches: 0, disqualifiedMatches: 0 };
-
-  return {
-    wins: null,
-    losses: null,
-    winRate: null,
-    matches: null,
-    points: null,
-    pointsPerGame: null,
-    podiums: null,
-    mvpMatches: null,
-    topUmas: [],
-    bestUmas: [],
-    allUmas: [],
-    recentMatches,
-    unresolvedUmaMatches: resolutionSummary.unresolvedUmaMatches,
-    disqualifiedMatches: resolutionSummary.disqualifiedMatches,
-    bestUmaScoreVersion: BEST_UMA_SCORE_VERSION,
-    recentHistoryVersion: RECENT_HISTORY_VERSION
-  };
-}
-
-function cacheTtl(path: string): number {
-  if (path === '/api/seasons' || path.startsWith('/api/leaderboard?')) return SHARED_CACHE_TTL_MS;
-  if (path.includes('/history?')) return HISTORY_RESPONSE_TTL_MS;
-  if (path.endsWith('/profile')) return PROFILE_RESPONSE_TTL_MS;
-  return STATS_RESPONSE_TTL_MS;
-}
-
-function isPersistentResponse(path: string): boolean {
-  return path === '/api/seasons' || path.startsWith('/api/leaderboard?') || path.endsWith('/profile');
-}
-
-function loadPersistentResponses(): Promise<void> {
-  return persistentCacheLoad ??= (async () => {
-    if (typeof browser === 'undefined' || browser.storage?.session === undefined) return;
-    try {
-      const stored = await browser.storage.session.get(RESPONSE_CACHE_STORAGE_KEY);
-      const entries = stored[RESPONSE_CACHE_STORAGE_KEY] as Record<string, { value: unknown; expiresAt: number }> | undefined;
-      for (const [path, entry] of Object.entries(entries ?? {})) {
-        if (!isPersistentResponse(path) || !Number.isFinite(entry?.expiresAt) || entry.expiresAt <= Date.now()) continue;
-        if ((responseCache.get(path)?.expiresAt ?? 0) < entry.expiresAt) responseCache.set(path, entry);
-      }
-    } catch { /* Session storage can be unavailable; the memory cache still works. */ }
-  })();
-}
-
-function persistResponses(): void {
-  if (typeof browser === 'undefined' || browser.storage?.session === undefined) return;
-  persistentCacheDirty = true;
-  if (persistentCacheWriteTimer !== undefined || persistentCacheWriteInFlight) return;
-  persistentCacheWriteTimer = setTimeout(() => {
-    persistentCacheWriteTimer = undefined;
-    void flushPersistentResponses();
-  }, 250);
-}
-
-async function flushPersistentResponses(): Promise<void> {
-  if (!persistentCacheDirty || persistentCacheWriteInFlight) return;
-  persistentCacheDirty = false;
-  persistentCacheWriteInFlight = true;
-  const entries = [...responseCache].filter(([path, entry]) => isPersistentResponse(path) && entry.expiresAt > Date.now())
-    .sort((a, b) => b[1].expiresAt - a[1].expiresAt);
-  const shared = entries.filter(([path]) => !path.endsWith('/profile'));
-  const profiles = entries.filter(([path]) => path.endsWith('/profile')).slice(0, 200);
-  const snapshot = Object.fromEntries([...shared, ...profiles]);
-  try {
-    await browser.storage.session.set({ [RESPONSE_CACHE_STORAGE_KEY]: snapshot });
-  } catch { /* Session storage can be unavailable; the memory cache still works. */ }
-  finally {
-    persistentCacheWriteInFlight = false;
-    if (persistentCacheDirty) persistResponses();
-  }
-}
-
-export async function fetchJson<T>(
-  path: string, signal?: AbortSignal, priority: RequestPriority = 'background', endpointLabel?: string
-): Promise<T> {
-  signal?.throwIfAborted();
-  let shared = inFlightRequests.get(path);
-  if (shared === undefined) {
-    const controller = new AbortController();
-    shared = { promise: fetchJsonOnce<T>(path, controller.signal, priority, endpointLabel), controller, consumers: 0 };
-    inFlightRequests.set(path, shared);
-    const request = shared;
-    void request.promise.finally(() => {
-      if (inFlightRequests.get(path) === request) inFlightRequests.delete(path);
-    }).catch(() => {});
-  }
-  shared.consumers += 1;
-  const request = shared;
-  const budget = deadline(signal, PROFILE_SUMMARY_TIMEOUT_MS, `Request queue timed out: ${path}`);
-  let released = false;
-  const release = () => {
-    if (released) return;
-    released = true;
-    request.consumers -= 1;
-    if (request.consumers === 0) {
-      if (inFlightRequests.get(path) === request) inFlightRequests.delete(path);
-      request.controller.abort(new Error('Request cancelled.'));
-    }
-  };
-  budget.signal.addEventListener('abort', release, { once: true });
-  try {
-    return await abortable(request.promise as Promise<T>, budget.signal);
-  } finally {
-    budget.signal.removeEventListener('abort', release);
-    budget.dispose();
-    release();
-  }
-}
-
-async function fetchJsonOnce<T>(path: string, signal: AbortSignal, priority: RequestPriority, endpointLabel?: string): Promise<T> {
-  await loadPersistentResponses();
-  signal.throwIfAborted();
-  // The last path segment can be a dynamic ID (e.g. a match code), which would
-  // fragment diagnostics per-request; callers with such paths pass a stable label.
-  const endpoint = endpointLabel ?? path.split('?')[0]!.split('/').at(-1);
-  const cached = responseCache.get(path);
-  if (cached !== undefined && cached.expiresAt > Date.now()) { recordDiagnostic({ kind: 'cache', endpoint, reason: 'hit' }); return cached.value as T; }
-  assertApiAvailable(path);
-  const queuedAt = Date.now();
-  const queueBudget = deadline(signal, PROFILE_SUMMARY_TIMEOUT_MS, `Request queue timed out: ${path}`);
-  try {
-    return await requestQueue.run(queueBudget.signal, async () => {
-      const startedAt = Date.now();
-      const budget = deadline(queueBudget.signal, API_REQUEST_TIMEOUT_MS, `Request timed out: ${path}`);
-      try {
-      // Do not hold profiles in an invisible sleep, or retry a rate-limited API in a burst.
-      assertApiAvailable(path);
-      const response = await fetch(new URL(path, API_ORIGIN), {
-        cache: 'no-store', credentials: 'omit', signal: budget.signal
-      });
-      if (!response.ok) {
-        recordDiagnostic({ kind: 'request', endpoint, reason: 'http-error', status: response.status, queueMs: startedAt - queuedAt, networkMs: Date.now() - startedAt });
-        // Release an error response body without keeping a connection occupied.
-        void response.body?.cancel().catch(() => undefined);
-        if (response.status === 429 || response.status >= 500) {
-          const retryAfter = response.headers.get('retry-after');
-          const seconds = retryAfter === null ? NaN : Number(retryAfter);
-          const dateMs = retryAfter === null ? NaN : Date.parse(retryAfter);
-          const delayMs = Number.isFinite(seconds) ? seconds * 1000
-            : Number.isFinite(dateMs) ? Math.max(0, dateMs - Date.now())
-            : response.status === 429 ? API_RATE_LIMIT_BACKOFF_MS : API_SERVER_ERROR_BACKOFF_MS;
-          restoreApiCooldown({ until: Date.now() + Math.max(1000, delayMs), status: response.status, path,
-            startIntervalMs: response.status === 429 ? Math.min(2000, requestStartIntervalMs * 2) : requestStartIntervalMs });
-        }
-        throw new ApiRequestError(response.status, `Request failed (HTTP ${response.status}): ${path}`);
-      }
-      const value = await response.json() as T;
-      budget.signal.throwIfAborted();
-      recordDiagnostic({ kind: 'request', endpoint, reason: 'success', status: response.status, queueMs: startedAt - queuedAt, networkMs: Date.now() - startedAt });
-      consecutiveSuccessCount += 1;
-      if (requestStartIntervalMs > baseRequestIntervalMs && consecutiveSuccessCount % PACING_RECOVERY_SUCCESS_STREAK === 0) {
-        requestStartIntervalMs = Math.max(baseRequestIntervalMs, requestStartIntervalMs * PACING_RECOVERY_FACTOR);
-        requestQueue.setStartInterval(requestStartIntervalMs);
-      }
-      // Cache successes only, so a partial retry does not re-download healthy endpoints.
-      for (const [key, entry] of responseCache) if (entry.expiresAt <= Date.now()) responseCache.delete(key);
-      if (responseCache.size >= 256) responseCache.delete(responseCache.keys().next().value!);
-      responseCache.set(path, { value, expiresAt: Date.now() + cacheTtl(path) });
-      if (isPersistentResponse(path)) persistResponses();
-      return value;
-      } catch (error) {
-        if (!(error instanceof ApiRequestError)) recordDiagnostic({ kind: 'request', endpoint,
-          reason: signal?.aborted ? 'cancelled' : /timed out/i.test(getErrorMessage(error)) ? 'timeout' : 'network-error', queueMs: startedAt - queuedAt, networkMs: Date.now() - startedAt });
-        throw error;
-      } finally { budget.dispose(); }
-    }, priority);
-  } finally {
-    queueBudget.dispose();
-  }
-}
-
-function assertApiAvailable(path: string): void {
-  if (apiCooldown !== undefined && apiCooldown.until > Date.now()) {
-    throw new Error(`API paused after HTTP ${apiCooldown.status} at ${apiCooldown.path}; retry after ${new Date(apiCooldown.until).toISOString()}. Pending: ${path}`);
-  }
 }
 
 function uniqueByDiscordId(players: PrematchPlayer[]): PrematchPlayer[] {
@@ -802,188 +424,4 @@ function uniqueByDiscordId(players: PrematchPlayer[]): PrematchPlayer[] {
   }
 
   return uniquePlayers;
-}
-
-function isDiscordSnowflake(value: string): boolean {
-  return /^\d{16,20}$/.test(value);
-}
-
-function getRecordFromUmaEntries(
-  umaEntries: ApiUmaEntry[] | undefined
-): { wins: number | null; losses: number | null } {
-  if (umaEntries === undefined) {
-    return { wins: null, losses: null };
-  }
-
-  return umaEntries.reduce<{ wins: number; losses: number }>(
-    (record, entry) => ({
-      wins: record.wins + (entry.wins ?? 0),
-      losses: record.losses + (entry.losses ?? 0)
-    }),
-    { wins: 0, losses: 0 }
-  );
-}
-
-function getTopPlayedUmas(
-  umaEntries: ApiUmaEntry[] | undefined,
-  umaMetadata: UmaMetadataLookup
-): PlayerTopUmaSummary[] {
-  if (umaEntries === undefined) {
-    return [];
-  }
-
-  return mergeUmaEntriesByOutfitId(umaEntries)
-    .filter((entry) => isKnownUmaId(entry.umaId) && (entry.matches ?? 0) > 0)
-    .sort((left, right) => (right.matches ?? 0) - (left.matches ?? 0))
-    .slice(0, 3)
-    .map((entry) => buildUmaSummary(entry, umaMetadata));
-}
-
-function getAllPlayedUmas(
-  umaEntries: ApiUmaEntry[] | undefined,
-  umaMetadata: UmaMetadataLookup
-): PlayerTopUmaSummary[] {
-  if (umaEntries === undefined) {
-    return [];
-  }
-
-  return mergeUmaEntriesByOutfitId(umaEntries)
-    .filter((entry) => isKnownUmaId(entry.umaId) && (entry.matches ?? 0) > 0)
-    .sort((left, right) => (right.matches ?? 0) - (left.matches ?? 0))
-    .map((entry) => buildUmaSummary(entry, umaMetadata));
-}
-
-function getBestPerformingUmas(
-  umaEntries: ApiUmaEntry[] | undefined,
-  umaMetadata: UmaMetadataLookup
-): PlayerTopUmaSummary[] {
-  if (umaEntries === undefined) {
-    return [];
-  }
-
-  return mergeUmaEntriesByOutfitId(umaEntries)
-    .filter((entry) => isKnownUmaId(entry.umaId) && (entry.matches ?? 0) >= BEST_UMA_MIN_MATCHES)
-    .map((entry) => buildUmaSummary(entry, umaMetadata))
-    .sort((left, right) => {
-      const scoreDelta = (right.performanceScore ?? 0) - (left.performanceScore ?? 0);
-
-      if (scoreDelta !== 0) return scoreDelta;
-
-      const ppgDelta = (right.pointsPerGame ?? 0) - (left.pointsPerGame ?? 0);
-
-      if (ppgDelta !== 0) return ppgDelta;
-
-      const winRateDelta = (right.winRate ?? 0) - (left.winRate ?? 0);
-
-      if (winRateDelta !== 0) return winRateDelta;
-
-      return right.matches - left.matches;
-    })
-    .slice(0, 5);
-}
-
-function buildUmaSummary(
-  entry: ApiUmaEntry,
-  umaMetadata: UmaMetadataLookup
-): PlayerTopUmaSummary {
-  const umaId = normalizeUmaOutfitId(entry.umaId ?? '');
-  const metadata = umaMetadata.get(umaId);
-  const matches = entry.matches ?? 0;
-  const wins = entry.wins ?? 0;
-  const losses = entry.losses ?? 0;
-  const points = entry.pointsScored ?? 0;
-  const podiums = entry.podiumPlacements ?? 0;
-  const winRate = wins + losses > 0 ? wins / (wins + losses) : null;
-  const pointsPerGame = matches > 0 ? points / matches : null;
-  const podiumRate = matches > 0 ? Math.min(Math.max(podiums / (matches * 3), 0), 1) : null;
-
-  return {
-    umaId,
-    name: getUmaDisplayName(umaId, metadata?.label),
-    imageUrl: metadata?.imageUrl ?? getUmaPortraitUrl(umaId, PROFILE_ORIGIN),
-    matches,
-    wins,
-    losses,
-    winRate,
-    points,
-    pointsPerGame,
-    podiums,
-    mvpMatches: entry.mvpMatches ?? 0,
-    performanceScore: calculatePerformanceScore(pointsPerGame, winRate, podiumRate)
-  };
-}
-
-function mergeUmaEntriesByOutfitId(umaEntries: ApiUmaEntry[]): ApiUmaEntry[] {
-  const mergedEntries = new Map<string, Required<ApiUmaEntry>>();
-
-  for (const entry of umaEntries) {
-    if (!isKnownUmaId(entry.umaId)) {
-      continue;
-    }
-
-    const umaId = normalizeUmaOutfitId(entry.umaId);
-    const current = mergedEntries.get(umaId) ?? {
-      umaId,
-      matches: 0,
-      wins: 0,
-      losses: 0,
-      pointsScored: 0,
-      podiumPlacements: 0,
-      mvpMatches: 0
-    };
-
-    current.matches += entry.matches ?? 0;
-    current.wins += entry.wins ?? 0;
-    current.losses += entry.losses ?? 0;
-    current.pointsScored += entry.pointsScored ?? 0;
-    current.podiumPlacements += entry.podiumPlacements ?? 0;
-    current.mvpMatches += entry.mvpMatches ?? 0;
-    mergedEntries.set(umaId, current);
-  }
-
-  return [...mergedEntries.values()];
-}
-
-function isKnownUmaId(value: unknown): value is string {
-  if (typeof value !== 'string') {
-    return false;
-  }
-
-  const trimmedValue = value.trim();
-
-  return (
-    trimmedValue.length > 0 &&
-    !/^(unknown|undefined|null|disqualified|\?|u)$/i.test(trimmedValue)
-  );
-}
-
-function calculatePerformanceScore(
-  pointsPerGame: number | null,
-  winRate: number | null,
-  podiumRate: number | null
-): number {
-  const normalizedPpg = Math.min(Math.max((pointsPerGame ?? 0) / 8, 0), 1);
-  const normalizedWinRate = Math.min(Math.max(winRate ?? 0, 0), 1);
-  const normalizedPodiumRate = Math.min(Math.max(podiumRate ?? 0, 0), 1);
-
-  return Math.round((normalizedPpg * 0.7 + normalizedWinRate * 0.2 + normalizedPodiumRate * 0.1) * 100);
-}
-
-
-function addNullable(left: number | null, right: number | null): number | null {
-  return left === null || right === null ? null : left + right;
-}
-
-function getErrorMessage(caught: unknown): string {
-  return caught instanceof Error ? caught.message : 'Unable to load profile.';
-}
-
-class ApiRequestError extends Error {
-  constructor(
-    readonly status: number,
-    message: string
-  ) {
-    super(message);
-    this.name = 'ApiRequestError';
-  }
 }

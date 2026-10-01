@@ -7,7 +7,7 @@ import { TeamSection } from '../../ui/lobby/TeamSection';
 import { PlayerDrawer } from '../../ui/player/PlayerDrawer';
 import { PlayersView } from '../../ui/players/PlayersView';
 import { AppHeader, type AppMode } from '../../ui/shell/AppHeader';
-import { UmaPlannerScene } from '../../ui/umas/UmaPlannerScene';
+import { UmasScene } from '../../ui/umas/UmasScene';
 import {
   PREVIEW_DRAFT_COMPLETE,
   PREVIEW_DRAFT_MID,
@@ -111,7 +111,7 @@ export default function PreviewApp() {
         ) : scene === 'draft' ? (
           <DraftScene snapshot={draftSnapshot} roster={PREVIEW_ROSTER} profiles={PREVIEW_PROFILES} statsScope={statsScope} />
         ) : scene === 'umas' ? (
-          <UmaPlannerScene roster={PREVIEW_ROSTER} profiles={PREVIEW_PROFILES} statsScope={statsScope} />
+          <UmasScene roster={PREVIEW_ROSTER} profiles={PREVIEW_PROFILES} statsScope={statsScope} />
         ) : (
           <>
             <section className="team-list" aria-label="Preview lobby teams">

@@ -2,7 +2,6 @@ import type {
   DraftMapSelection,
   DraftSnapshot,
   DraftTeamSnapshot,
-  DraftUmaAction,
   DraftUmaActionKind,
   TeamId
 } from '@umalytics/shared';
@@ -245,15 +244,4 @@ export function getDraftWeatherIconKey(value: string | undefined): DraftWeatherI
   const normalized = value?.toLowerCase();
 
   return WEATHER_ICON_KEYS.find((key) => key === normalized);
-}
-
-export function formatDraftUmaKind(kind: DraftUmaAction['kind']): string {
-  switch (kind) {
-    case 'ban':
-      return 'Ban';
-    case 'veto':
-      return 'Veto';
-    case 'pick':
-      return 'Pick';
-  }
 }

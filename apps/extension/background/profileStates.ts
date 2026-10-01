@@ -1,6 +1,6 @@
 import type { PlayerProfileSummary, PrematchPlayer } from '@umalytics/shared';
 import { mergeProfileScopes } from '../profiles/profileMerge';
-import type { ApiCooldown } from '../profiles/playerProfileApi';
+import type { ApiCooldown } from '../profiles/apiClient';
 import type { PlayerProfileLoadState, PlayerProfileLoadStatus } from '../profiles/profileTypes';
 
 const MAX_AUTOMATIC_RETRIES = 2;
@@ -99,10 +99,6 @@ function getLoadingDiscordIds(profileStates: Record<string, PlayerProfileLoadSta
     .map((state) => state.discordId);
 }
 
-function getErrorMessage(caught: unknown): string {
-  return caught instanceof Error ? caught.message : String(caught);
-}
-
 function isPendingProfileState(state: PlayerProfileLoadState | undefined): boolean {
   return state?.status === 'loading' || state?.status === 'queued';
 }
@@ -120,10 +116,6 @@ function getRetainedProfiles(
         (entry[1].error === undefined || hasUsableProfileStats(entry[1]))
       ))
   );
-}
-
-function isDiscordSnowflake(value: string): boolean {
-  return /^\d{16,20}$/.test(value);
 }
 
 function hasCurrentStatsShape(profile: PlayerProfileSummary): boolean {
@@ -145,7 +137,5 @@ export {
   markProfilesForRecovery,
   getLoadingDiscordIds,
   isPendingProfileState,
-  hasCurrentStatsShape,
-  isDiscordSnowflake,
-  getErrorMessage
+  hasCurrentStatsShape
 };

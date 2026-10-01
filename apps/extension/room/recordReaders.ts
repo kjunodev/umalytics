@@ -5,6 +5,10 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
+export function getErrorMessage(caught: unknown, fallback?: string): string {
+  return caught instanceof Error ? caught.message : fallback ?? String(caught);
+}
+
 export function normalizeText(value: string | null | undefined): string | undefined {
   const normalized = value?.replace(/\s+/g, ' ').trim();
 

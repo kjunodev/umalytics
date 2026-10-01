@@ -5,7 +5,7 @@ import { getPlayerKey } from '../common/roster';
 import { DraftScene } from '../draft/DraftScene';
 import { TeamSection } from '../lobby/TeamSection';
 import { PlayerDrawer } from '../player/PlayerDrawer';
-import { UmaPlannerScene } from '../umas/UmaPlannerScene';
+import { UmasScene } from '../umas/UmasScene';
 
 export type AppScene = 'lobby' | 'draft' | 'umas';
 
@@ -30,7 +30,7 @@ export function HistoricalScene({ snapshot, roster, profiles, statsScope, scene,
     onOpenPlayer?.(getSelectedPlayerContext(teams, key)?.player);
   };
   if (scene === 'draft') return <DraftScene snapshot={snapshot} roster={roster} profiles={profiles} statsScope={statsScope} historical />;
-  if (scene === 'umas') return <UmaPlannerScene roster={roster} profiles={profiles} statsScope={statsScope} />;
+  if (scene === 'umas') return <UmasScene roster={roster} profiles={profiles} statsScope={statsScope} />;
   return <>
     <section className="team-list" aria-label="Historical lobby teams">{teams.map(team => <TeamSection key={team.id} team={team} profiles={profiles} loadingDiscordIds={loading ? roster.players.filter(player => !profiles[player.discordId]).map(player => player.discordId) : []} statsScope={statsScope} teamIcons={teamIcons} selectedPlayerKey={selected} onSelectPlayer={selectPlayer} />)}</section>
     {context && <PlayerDrawer player={context.player} profile={profiles[context.player.discordId]} onClose={() => { setSelected(undefined); onOpenPlayer?.(undefined); }} context={{ team: context.team, statsScope, isProfileLoading: loading && !profiles[context.player.discordId], now: Date.now(), inLobby: false, teamIcon: teamIcons[context.player.discordId], onOpenMatch }} />}

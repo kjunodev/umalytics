@@ -36,7 +36,6 @@ type UmaLyticsWindow = Window & {
 const roomEvents = new RoomEventState();
 const pendingRoomEvents = new Map<string, { event: Record<string, unknown>; at: number }>();
 let lastRosterSignature: string | undefined;
-let lastRosterMatchCode: string | undefined;
 let lastRosterSource: RosterSource | undefined;
 let lastPublishedRoster: PrematchRoster | undefined;
 let lastDraftSnapshotSignature: string | undefined;
@@ -421,7 +420,6 @@ async function publishRosterInOrder(
     team1: roster.players.filter(p => p.team === 'team1').length,
     team2: roster.players.filter(p => p.team === 'team2').length }).catch(() => {});
   lastRosterSignature = rosterSignature;
-  lastRosterMatchCode = roster.matchCode;
   lastRosterSource = source;
   lastPublishedRoster = roster;
 }

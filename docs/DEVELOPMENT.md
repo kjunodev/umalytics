@@ -9,7 +9,7 @@ pnpm typecheck
 pnpm build:all
 ~~~
 
-The extension's postinstall/typecheck prepares WXT generated types. Keep separate dependencies on each machine and use the committed lockfile. The regression runner uses Node 24's TypeScript stripping API.
+The extension's postinstall/typecheck prepares WXT generated types. Keep separate dependencies on each machine and use the committed lockfile.
 
 ## Commands
 
@@ -20,6 +20,23 @@ The extension's postinstall/typecheck prepares WXT generated types. Keep separat
 | pnpm typecheck | Shared and extension TypeScript checks |
 | pnpm build | Chromium build |
 | pnpm build:all | Chromium and Firefox builds with manifest and history-display checks |
+| pnpm --filter @umalytics/extension preview | Layout preview harness (static fixtures, no live lobby); see apps/extension/dev/preview/README.md |
+| pnpm --filter @umalytics/extension preview:shots | Screenshots and layout checks for every scene, viewport and UI size |
+
+## Tests
+
+`pnpm test` runs every `tests/*.test.mjs` file with the Node test runner, one file per area:
+
+| Area | Files |
+| --- | --- |
+| Profile API | `profile-api`, `request-pacing`, `profile-cache`, `profile-recovery`, `team-icons` |
+| Background | `background-enrichment`, `scout-window`, `diagnostic-recorder` |
+| Room and content | `room-events`, `roster-extraction`, `dom-extraction`, `content-script`, `page-hook`, `casual-room-replay` |
+| History and players | `explorer`, `explorer-scenes`, `explorer-transport`, `recent-history`, `history-display-rules`, `players-data` |
+| UI | `lobby-cards`, `draft-scene`, `uma-data`, `uma-experience`, `profile-usability`, `podium-badge`, `ui-size`, `ui-polish-0-5-1` |
+| Release | `release` (the publish script) |
+
+Tests load extension sources through `tests/support/harness.mjs`, which strips imports and exports and evaluates the TypeScript (Node 24 type stripping) in a `vm` context. Its `MODULES` map names every source file the suite loads, and `PRELOADS` lists the modules each one needs first, so a moved or split file only changes the map. `playerProfileApi` is listed as three files (`profiles/apiClient.ts`, `profiles/profileApiMapping.ts`, `profiles/playerProfileApi.ts`) that are evaluated together. `tests/support/helpers.mjs` holds the shared API, background, room, DOM and content harnesses; `tests/fixtures/` holds recorded JSON.
 
 Generated bundles live in apps/extension/.output. Checked build snapshots live in .releases; latest.json describes the latest pair. There is one extension build for each browser. Match history can be fetched and displayed, including for players with hidden stats, but never used to calculate ranked statistics.
 

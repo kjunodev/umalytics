@@ -2,12 +2,16 @@ import type { PrematchPlayer, PrematchRoster } from '@umalytics/shared';
 
 export const UNKNOWN_PLAYER_NAME = 'Unknown player';
 
+export function isDiscordSnowflake(value: string): boolean {
+  return /^\d{16,20}$/.test(value);
+}
+
 /** Internal account IDs (UUIDs, Discord snowflakes, or the player's own ID
  * fields) are never shown as a player name. */
 export function isRawPlayerIdentifier(name: string, identityKeys: readonly (string | undefined)[] = []): boolean {
   const trimmed = name.trim();
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(trimmed) ||
-    /^\d{16,20}$/.test(trimmed) || identityKeys.includes(trimmed);
+    isDiscordSnowflake(trimmed) || identityKeys.includes(trimmed);
 }
 
 export function readablePlayerName(candidates: readonly (string | undefined)[], identityKeys: readonly (string | undefined)[] = []): string {
@@ -30,7 +34,7 @@ export function matchesVisibleTeamSlots(synced: PrematchRoster, visible: Prematc
 }
 
 function sameVisibleIdentity(candidate: PrematchPlayer, visible: PrematchPlayer): boolean {
-  if (/^\d{16,20}$/.test(visible.discordId)) return candidate.discordId === visible.discordId;
+  if (isDiscordSnowflake(visible.discordId)) return candidate.discordId === visible.discordId;
   return candidate.displayName.normalize('NFC').trim() === visible.displayName.normalize('NFC').trim();
 }
 
