@@ -5,6 +5,7 @@ import { loadExplorerProfiles, loadSeasonLeaderboard, searchPlayers } from '../.
 import { lookupPlayer } from '../../explorer/explorerData';
 import type { PlayerSearchResult } from '../../explorer/explorerTypes';
 import type { SeasonLeaderboard, SeasonLeaderboardEntry } from '../../profiles/playerProfileApi';
+import { getErrorMessage } from '../../room/recordReaders';
 import { getRecentPlayers, setRecentPlayers, type RecentPlayerEntry } from '../../storage/playersRecentStorage';
 import { formatNumber } from '../common/format';
 import { TeamIcon } from '../common/TeamIcon';
@@ -25,6 +26,8 @@ import {
   sortLeaderboardEntries,
   type LeaderboardSortKey
 } from './playersData';
+
+const REQUEST_ERROR_FALLBACK = 'Unable to complete the request.';
 
 const LB_COLUMNS: { key: LeaderboardSortKey | null; label: string }[] = [
   { key: 'rank', label: 'Rank' },
@@ -50,10 +53,6 @@ interface DirectorySearchState {
   error?: string;
   retryAt?: number;
   results?: PlayerSearchResult;
-}
-
-function getErrorMessage(caught: unknown): string {
-  return caught instanceof Error ? caught.message : 'Unable to complete the request.';
 }
 
 function getRetryAt(caught: unknown): number | undefined {
@@ -115,7 +114,7 @@ export function PlayersView({ roster, statsScope, active, teamIcons = {}, onOpen
         if (controller.signal.aborted) return;
         setLeaderboardState(previous => ({
           data: previous.data, fetchedAt: previous.fetchedAt, loading: false,
-          error: getErrorMessage(caught), retryAt: getRetryAt(caught)
+          error: getErrorMessage(caught, REQUEST_ERROR_FALLBACK), retryAt: getRetryAt(caught)
         }));
       });
     return () => controller.abort();
@@ -163,7 +162,7 @@ export function PlayersView({ roster, statsScope, active, teamIcons = {}, onOpen
       .then(found => { if (!controller.signal.aborted) setSearchState({ term, page, loading: false, results: found }); })
       .catch(caught => {
         if (controller.signal.aborted) return;
-        setSearchState({ term, page, loading: false, error: getErrorMessage(caught), retryAt: getRetryAt(caught) });
+        setSearchState({ term, page, loading: false, error: getErrorMessage(caught, REQUEST_ERROR_FALLBACK), retryAt: getRetryAt(caught) });
       });
   };
 

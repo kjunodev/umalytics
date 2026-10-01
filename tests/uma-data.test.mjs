@@ -31,8 +31,8 @@ test('Uma hits count distinct lobby players with scoped experience', () => {
 
 test('Uma scope labels are All, Team 1, and Team 2 and draft plan is removed', () => {
   const c = vm.createContext({});
-  const syntax = parseTsxModule('uiUmasPlannerScene');
+  const syntax = parseTsxModule('uiUmasScene');
   loadFunction(c, syntax, 'getHitScopeLabel');
   assert.deepEqual(['all', 'team1', 'team2'].map(scope => c.getHitScopeLabel(scope)), ['All', 'Team 1', 'Team 2']);
-  assert.doesNotMatch(readModule('uiUmasPlannerScene'), /DraftPlanTray|DRAFT_PLAN_PIN_LIMIT|pinnedUmaIds|Pin to plan/);
+  assert.doesNotMatch(readModule('uiUmasScene'), /DraftPlanTray|DRAFT_PLAN_PIN_LIMIT|pinnedUmaIds|Pin to plan/);
 });

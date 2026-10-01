@@ -17,8 +17,8 @@ export function checkGeometry() {
     '.player-drawer-title-row', '.drawer-stat-row', '.drawer-stat-panel',
     '.drawer-section', '.drawer-section-head', '.uma-table-rows', '.uma-table-row',
     '.uma-table-name', '.drawer-history-rows', '.drawer-history-row', '.drawer-pager',
-    '.uma-planner-layout', '.uma-catalog-grid', '.uma-catalog-button',
-    '.uma-planning-panel', '.uma-planning-player', '.players-board', '.players-rows',
+    '.umas-layout', '.uma-catalog-grid', '.uma-catalog-button',
+    '.uma-detail-panel', '.uma-detail-player', '.players-board', '.players-rows',
     '.players-row', '.players-name', '.players-cols'
   ];
   const failures = [];

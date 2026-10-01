@@ -15,7 +15,7 @@ function sceneHarness(selected) {
     useState: () => [selected, value => { selected = value; }], useEffect: () => {},
     getTeamGroups: roster => Object.values(roster.teams),
     getSelectedPlayerContext: (teams, key) => { for (const team of teams) { const player = team.players.find(p => p.discordId === key); if (player) return {team, player}; } },
-    PlayerDrawer: 'Drawer', DraftScene: 'Draft', UmaPlannerScene: 'Umas', TeamSection: 'Team',
+    PlayerDrawer: 'Drawer', DraftScene: 'Draft', UmasScene: 'Umas', TeamSection: 'Team',
   });
   loadFunction(c, historySyntax, 'HistoricalScene');
   return c.HistoricalScene;

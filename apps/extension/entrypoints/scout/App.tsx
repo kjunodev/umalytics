@@ -52,8 +52,8 @@ import {
   normalizeProfileSnapshotForDisplay,
   ROOM_EVENT_SUMMARY_LIMIT
 } from '../../ui/scoutData';
-import { AppHeader, type AppMode } from '../../ui/shell/AppHeader';
-import { UmaPlannerScene } from '../../ui/umas/UmaPlannerScene';
+import { AppHeader } from '../../ui/shell/AppHeader';
+import { UmasScene } from '../../ui/umas/UmasScene';
 
 const STATS_SCOPE_STORAGE_KEY = 'statsScope';
 const ACTIVE_CLOCK_REFRESH_MS = 1_000;
@@ -359,7 +359,7 @@ export default function App() {
           statsScope={statsScope}
         />
       ) : activeScene === 'umas' ? (
-        <UmaPlannerScene
+        <UmasScene
           roster={displayedRoster}
           profiles={profileSnapshot?.profiles ?? {}}
           statsScope={statsScope}

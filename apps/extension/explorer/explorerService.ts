@@ -1,6 +1,7 @@
 import { browser } from 'wxt/browser';
 import type { PlayerProfileSummary, PrematchPlayer } from '@umalytics/shared';
-import { fetchJson, fetchPlayerProfileSummaries, getApiCooldown, getSeasonLeaderboard } from '../profiles/playerProfileApi';
+import { fetchJson, getApiCooldown } from '../profiles/apiClient';
+import { fetchPlayerProfileSummaries, getSeasonLeaderboard } from '../profiles/playerProfileApi';
 import { getCachedPlayerProfiles, rememberCachedPlayerProfiles } from '../storage/profileStorage';
 import { BEST_UMA_SCORE_VERSION, PROFILE_CACHE_TTL_MS, RECENT_HISTORY_VERSION } from '../profiles/profileConstants';
 import { mergeProfileScopes } from '../profiles/profileMerge';

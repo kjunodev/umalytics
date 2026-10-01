@@ -1,5 +1,5 @@
 import type { EsportsTeamIcon, EsportsTeamIconMap } from '@umalytics/shared';
-import { fetchJson } from './playerProfileApi';
+import { fetchJson } from './apiClient';
 
 const PROFILE_ORIGIN = 'https://drafter.uma.guide';
 

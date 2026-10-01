@@ -8,14 +8,13 @@ import {
   isUmaLyticsMessage,
   type LobbyReconnectResult
 } from '../runtime/messaging';
+import { getApiCooldown, restoreApiCooldown } from '../profiles/apiClient';
 import {
   buildUnavailablePlayerSummary,
   fetchPlayerAllTimeStats,
   fetchPlayerHistoryPage,
   fetchPlayerProfileSummaries,
-  fetchPlayerProfileTitle,
-  getApiCooldown,
-  restoreApiCooldown
+  fetchPlayerProfileTitle
 } from '../profiles/playerProfileApi';
 import {
   getPlayerProfileSummaries,
@@ -43,12 +42,10 @@ import {
   MAX_AUTOMATIC_RETRIES,
   buildProfileLoadStates,
   buildCompletedProfileState,
-  getErrorMessage,
   getLoadingDiscordIds,
   getRetainedProfiles,
   hasCurrentStatsShape,
   hasUsableProfileStats,
-  isDiscordSnowflake,
   isPendingProfileState,
   markProfilesForRecovery,
   retainUsableProfile,
@@ -66,6 +63,8 @@ import {
   reconnectOpenDrafterTabs,
   requestRoomDomScan
 } from '../background/drafterTabs';
+import { getErrorMessage } from '../room/recordReaders';
+import { isDiscordSnowflake } from '../room/rosterIdentity';
 
 let enrichmentRunId = 0;
 let reconnecting: Promise<LobbyReconnectResult> | undefined;

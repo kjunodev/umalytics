@@ -1,9 +1,9 @@
-.uma-planner-scene {
+.umas-scene {
   min-height: 0;
   overflow: hidden;
 }
 
-.uma-planner-layout {
+.umas-layout {
   align-items: start;
   display: grid;
   grid-template-columns: minmax(0, 1.75fr) minmax(320px, 1fr);
@@ -12,7 +12,7 @@
 }
 
 .uma-catalog-panel,
-.uma-planning-panel {
+.uma-detail-panel {
   min-width: 0;
   min-height: 0;
   background: var(--bg-surface-1);
@@ -44,8 +44,8 @@
 }
 
 .uma-catalog-heading span,
-.uma-planning-title p,
-.uma-planning-team p {
+.uma-detail-title p,
+.uma-detail-team p {
   color: var(--text-secondary);
   font-size: 12px;
   margin: 0;
@@ -106,8 +106,8 @@
 .uma-sort-toggle button { padding: 0 9px; }
 .uma-sort-toggle button.active,
 .uma-hit-scope-toggle button.active { background: var(--bg-raised); color: var(--text-primary); }
-.uma-planner-scene button:hover { color: var(--text-primary); border-color: var(--border-emphasis); }
-.uma-planner-scene :focus-visible { outline: 2px solid var(--accent-blue); outline-offset: 2px; }
+.umas-scene button:hover { color: var(--text-primary); border-color: var(--border-emphasis); }
+.umas-scene :focus-visible { outline: 2px solid var(--accent-blue); outline-offset: 2px; }
 
 .uma-catalog-grid {
   display: grid;
@@ -121,7 +121,7 @@
 }
 
 .uma-catalog-grid,
-.uma-planning-team-grid { scrollbar-width: thin; scrollbar-color: var(--border-emphasis) transparent; overscroll-behavior: contain; }
+.uma-detail-team-grid { scrollbar-width: thin; scrollbar-color: var(--border-emphasis) transparent; overscroll-behavior: contain; }
 
 .uma-catalog-button {
   display: flex;
@@ -143,7 +143,7 @@
 }
 
 .uma-catalog-portrait,
-.uma-planning-portrait {
+.uma-detail-portrait {
   display: grid;
   place-items: center;
   flex-shrink: 0;
@@ -155,9 +155,9 @@
 }
 
 .uma-catalog-portrait { width: min(52px, 100%); aspect-ratio: 1; }
-.uma-planning-portrait { width: 72px; height: 72px; }
+.uma-detail-portrait { width: 72px; height: 72px; }
 .uma-catalog-portrait img,
-.uma-planning-portrait img { width: 100%; height: 100%; object-fit: cover; border-radius: inherit; }
+.uma-detail-portrait img { width: 100%; height: 100%; object-fit: cover; border-radius: inherit; }
 
 .uma-catalog-count {
   position: absolute;
@@ -185,51 +185,51 @@
 }
 
 .uma-catalog-empty,
-.uma-planning-panel.empty { display: grid; align-content: center; justify-items: center; gap: 8px; color: var(--text-secondary); padding: 16px; }
+.uma-detail-panel.empty { display: grid; align-content: center; justify-items: center; gap: 8px; color: var(--text-secondary); padding: 16px; }
 
-.uma-planning-panel { display: grid; grid-template-rows: auto auto auto; align-content: start; }
-.uma-planning-heading { display: flex; align-items: center; gap: 14px; padding: 18px 16px; }
-.uma-planning-title { min-width: 0; }
-.uma-planning-title h3 { font: 600 24px/1.1 var(--font-display); margin: 0 0 7px; overflow-wrap: anywhere; }
-.uma-planning-title p { line-height: 1.5; }
+.uma-detail-panel { display: grid; grid-template-rows: auto auto auto; align-content: start; }
+.uma-detail-heading { display: flex; align-items: center; gap: 14px; padding: 18px 16px; }
+.uma-detail-title { min-width: 0; }
+.uma-detail-title h3 { font: 600 24px/1.1 var(--font-display); margin: 0 0 7px; overflow-wrap: anywhere; }
+.uma-detail-title p { line-height: 1.5; }
 
-.uma-planning-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin: 0 16px 16px; padding: 12px 0; background: var(--bg-inset); border: 1px solid var(--border-default); border-radius: var(--radius-md); }
-.uma-planning-summary > span { display: grid; gap: 5px; text-align: center; }
-.uma-planning-summary > span + span { border-left: 1px solid var(--border-default); }
-.uma-planning-summary small { font-size: 10px; color: var(--text-secondary); text-transform: uppercase; }
-.uma-planning-summary strong { font: 600 22px var(--font-display); font-variant-numeric: tabular-nums; }
+.uma-detail-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin: 0 16px 16px; padding: 12px 0; background: var(--bg-inset); border: 1px solid var(--border-default); border-radius: var(--radius-md); }
+.uma-detail-summary > span { display: grid; gap: 5px; text-align: center; }
+.uma-detail-summary > span + span { border-left: 1px solid var(--border-default); }
+.uma-detail-summary small { font-size: 10px; color: var(--text-secondary); text-transform: uppercase; }
+.uma-detail-summary strong { font: 600 22px var(--font-display); font-variant-numeric: tabular-nums; }
 
-.uma-planning-team-grid { min-height: 0; overflow-y: auto; padding: 0 16px 16px; }
-.uma-planning-team + .uma-planning-team { margin-top: 18px; }
-.uma-planning-team header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 10px; margin-bottom: 8px; }
-.uma-planning-team h4 { font: 600 18px var(--font-display); margin: 0; overflow-wrap: anywhere; }
-.uma-planning-team.team1 h4 { color: var(--accent-blue-soft); }
-.uma-planning-team.team2 h4 { color: var(--accent-orange); }
-.uma-planning-team p { font-size: 10px; }
+.uma-detail-team-grid { min-height: 0; overflow-y: auto; padding: 0 16px 16px; }
+.uma-detail-team + .uma-detail-team { margin-top: 18px; }
+.uma-detail-team header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 10px; margin-bottom: 8px; }
+.uma-detail-team h4 { font: 600 18px var(--font-display); margin: 0; overflow-wrap: anywhere; }
+.uma-detail-team.team1 h4 { color: var(--accent-blue-soft); }
+.uma-detail-team.team2 h4 { color: var(--accent-orange); }
+.uma-detail-team p { font-size: 10px; }
 
-.uma-planning-table { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; }
-.uma-planning-table th,
-.uma-planning-table td { padding: 8px 6px; border-bottom: 1px solid var(--border-subtle); text-align: right; overflow-wrap: anywhere; }
-.uma-planning-table th:first-child { width: 52%; text-align: left; padding-left: 0; }
-.uma-planning-table thead th { font-size: 10px; font-weight: 500; text-transform: uppercase; color: var(--text-muted); }
-.uma-planning-player { height: 38px; }
-.uma-planning-player th { font-weight: 500; }
-.uma-planning-player.empty,
-.uma-planning-player.no-history { color: var(--text-muted); }
-.uma-planning-table .uma-planning-unavailable { font-size: 10px; white-space: normal; }
+.uma-detail-table { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; }
+.uma-detail-table th,
+.uma-detail-table td { padding: 8px 6px; border-bottom: 1px solid var(--border-subtle); text-align: right; overflow-wrap: anywhere; }
+.uma-detail-table th:first-child { width: 52%; text-align: left; padding-left: 0; }
+.uma-detail-table thead th { font-size: 10px; font-weight: 500; text-transform: uppercase; color: var(--text-muted); }
+.uma-detail-player { height: 38px; }
+.uma-detail-player th { font-weight: 500; }
+.uma-detail-player.empty,
+.uma-detail-player.no-history { color: var(--text-muted); }
+.uma-detail-table .uma-detail-unavailable { font-size: 10px; white-space: normal; }
 
 @media (max-width: 900px) {
-  .uma-planner-layout { grid-template-columns: minmax(0, 1.4fr) minmax(280px, 1fr); gap: 10px; }
+  .umas-layout { grid-template-columns: minmax(0, 1.4fr) minmax(280px, 1fr); gap: 10px; }
   .uma-catalog-grid { gap: 5px; padding: 8px; }
   .uma-catalog-toolbar { padding: 12px; }
   .uma-catalog-controls .uma-search { flex-basis: 100%; }
 }
 
 @media (max-width: 620px) {
-  .uma-planner-layout { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto; }
-  .uma-planning-heading { padding: 10px 12px; }
-  .uma-planning-summary { margin: 0 12px 10px; padding: 6px 0; }
-  .uma-planning-team-grid { padding: 0 12px 12px; }
+  .umas-layout { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto; }
+  .uma-detail-heading { padding: 10px 12px; }
+  .uma-detail-summary { margin: 0 12px 10px; padding: 6px 0; }
+  .uma-detail-team-grid { padding: 0 12px 12px; }
   .uma-catalog-heading { margin-bottom: 8px; }
   .uma-catalog-controls { gap: 6px; }
   .uma-sort-toggle button { padding: 0 6px; }

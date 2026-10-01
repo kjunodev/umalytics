@@ -82,7 +82,7 @@ function apiPageRowOffset(pagerPage: number): number {
   return ((pagerPage - 1) * HISTORY_PAGE_SIZE) % HISTORY_API_PAGE_SIZE;
 }
 
-// 600px right drawer over the lobby. Reusable for the Players page (Phase 3):
+// 600px right drawer over the lobby. Reused by the Players page:
 // `context` carries everything that differs between call sites (team,
 // scope, loading state, now) so `player`/`profile`/`onClose` stay stable.
 export function PlayerDrawer({

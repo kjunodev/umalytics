@@ -57,6 +57,10 @@ interaction checks: a drawer match code opening History, the Players season
 name and rating, and the team-icon tooltip staying inside its card, row or
 drawer (hover and keyboard focus, every UI size) without covering a
 neighbour or scrolling the page.
+`preview:shots` also accepts `--scenes=lobby,umas` (scene names as listed in
+`shots.mjs`), `--sizes=1280x720,1920x1080`, `--concurrency=N` (default: CPU count
+- 1, at most 6) and `--interactions-only` (skip the screenshot matrix and run
+only the interaction checks).
 Failures make the command exit unsuccessfully; per-case results and element
 counts are saved in `.shots/geometry.json`. Intentional overlays (tooltips,
 card hit targets, and the drawer backdrop) are excluded from sibling checks.

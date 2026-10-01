@@ -139,18 +139,6 @@ button {
   white-space: nowrap;
 }
 
-.player-meta {
-  align-content: start;
-  align-items: start;
-  color: var(--text-secondary);
-  display: grid;
-  font-size: 13px;
-  gap: 4px;
-  line-height: 1.2;
-  min-height: 62px;
-  overflow: visible;
-}
-
 .player-rank-line {
   align-items: center;
   color: var(--text-secondary);

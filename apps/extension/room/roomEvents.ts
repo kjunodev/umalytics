@@ -1,7 +1,7 @@
 import type { DraftSnapshot, PrematchPlayer, PrematchRoster, TeamId } from '@umalytics/shared';
 import { normalizeMatchCode } from './matchDetection';
 import { normalizePrematchRosterFromPlayers } from './playerExtraction';
-import { UNKNOWN_PLAYER_NAME } from './rosterIdentity';
+import { isDiscordSnowflake, UNKNOWN_PLAYER_NAME } from './rosterIdentity';
 import { getUmaDisplayName, normalizeUmaOutfitId } from '../umas/umaPortraits';
 
 type RoomRecord = Record<string, any>;
@@ -189,7 +189,6 @@ export class RoomEventState {
 function sameRoomMember(a: PrematchPlayer, b: PrematchPlayer): boolean {
   return a.discordId === b.discordId || a.userId === b.userId;
 }
-function isDiscordSnowflake(value: string): boolean { return /^\d{16,20}$/.test(value); }
 
 const ROOM_EVENT_LABELS: Record<string, string> = { 'match.snapshot': 'snapshot', 'room.presence.updated': 'presence',
   'participant.uma-assignments.snapshot': 'assignment', 'room.captain.changed': 'captain' };

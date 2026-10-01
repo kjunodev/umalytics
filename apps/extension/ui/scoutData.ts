@@ -2,6 +2,7 @@ import { browser } from 'wxt/browser';
 import type { DraftSnapshot, PlayerProfileSummary, PlayerStatsScope, PrematchRoster, PrematchTeam } from '@umalytics/shared';
 import { latestStatsCheckAt } from '../profiles/profileTiming';
 import { BEST_UMA_SCORE_VERSION, RECENT_HISTORY_VERSION } from '../profiles/profileConstants';
+import { isRecord } from '../room/recordReaders';
 import { normalizeRosterForDisplay } from '../room/rosterDisplay';
 import type { PlayerProfileLoadState, PlayerProfileSummariesSnapshot } from '../profiles/profileTypes';
 import type { LobbyLockState } from '../storage/lobbyLockStorage';
@@ -138,10 +139,6 @@ export function isLobbyLockState(value: unknown): value is LobbyLockState {
       isPrematchRoster(value.roster)
     )
   );
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
 }
 
 function formatAppVersionLabel(manifest: unknown): string {

@@ -32,7 +32,7 @@ export const UMA_CATALOG_HIT_SCOPE_OPTIONS: UmaCatalogHitScopeOption[] = [
   { value: 'team2', label: 'Team 2' }
 ];
 
-export function UmaPlannerScene({
+export function UmasScene({
   roster,
   profiles,
   statsScope
@@ -76,8 +76,8 @@ export function UmaPlannerScene({
   }, [filteredCatalog, selectedUmaId]);
 
   return (
-    <section className="uma-planner-scene" aria-label="Uma planner">
-      <div className="uma-planner-layout">
+    <section className="umas-scene" aria-label="Uma planner">
+      <div className="umas-layout">
         <section className="uma-catalog-panel" aria-label="Uma catalog">
           <div className="uma-catalog-toolbar">
             <div className="uma-catalog-heading">
@@ -139,7 +139,7 @@ export function UmaPlannerScene({
             </div>
           )}
         </section>
-        <UmaPlanningPanel
+        <UmaDetailPanel
           selectedUma={selectedUma}
           roster={roster}
           profiles={profiles}
@@ -207,7 +207,7 @@ export function UmaCatalogButton({
   );
 }
 
-export function UmaPlanningPanel({
+export function UmaDetailPanel({
   selectedUma,
   roster,
   profiles,
@@ -220,7 +220,7 @@ export function UmaPlanningPanel({
 }) {
   if (selectedUma === undefined) {
     return (
-      <section className="uma-planning-panel empty" aria-label="Selected Uma history">
+      <section className="uma-detail-panel empty" aria-label="Selected Uma history">
         <h3>No Uma selected</h3>
       </section>
     );
@@ -233,27 +233,27 @@ export function UmaPlanningPanel({
   const scopeLabel = formatStatsScopeShortLabel(statsScope);
 
   return (
-    <section className="uma-planning-panel" aria-label={`${selectedUma.name} lobby history`}>
-      <header className="uma-planning-heading">
-        <span className="uma-planning-portrait">
+    <section className="uma-detail-panel" aria-label={`${selectedUma.name} lobby history`}>
+      <header className="uma-detail-heading">
+        <span className="uma-detail-portrait">
           <UmaImage imageUrl={selectedUma.imageUrl} name={selectedUma.name} loading="eager" />
         </span>
-        <div className="uma-planning-title">
+        <div className="uma-detail-title">
           <h3>{selectedUma.name}</h3>
           <p>
             {experience.length} {experience.length === 1 ? 'player' : 'players'} with {scopeLabel} history
           </p>
         </div>
       </header>
-      <div className="uma-planning-summary" aria-label={`${selectedUma.name} lobby stats`}>
+      <div className="uma-detail-summary" aria-label={`${selectedUma.name} lobby stats`}>
         <span><small>Lobby games</small><strong>{summary.games}</strong></span>
         <span><small>Lobby WR</small><strong>{formatPercent(summary.winRate)}</strong></span>
         <span><small>Lobby PPG</small><strong>{formatDecimal(summary.pointsPerGame)}</strong></span>
       </div>
 
-      <div className="uma-planning-team-grid">
+      <div className="uma-detail-team-grid">
         {TEAM_IDS.map((teamId) => (
-          <UmaPlanningTeamPanel
+          <UmaDetailTeamPanel
             key={teamId}
             team={teams.find((team) => team.id === teamId)}
             fallbackTeamId={teamId}
@@ -267,7 +267,7 @@ export function UmaPlanningPanel({
   );
 }
 
-export function UmaPlanningTeamPanel({
+export function UmaDetailTeamPanel({
   team,
   fallbackTeamId,
   action,
@@ -286,18 +286,18 @@ export function UmaPlanningTeamPanel({
   ).length;
 
   return (
-    <article className={`uma-planning-team ${fallbackTeamId}`}>
+    <article className={`uma-detail-team ${fallbackTeamId}`}>
       <header>
         <h4>{team?.name ?? (fallbackTeamId === 'team1' ? 'Team 1' : 'Team 2')}</h4>
         <p>
           {historyCount}/{team?.players.length ?? 0} with {formatStatsScopeShortLabel(statsScope)} history
         </p>
       </header>
-      <table className="uma-planning-table" aria-label={`${team?.name ?? (fallbackTeamId === 'team1' ? 'Team 1' : 'Team 2')} Uma stats`}>
+      <table className="uma-detail-table" aria-label={`${team?.name ?? (fallbackTeamId === 'team1' ? 'Team 1' : 'Team 2')} Uma stats`}>
         <thead><tr><th scope="col">Player</th><th scope="col">GP</th><th scope="col">WR</th><th scope="col">PPG</th></tr></thead>
         <tbody>
           {players.map((player, index) => (
-            <UmaPlanningPlayerSlot
+            <UmaDetailPlayerSlot
               key={player === undefined ? `${fallbackTeamId}:empty:${index}` : getPlayerKey(player)}
               player={player}
               action={action}
@@ -312,7 +312,7 @@ export function UmaPlanningTeamPanel({
   );
 }
 
-export function UmaPlanningPlayerSlot({
+export function UmaDetailPlayerSlot({
   player,
   action,
   profile,
@@ -327,7 +327,7 @@ export function UmaPlanningPlayerSlot({
 }) {
   if (player === undefined) {
     return (
-      <tr className="uma-planning-player empty">
+      <tr className="uma-detail-player empty">
         <th scope="row">Open slot {slotNumber}</th>
         <td>—</td><td>—</td><td>—</td>
       </tr>
@@ -337,10 +337,10 @@ export function UmaPlanningPlayerSlot({
   const uma = findScopedUmaEntry(action, profile, statsScope);
 
   return (
-    <tr className={uma === undefined ? 'uma-planning-player no-history' : 'uma-planning-player'}>
+    <tr className={uma === undefined ? 'uma-detail-player no-history' : 'uma-detail-player'}>
       <th scope="row">{profile?.displayName ?? player.displayName}</th>
       {uma === undefined ? (
-        <td colSpan={3} className="uma-planning-unavailable">{missingUmaHistoryLabel(profile, statsScope)}</td>
+        <td colSpan={3} className="uma-detail-unavailable">{missingUmaHistoryLabel(profile, statsScope)}</td>
       ) : (
         <>
           <td>{uma.matches}</td>

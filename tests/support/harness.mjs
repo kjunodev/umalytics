@@ -37,7 +37,9 @@ export const MODULES = {
   pageHookRuntime: 'room/pageHookRuntime.ts',
   playerExtraction: 'room/playerExtraction.ts',
   recordReaders: 'room/recordReaders.ts',
-  playerProfileApi: 'profiles/playerProfileApi.ts',
+  // A list is evaluated as one module, so playerProfileApi keeps exposing every
+  // function and the request/pacing state the tests read, whichever file defines it.
+  playerProfileApi: ['profiles/apiClient.ts', 'profiles/profileApiMapping.ts', 'profiles/playerProfileApi.ts'],
   esportsTeamApi: 'profiles/esportsTeamApi.ts',
   teamIconStorage: 'storage/teamIconStorage.ts',
   profileAvailability: 'profiles/profileAvailability.ts',
@@ -56,7 +58,7 @@ export const MODULES = {
   umaPortraits: 'umas/umaPortraits.ts',
   umaReleaseOrder: 'umas/umaReleaseOrder.ts',
 
-  // ui (phase 2)
+  // ui
   uiScoutData: 'ui/scoutData.ts',
   uiCommonFormat: 'ui/common/format.ts',
   uiCommonUmaImage: 'ui/common/UmaImage.tsx',
@@ -76,7 +78,7 @@ export const MODULES = {
   uiDraftScene: 'ui/draft/DraftScene.tsx',
   uiDraftFormat: 'ui/draft/draftFormat.ts',
   uiUmasCatalog: 'ui/umas/umaCatalog.ts',
-  uiUmasPlannerScene: 'ui/umas/UmaPlannerScene.tsx',
+  uiUmasScene: 'ui/umas/UmasScene.tsx',
   uiHistoryScene: 'ui/history/HistoricalScene.tsx',
   uiHistoryExplorerViews: 'ui/history/ExplorerViews.tsx',
   uiPlayersData: 'ui/players/playersData.ts',
@@ -84,7 +86,7 @@ export const MODULES = {
   uiPlayersCss: 'ui/players/players.css',
   storagePlayersRecent: 'storage/playersRecentStorage.ts',
 
-  // background (phase 3)
+  // background
   profileStates: 'background/profileStates.ts',
   scoutWindow: 'background/scoutWindow.ts',
   drafterTabs: 'background/drafterTabs.ts',
@@ -96,7 +98,11 @@ const pathByName = new Map(Object.entries(MODULES));
 // Dependencies each module needs evaluated into the same vm context first,
 // matching the preload order the original per-test-file loaders hard coded.
 const PRELOADS = {
-  background: ['profileStates', 'scoutWindow', 'drafterTabs', 'profileConstants'],
+  background: ['profileStates', 'scoutWindow', 'drafterTabs', 'profileConstants', 'recordReaders', 'rosterIdentity'],
+  playerProfileApi: ['recordReaders', 'rosterIdentity'],
+  profileStates: ['recordReaders', 'rosterIdentity'],
+  roomEvents: ['rosterIdentity'],
+  uiScoutData: ['recordReaders'],
   profileCache: ['profileMerge'],
   explorerState: ['profileMerge'],
   explorerService: ['profileMerge'],
@@ -112,13 +118,13 @@ const PRELOADS = {
   uiCommonUiSize: ['uiCommonHeaderLayout'],
 };
 
-function resolvePath(name) {
+function resolvePaths(name) {
   if (!pathByName.has(name)) throw new Error(`Unknown module: ${name}`);
-  return pathByName.get(name);
+  return [pathByName.get(name)].flat();
 }
 
 export function readModule(name) {
-  return fs.readFileSync(path.join(root, resolvePath(name)), 'utf8');
+  return resolvePaths(name).map(relPath => fs.readFileSync(path.join(root, relPath), 'utf8')).join('\n');
 }
 
 function stripImportsAndExports(source) {
@@ -177,8 +183,7 @@ export function loadModuleTS(context, name) {
 // Parses a .tsx module once so individual function declarations can be
 // extracted and evaluated in isolation.
 export function parseTsxModule(name) {
-  const relPath = resolvePath(name);
-  return ts.createSourceFile(path.basename(relPath), readModule(name), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  return ts.createSourceFile(path.basename(resolvePaths(name)[0]), readModule(name), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
 }
 
 const JSX_COMPILER_OPTIONS = { target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.React, jsxFactory: 'element' };
