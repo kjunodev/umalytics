@@ -11,7 +11,7 @@ import type {
   PrematchPlayer,
   PrematchRoster
 } from '@umalytics/shared';
-import { getUmaPortraitUrl, isKnownUmaOutfitId } from '../../umas/umaPortraits';
+import { getUmaPortraitUrl, isHashedUmaAssetUrl } from '../../umas/umaPortraits';
 import { UmaImage } from '../common/UmaImage';
 import { formatDecimal, formatPercent } from '../common/format';
 import { TEAM_IDS, TEAM_SLOT_COUNT, getDraftRosterPlayersForTeam, getDraftSlots } from '../common/roster';
@@ -244,6 +244,13 @@ export function DraftTeamPanel({
   );
 }
 
+// The drafter's own image is authoritative; the computed portrait is the fallback.
+function getDraftActionImageUrl(action: DraftUmaAction): string | undefined {
+  const portraitUrl = action.umaId === undefined ? undefined : getUmaPortraitUrl(action.umaId);
+
+  return isHashedUmaAssetUrl(action.imageUrl) ? portraitUrl ?? action.imageUrl : action.imageUrl ?? portraitUrl;
+}
+
 export function DraftPickTile({
   action,
   experienceCount,
@@ -255,8 +262,7 @@ export function DraftPickTile({
   isSelected: boolean;
   onSelect: () => void;
 }) {
-  const imageUrl = (action.umaId !== undefined && isKnownUmaOutfitId(action.umaId)
-    ? getUmaPortraitUrl(action.umaId) : undefined) ?? action.imageUrl;
+  const imageUrl = getDraftActionImageUrl(action);
 
   return (
     <li className={`draft-pick-tile ${isSelected ? 'selected' : ''}`}>
@@ -294,7 +300,7 @@ export function DraftBanVetoRow({ kind, action }: { kind: 'ban' | 'veto'; action
     );
   }
 
-  const imageUrl = action.imageUrl ?? (action.umaId === undefined ? undefined : getUmaPortraitUrl(action.umaId));
+  const imageUrl = getDraftActionImageUrl(action);
 
   return (
     <div className="draft-ban-veto-row">

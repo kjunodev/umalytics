@@ -79,7 +79,7 @@ export function summaryFor(player,overrides={}) {
     currentSeasonStats:{matches:null},allTimeStats:{matches:null},...overrides};
 }
 export function roomHarness() {
-  const c=context({cleanTeamName:x=>x, getUmaDisplayName:(id,name)=>name??id, normalizeUmaOutfitId:x=>x});
+  const c=context({cleanTeamName:x=>x, getUmaDisplayName:(id,name)=>name??id, normalizeUmaOutfitId:x=>x,resolveDrafterImageUrl:x=>x});
   evaluate(c,'matchDetection');evaluate(c,'syncPayload');evaluate(c,'playerExtraction');evaluate(c,'roomEvents');
   return {c,state:vm.runInContext('new RoomEventState()',c)};
 }
@@ -98,7 +98,7 @@ export const realTrainerRow =(name='Fixture Trainer | 기',avatar='https://cdn.d
 export const lobbyFixture =(left,right)=>`<button title="Copy room code" aria-label="Copy room code">6XN-84X</button><section data-left="0"><h2>Team 1[edit]</h2>${left}</section><section data-left="400"><h2>Team 2</h2>${right}</section>`;
 export function contentRoomHarness({delayDraft}={}) {
   let visibleRoom;let domRoster=null;const sent=[];
-  const c=context({cleanTeamName:x=>x,getUmaDisplayName:(id,name)=>name??id,normalizeUmaOutfitId:x=>x,
+  const c=context({cleanTeamName:x=>x,getUmaDisplayName:(id,name)=>name??id,normalizeUmaOutfitId:x=>x,resolveDrafterImageUrl:x=>x,
     document:{},window:{location:{href:'https://drafter.uma.guide/host'},postMessage(){},clearTimeout},
     extractRoomCodeFromRoomDom:()=>visibleRoom,extractPrematchRosterFromRoomDom:()=>domRoster,
     extractDraftSnapshotFromDraftDom:()=>null,extractDraftSnapshotFromSyncedDraftState:()=>null,

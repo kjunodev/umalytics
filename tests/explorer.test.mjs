@@ -8,7 +8,7 @@ const load = loadModule;
 const fixture = JSON.parse(fs.readFileSync(new URL('./fixtures/completed-match.json', import.meta.url)));
 function harness(globals = {}) {
   const context = vm.createContext({ URL, URLSearchParams, Error, console, AbortController, setTimeout, clearTimeout,
-    getUmaDisplayName: (id, name) => name, getUmaPortraitUrl: id => `portrait:${id}`, normalizeUmaOutfitId: id => id,
+    getUmaDisplayName: (id, name) => name, getUmaPortraitUrl: id => `portrait:${id}`, normalizeUmaOutfitId: id => id, resolveDrafterImageUrl: x => x,
     ...globals });
   load(context, 'matchDetection'); load(context, 'explorerData');
   return context;
@@ -200,4 +200,14 @@ test('retry failures retain useful displayed stats, but a confirmed private resp
   assert.equal(recovered['1'].matches, 20);
   const updated = h.mergeExplorerProfiles({ '1': old }, { '1': { ...old, matches: 21, error: 'Profile identity failed' } });
   assert.equal(updated['1'].matches, 21);
+});
+
+test('recorded Uma images prefer the drafter imageUrl and fall back to the computed portrait', () => {
+  const saved = structuredClone(fixture);
+  const [withImage, withoutImage] = saved.report.draftSnapshot.team1.pickedUmas;
+  withImage.imageUrl = '/uma/chara_stand_1006_100646.webp';
+  delete withoutImage.imageUrl;
+  const picks = harness().parseHistoricalMatch(saved, 'FX1A2B').draft.teams.team1.umas.filter(item => item.kind === 'pick');
+  assert.equal(picks.find(item => item.umaId === withImage.id).imageUrl, '/uma/chara_stand_1006_100646.webp');
+  assert.equal(picks.find(item => item.umaId === withoutImage.id).imageUrl, `portrait:${withoutImage.id}`);
 });

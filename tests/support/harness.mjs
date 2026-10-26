@@ -55,6 +55,7 @@ export const MODULES = {
   syncPayload: 'room/syncPayload.ts',
   teams: 'room/teams.ts',
   textCleanup: 'room/textCleanup.ts',
+  umaPortraitMap: 'umas/umaPortraitMap.ts',
   umaPortraits: 'umas/umaPortraits.ts',
   umaReleaseOrder: 'umas/umaReleaseOrder.ts',
 
@@ -116,6 +117,7 @@ const PRELOADS = {
   uiCommonRoster: ['teams'],
   uiCommonBadges: ['uiCommonFormat', 'profileConstants'],
   uiCommonUiSize: ['uiCommonHeaderLayout'],
+  umaPortraits: ['umaPortraitMap', 'umaReleaseOrder'],
 };
 
 function resolvePaths(name) {

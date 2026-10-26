@@ -13,7 +13,7 @@ import { extractRoomCodeFromRoomDom } from './domLobbyExtraction';
 import { isRecord, normalizeText, readOptionalNumber, readOptionalString, readOptionalTeamId } from './recordReaders';
 import { cleanTeamName } from './textCleanup';
 import { TEAM_IDS } from './teams';
-import { getUmaDisplayName, normalizeUmaOutfitId } from '../umas/umaPortraits';
+import { getUmaDisplayName, normalizeUmaOutfitId, normalizeUmaPortraitId, resolveDrafterImageUrl } from '../umas/umaPortraits';
 
 export function extractDraftSnapshotFromSyncedDraftState(
   value: unknown,
@@ -134,6 +134,7 @@ function collectSyncedUmaActions(value: unknown): DraftUmaAction[] {
 
     const kind = readUmaActionKind(record, path);
     const order = readOptionalNumber(record.order) ?? readOptionalNumber(record.pickOrder);
+    const imageUrl = resolveDrafterImageUrl(readOptionalString(record.imageUrl));
     const key = `${kind}:${team}:${umaId ?? name}:${order ?? actions.length}`;
 
     if (seen.has(key)) {
@@ -146,6 +147,7 @@ function collectSyncedUmaActions(value: unknown): DraftUmaAction[] {
       team,
       ...(umaId === undefined ? {} : { umaId }),
       name,
+      ...(imageUrl === undefined ? {} : { imageUrl }),
       ...(order === undefined ? {} : { order })
     });
   });
@@ -543,7 +545,7 @@ function isDraftCrossMark(value: string): boolean {
 function extractUmaIdFromImageUrl(value: string): string | undefined {
   const umaId = /chara_stand_\d+_(\d+)\.webp/i.exec(value)?.[1];
 
-  return umaId === undefined ? undefined : normalizeUmaOutfitId(umaId);
+  return umaId === undefined ? undefined : normalizeUmaPortraitId(umaId);
 }
 
 function isPlaceholderUmaText(value: string): boolean {

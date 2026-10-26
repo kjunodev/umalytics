@@ -2,7 +2,7 @@ import type { DraftSnapshot, PrematchPlayer, PrematchRoster, TeamId } from '@uma
 import { normalizeMatchCode } from './matchDetection';
 import { normalizePrematchRosterFromPlayers } from './playerExtraction';
 import { isDiscordSnowflake, UNKNOWN_PLAYER_NAME } from './rosterIdentity';
-import { getUmaDisplayName, normalizeUmaOutfitId } from '../umas/umaPortraits';
+import { getUmaDisplayName, normalizeUmaOutfitId, resolveDrafterImageUrl } from '../umas/umaPortraits';
 
 type RoomRecord = Record<string, any>;
 const ROOM_EVENT_TYPES = new Set(['match.snapshot', 'room.presence.updated', 'participant.uma-assignments.snapshot', 'room.captain.changed']);
@@ -65,6 +65,7 @@ function cleanItem(value: unknown): RoomRecord | undefined {
   if (!roomRecord(value)) return undefined;
   const item: RoomRecord = {};
   for (const key of ['id','name','title','track','surface','direction','variant']) if (typeof value[key] === 'string') item[key] = value[key].slice(0,160);
+  if (typeof value.imageUrl === 'string' && value.imageUrl.length <= 160) item.imageUrl = value.imageUrl;
   if (typeof value.distance === 'number' && Number.isFinite(value.distance)) item.distance = value.distance;
   if (roomRecord(value.conditions)) item.conditions = Object.fromEntries(['season','weather','ground'].filter(key => typeof value.conditions[key] === 'string').map(key => [key,value.conditions[key].slice(0,40)]));
   return item;
@@ -226,13 +227,18 @@ function draftFromRoomState(state: RoomRecord, matchCode: string, version: numbe
       ...value.bannedMaps.map((m: RoomRecord) => ({ team, mapId: m.id, name: m.track ?? m.name ?? m.id, details: mapDetails(m), ...mapFields(m), status: 'vetoed' as const }))];
     const umas = (['pickedUmas','preBannedUmas','bannedUmas'] as const).flatMap((key, kindIndex) => value[key].map((uma: RoomRecord,index: number) => ({
       team, kind: (['pick','ban','veto'] as const)[kindIndex]!, umaId: normalizeUmaOutfitId(String(uma.id ?? '')),
-      name: getUmaDisplayName(String(uma.id ?? ''), uma.name), order: index + 1
+      name: getUmaDisplayName(String(uma.id ?? ''), uma.name), order: index + 1,
+      ...umaImageField(uma)
     })));
     teams[team] = { id: team, name: state.multiplayer[team + 'Name'] ?? (team === 'team1' ? 'Team 1' : 'Team 2'), maps, umas };
   }
   return { matchCode, version, phase: state.phase, currentTeam: isRoomTeam(state.currentTeam) ? state.currentTeam : undefined,
     source: 'synced-draft-state', teams, updatedAt: Date.now(), rules: state.rules,
     ...(state.wildcardMap ? { tiebreakerMap: { name: state.wildcardMap.track ?? state.wildcardMap.name, details: mapDetails(state.wildcardMap), ...mapFields(state.wildcardMap) } } : {}) };
+}
+function umaImageField(uma: RoomRecord): { imageUrl?: string } {
+  const imageUrl = resolveDrafterImageUrl(typeof uma.imageUrl === 'string' ? uma.imageUrl : undefined);
+  return imageUrl === undefined ? {} : { imageUrl };
 }
 function mapFields(map: RoomRecord) {
   return { track: map.track, distance: map.distance, surface: map.surface, variant: map.variant,

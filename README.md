@@ -2,12 +2,12 @@
 
 UmaLytics opens a separate scouting window beside [Uma Drafter](https://drafter.uma.guide). See the players in team slots, their available ranked statistics, and the confirmed live draft.
 
-**0.5.1 — manual installation and updates.**
+**0.5.2 — manual installation and updates.**
 
 | Browser | Download |
 | --- | --- |
-| Chrome, Edge, Brave, Opera GX | [Chromium download](https://github.com/skimuic/UmaLytics/releases/tag/v0.5.1) |
-| Firefox / LibreWolf | [Firefox download](https://github.com/skimuic/UmaLytics/releases/tag/v0.5.1) — temporary installation |
+| Chrome, Edge, Brave, Opera GX | [Chromium download](https://github.com/skimuic/UmaLytics/releases/tag/v0.5.2) |
+| Firefox / LibreWolf | [Firefox download](https://github.com/skimuic/UmaLytics/releases/tag/v0.5.2) — temporary installation |
 
 [Install or update](docs/INSTALL.md) · [Changes](CHANGELOG.md) · [Privacy](PRIVACY.md) · [Report a bug](https://github.com/kjunodev/umalytics/issues/new?template=bug_report.md)
 

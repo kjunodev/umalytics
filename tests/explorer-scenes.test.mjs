@@ -135,7 +135,8 @@ test('the races column orders races 1..N first, then the tiebreaker card, then t
 });
 
 test('the played/new chip renders as its own line under the pick name, not layered over the portrait', () => {
-  const c = vm.createContext({element:(type,props,...children)=>({type,props,children}),UmaImage:'Image',getUmaPortraitUrl:id=>`portrait/${id}`,isKnownUmaOutfitId:()=>false});
+  const c = vm.createContext({element:(type,props,...children)=>({type,props,children}),UmaImage:'Image',getUmaPortraitUrl:id=>`portrait/${id}`,isHashedUmaAssetUrl:()=>false});
+  loadFunction(c, draftSyntax, 'getDraftActionImageUrl');
   loadFunction(c, draftSyntax, 'DraftPickTile');
   const result = c.DraftPickTile({action:{umaId:'100601',name:'Oguri'},experienceCount:3,isSelected:false,onSelect(){}});
   const button = result.children.find((child) => child?.type === 'button');
@@ -147,12 +148,14 @@ test('the played/new chip renders as its own line under the pick name, not layer
   assert.match(draftCss, /\.draft-pick-exp\s*\{(?:(?!position:\s*absolute)[^}])*\}/s, '.draft-pick-exp must not be absolutely positioned over the portrait');
 });
 
-test('Live and History pick tiles use identical known-outfit portraits regardless of captured image URL', () => {
-  const c = vm.createContext({element:(type,props,...children)=>({type,props,children}),UmaImage:'Image',getUmaPortraitUrl:id=>`portrait/${id}`,isKnownUmaOutfitId:id=>id==='100601'});
+test('pick tiles prefer the drafter image URL and fall back to the computed portrait', () => {
+  const c = vm.createContext({element:(type,props,...children)=>({type,props,children}),UmaImage:'Image',getUmaPortraitUrl:id=>`portrait/${id}`,isHashedUmaAssetUrl:url=>(url ?? '').includes('/assets/')});
+  loadFunction(c, draftSyntax, 'getDraftActionImageUrl');
   loadFunction(c, draftSyntax, 'DraftPickTile');
   const image = result => result.children.flatMap(child=>child?.children ?? []).flatMap(child=>child?.children ?? []).find(child=>child?.type==='Image').props.imageUrl;
   const render = action => c.DraftPickTile({action,experienceCount:0,isSelected:false,onSelect(){}});
-  assert.equal(image(render({umaId:'100601',name:'Oguri',imageUrl:'captured/other.png'})), 'portrait/100601');
-  assert.equal(image(render({umaId:'100601',name:'Oguri',imageUrl:'portrait/100601'})), 'portrait/100601');
+  assert.equal(image(render({umaId:'106802',name:'New Year Kitasan Black',imageUrl:'https://drafter.uma.guide/uma/chara_stand_1068_106810.webp'})), 'https://drafter.uma.guide/uma/chara_stand_1068_106810.webp');
+  assert.equal(image(render({umaId:'100601',name:'Oguri'})), 'portrait/100601');
+  assert.equal(image(render({umaId:'100601',name:'Oguri',imageUrl:'https://drafter.uma.guide/assets/100601-abc123.webp'})), 'portrait/100601');
   assert.equal(image(render({umaId:'unknown',name:'Future Uma',imageUrl:'future.png'})), 'future.png');
 });
