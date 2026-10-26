@@ -1,6 +1,6 @@
 {
   "name": "umalytics",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "private": true,
   "packageManager": "pnpm@9.15.4",
   "scripts": {
@@ -9,7 +9,8 @@
     "build:all": "node scripts/build-all.mjs",
     "package:release": "node scripts/package-release.mjs",
     "typecheck": "pnpm -r typecheck",
-    "test": "node --disable-warning=ExperimentalWarning --test tests/*.test.mjs"
+    "test": "node --disable-warning=ExperimentalWarning --test tests/*.test.mjs",
+    "sync:umas": "node scripts/sync-uma-data.mjs"
   },
   "devDependencies": {
     "typescript": "^5.7.2",

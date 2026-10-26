@@ -1,7 +1,7 @@
 import type { DraftMapSelection, DraftSnapshot, DraftUmaAction, PrematchPlayer, PrematchRoster, TeamId } from '@umalytics/shared';
 import type { HistoricalMatch, PlayerSearchResult } from './explorerTypes';
 import { normalizeMatchCode } from '../room/matchDetection';
-import { getUmaDisplayName, getUmaPortraitUrl, normalizeUmaOutfitId } from '../umas/umaPortraits';
+import { getUmaDisplayName, getUmaPortraitUrl, normalizeUmaOutfitId, resolveDrafterImageUrl } from '../umas/umaPortraits';
 
 const record = (value: unknown): Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : {};
 const rows = (value: unknown): Record<string, unknown>[] => Array.isArray(value) ? value.map(record) : [];
@@ -132,7 +132,7 @@ export function parseHistoricalMatch(value: unknown, requestedCode: string): His
         const umaId = id ? normalizeUmaOutfitId(id) : undefined;
         const fallback = [text(uma.title), text(uma.name)].filter(Boolean).join(' ') || 'Unknown Uma';
         const item: DraftUmaAction = { team, kind, umaId, name: umaId ? getUmaDisplayName(umaId, fallback) : fallback,
-          imageUrl: umaId ? getUmaPortraitUrl(umaId) : undefined };
+          imageUrl: resolveDrafterImageUrl(text(uma.imageUrl)) ?? (umaId ? getUmaPortraitUrl(umaId) : undefined) };
         target.umas.push(item);
       }
     }

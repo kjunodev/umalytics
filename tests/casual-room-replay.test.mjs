@@ -9,7 +9,7 @@ const ROOM = fixture.room;
 
 function context(globals = {}) {
   return vm.createContext({ console, URL, URLSearchParams, AbortController, DOMException, Headers, setTimeout, clearTimeout,
-    cleanTeamName: x => x, getUmaDisplayName: (id, name) => name ?? id, normalizeUmaOutfitId: x => x, ...globals });
+    cleanTeamName: x => x, getUmaDisplayName: (id, name) => name ?? id, normalizeUmaOutfitId: x => x, resolveDrafterImageUrl: x => x, ...globals });
 }
 function roomHarness() {
   const c = context();

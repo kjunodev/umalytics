@@ -140,3 +140,12 @@ test('room nickname maps override old display names without changing account ide
   const result=c.normalizePrematchPlayer(p,{participantNicknames:{'actor-one':'New nickname'}});
   assert.equal(result.displayName,'New nickname');assert.equal(result.discordId,p.discordId);
 });
+
+test('room-state Umas keep the drafter imageUrl so the right outfit art is shown',()=>{
+  const {state,c}=roomHarness();const event=matchEvent({phase:'complete'});
+  event.state.team1.pickedUmas=[{id:'106802',title:'New Year',name:'Kitasan Black',imageUrl:'/uma/chara_stand_1068_106810.webp'},{id:'106803',name:'Kitasan Black'}];
+  const result=state.apply(c.decodeRoomEvent('42'+JSON.stringify(['server:event',event])),'M95Z2Z');
+  const [newYear,anime]=result.draft.teams.team1.umas;
+  assert.equal(newYear.imageUrl,'/uma/chara_stand_1068_106810.webp');
+  assert.equal('imageUrl' in anime,false,'no drafter image means the computed portrait is used');
+});

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.2
+
+- Show the correct portraits for seasonal and alternate outfits, including New Year and Anime Kitasan Black.
+- Recognize the newest Umas, including Admire Groove, Halloween Air Groove and Claret Nosferatu Duramente.
+- Keep alternate outfits' statistics under the right outfit when a pick is read from its image.
+
 ## 0.5.1
 
 - Fit the header in narrow and display-scaled windows: it switches to a compact or two-row layout instead of wrapping, the menu always opens on-screen, and new installs pick a UI size that fits the window.
