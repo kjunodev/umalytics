@@ -6,8 +6,8 @@ UmaLytics opens a separate scouting window beside [Uma Drafter](https://drafter.
 
 | Browser | Download |
 | --- | --- |
-| Chrome, Edge, Brave, Opera GX | [Chromium download](https://github.com/skimuic/UmaLytics/releases/tag/v0.5.2) |
-| Firefox / LibreWolf | [Firefox download](https://github.com/skimuic/UmaLytics/releases/tag/v0.5.2) — temporary installation |
+| Chrome, Edge, Brave, Opera GX | [Chromium download](https://github.com/kjunodev/umalytics/releases/tag/v0.5.2) |
+| Firefox / LibreWolf | [Firefox download](https://github.com/kjunodev/umalytics/releases/tag/v0.5.2) — temporary installation |
 
 [Install or update](docs/INSTALL.md) · [Changes](CHANGELOG.md) · [Privacy](PRIVACY.md) · [Report a bug](https://github.com/kjunodev/umalytics/issues/new?template=bug_report.md)
 
@@ -45,6 +45,6 @@ Chromium behavior has been observed during a live ranked draft on the preceding 
 
 ## Development and feedback
 
-Built with TypeScript, React and WXT. [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) documents tests and reproducible builds. [skimuic/UmaLytics](https://github.com/skimuic/UmaLytics) and [kjunodev/umalytics](https://github.com/kjunodev/umalytics) host the same source and each publish releases.
+Built with TypeScript, React and WXT. [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) documents tests and reproducible builds. Source and releases live at [kjunodev/umalytics](https://github.com/kjunodev/umalytics).
 
 Bug reports should include the version, browser, expected/actual behavior and diagnostics copied soon after the problem. Review the report before posting: its status section can include player IDs, room codes and API error paths. Older download assets retain their original contents.

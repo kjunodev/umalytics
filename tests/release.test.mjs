@@ -6,7 +6,7 @@ import vm from 'node:vm';
 import {createHash} from 'node:crypto';
 const root=path.resolve('release-fixture');
 const source=fs.readFileSync(new URL('../scripts/publish-release.mjs',import.meta.url),'utf8').replace(/^import .*;\r?\n/gm,'').replace(/const root=.*;/,'');
-function run({invalidManifestName=false, existing, uploadFails=false, listFails=false, wrongTag=false, noTag=false, wrongSource=false, wrongVersion=false, repository='skimuic/UmaLytics', packageOnly=false, platform='linux', legacyNotes=false}={}) {
+function run({invalidManifestName=false, existing, uploadFails=false, listFails=false, wrongTag=false, noTag=false, wrongSource=false, wrongVersion=false, repository='kjunodev/umalytics', packageOnly=false, platform='linux', legacyNotes=false}={}) {
   const sha='a'.repeat(40), calls=[], logs=[], files=new Map(); let uploaded=false;
   const set=(file,value)=>files.set(path.join(root,file),typeof value==='string'?value:JSON.stringify(value));
   set('package.json',{version:'0.4.1'});
@@ -57,30 +57,33 @@ test('release requires notes when neither the new nor legacy path exists',()=>{
   const builds=['chromium','firefox'].map(family=>({family,path:path.join(root,'.releases/build/'+family)}));
   set('.releases/latest.json',{version:'0.4.1',builds});
   for(const b of builds){files.set(path.join(b.path,'manifest.json'),JSON.stringify({version:'0.4.1',name:'UmaLytics'}));files.set(path.join(b.path,'background.js') ,'display');}
-  const context={root,path,createHash,console:{log:message=>logs.push(message)},process:{argv:[],platform:'linux',env:{GITHUB_REPOSITORY:'skimuic/UmaLytics',GITHUB_SHA:sha,RELEASE_VERSION:'0.4.1'}},
+  const context={root,path,createHash,console:{log:message=>logs.push(message)},process:{argv:[],platform:'linux',env:{GITHUB_REPOSITORY:'kjunodev/umalytics',GITHUB_SHA:sha,RELEASE_VERSION:'0.4.1'}},
     fs:{readFileSync:file=>{if(!files.has(file))throw Error('Missing '+file);return files.get(file);},existsSync:file=>files.has(file),mkdirSync(){},writeFileSync:(file,value)=>files.set(file,value)},
     execFileSync:(cmd)=>{if(cmd==='git')return sha;throw Error('Unexpected call: '+cmd);}};
   let error;try{vm.runInNewContext(source,context);}catch(e){error=e;}
   assert.match(error.message,/Release notes are required/);
 });
-test('both release repositories publish to their own repository',()=>{
-  for(const repository of ['skimuic/UmaLytics','kjunodev/umalytics']) {
-    const r=run({repository});assert.equal(r.error,undefined);
-    const releaseCalls=r.calls.filter(c=>c[0]==='gh' && c[1]==='release');
-    assert(releaseCalls.some(c=>c[2]==='create'));
-    assert(releaseCalls.some(c=>c[2]==='edit'));
-    for(const call of releaseCalls) assert.equal(call[call.indexOf('--repo')+1],repository);
-    for(const call of r.calls.filter(c=>c[0]==='gh' && c[1]==='api')) assert(call[2].startsWith(`repos/${repository}/`));
-  }
+test('kjunodev/umalytics publishes to its own repository',()=>{
+  const repository='kjunodev/umalytics';
+  const r=run({repository});assert.equal(r.error,undefined);
+  const releaseCalls=r.calls.filter(c=>c[0]==='gh' && c[1]==='release');
+  assert(releaseCalls.some(c=>c[2]==='create'));
+  assert(releaseCalls.some(c=>c[2]==='edit'));
+  for(const call of releaseCalls) assert.equal(call[call.indexOf('--repo')+1],repository);
+  for(const call of r.calls.filter(c=>c[0]==='gh' && c[1]==='api')) assert(call[2].startsWith(`repos/${repository}/`));
+});
+
+test('the archived skimuic/UmaLytics repository can no longer publish',()=>{
+  const r=run({repository:'skimuic/UmaLytics'});assert.match(r.error.message,/Unexpected release repository/);assert.equal(r.calls.length,0);
 });
 
 test('release rejects repositories outside the allowlist before any commands',()=>{
   const r=run({repository:'example/umalytics'});assert.match(r.error.message,/Unexpected release repository/);assert.equal(r.calls.length,0);
 });
 
-test('release workflow allows both repositories on main with write permission',()=>{
+test('release workflow allows only kjunodev/umalytics on main with write permission',()=>{
   const workflow=fs.readFileSync(new URL('../.github/workflows/release.yml',import.meta.url),'utf8');
-  assert(workflow.includes("if: (github.repository == 'skimuic/UmaLytics' || github.repository == 'kjunodev/umalytics') && github.ref == 'refs/heads/main'"));
+  assert(workflow.includes("if: github.repository == 'kjunodev/umalytics' && github.ref == 'refs/heads/main'"));
   assert.match(workflow,/permissions:\s*\n\s+contents: write/);
   assert(workflow.includes('tag="v${version}"'));
 });
