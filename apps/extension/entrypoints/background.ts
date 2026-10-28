@@ -87,6 +87,7 @@ let selectedStatsScope: 'currentSeason' | 'allTime' = 'currentSeason';
 interface EnrichmentOptions { forceRefresh?: boolean; recoveryAttempt?: number }
 let pendingRecovery: ProfileRecovery | undefined;
 let recoveryWrites = Promise.resolve();
+let recoveryTimer: ReturnType<typeof setTimeout> | undefined;
 let initialization = Promise.resolve();
 const historyRequests = new Map<string, AbortController>();
 const profileTitleRequests = new Map<string, AbortController>();
@@ -613,6 +614,7 @@ function getEnrichmentKey(roster: PrematchRoster): string {
 
 function persistProfileRecovery(): Promise<void> {
   const value = pendingRecovery;
+  scheduleRecoveryTimer(value);
   const write = recoveryWrites.then(async () => {
     if (value === undefined) await browser.storage.local.remove(RECOVERY_STORAGE_KEY);
     else await browser.storage.local.set({ [RECOVERY_STORAGE_KEY]: value });
@@ -621,6 +623,20 @@ function persistProfileRecovery(): Promise<void> {
   });
   recoveryWrites = write.catch(reportEnrichmentError);
   return write;
+}
+
+// Chrome fires alarms no sooner than 30 s after they are set, but a 5xx or a
+// short Retry-After can make retryAt (shown on the cards) earlier. While the
+// worker is alive, a timer runs the retry on time; the alarm is the backstop
+// for a worker that stopped, and finds nothing due once the timer has run.
+function scheduleRecoveryTimer(recovery: ProfileRecovery | undefined): void {
+  if (recoveryTimer !== undefined) clearTimeout(recoveryTimer);
+  recoveryTimer = undefined;
+  if (recovery === undefined || recovery.exhausted) return;
+  recoveryTimer = setTimeout(() => {
+    recoveryTimer = undefined;
+    void initialization.then(resumeProfileRecovery).catch(reportEnrichmentError);
+  }, Math.max(0, recovery.retryAt - Date.now()));
 }
 
 async function restoreProfileRecovery(): Promise<void> {
