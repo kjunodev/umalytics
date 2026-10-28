@@ -242,3 +242,39 @@ export function checkTeamIconTooltip({ boundsSelector, siblingSelector, baseline
   }
   return { failures, width: box.width, containerWidth: bounds.width, side: tooltip.dataset.side };
 }
+
+// Runs in the page. The Umas scene fills the window below the header: no page
+// overflow unless the window is too short to give the scene its minimum
+// height, the catalog grid (and only it) scrolls, and after scrolling the grid
+// to the end the detail panel is still in view. Measured in viewport px, so
+// root zoom is included; the floor is in layout px (times the UI scale).
+export function checkUmasScene({ floor }) {
+  const tolerance = 1.5;
+  const failures = [];
+  const scale = { small: 0.875, default: 1, large: 1.15 }[document.documentElement.dataset.uiSize];
+  const root = document.documentElement;
+  const grid = document.querySelector('.uma-catalog-grid');
+  const detail = document.querySelector('.uma-detail-panel');
+  const sceneEl = document.querySelector('.umas-scene');
+  if (!grid || !detail || !sceneEl) return { failures: ['Umas scene is missing its grid or detail panel'] };
+  const scene = sceneEl.getBoundingClientRect();
+  const windowHeight = window.innerHeight;
+  // The scene is unclamped when it, the floor and the shell's bottom padding fit.
+  const fits = scene.top + floor * scale + 22 * scale <= windowHeight + tolerance;
+  const overflow = root.scrollHeight - root.clientHeight;
+  const result = { fits, overflow: Number(overflow.toFixed(1)), gridClient: grid.clientHeight, gridScroll: grid.scrollHeight };
+  if (fits && overflow > tolerance) failures.push(`Page scrolls ${overflow.toFixed(1)}px although the window is tall enough`);
+  if (!fits && scene.height < floor * scale - tolerance) failures.push(`Scene is ${(scene.height / scale).toFixed(1)}px, under its ${floor}px minimum`);
+  if (grid.scrollHeight <= grid.clientHeight + tolerance) failures.push('Catalog grid does not scroll');
+  const catalog = document.querySelector('.uma-catalog-panel').getBoundingClientRect();
+  if (Math.abs(catalog.height - detail.getBoundingClientRect().height) > tolerance) failures.push('Catalog and detail panels differ in height');
+  const toolbar = () => document.querySelector('.uma-catalog-toolbar').getBoundingClientRect().top;
+  const toolbarTop = toolbar();
+  const pageY = window.scrollY;
+  grid.scrollTop = grid.scrollHeight;
+  const detailTop = detail.getBoundingClientRect().top;
+  if (Math.abs(toolbar() - toolbarTop) > tolerance || window.scrollY !== pageY) failures.push('Scrolling the catalog moved the page or toolbar');
+  if (detailTop < -tolerance || detailTop > windowHeight - 40) failures.push(`Detail panel top ${detailTop.toFixed(1)} is outside the viewport after scrolling the catalog`);
+  grid.scrollTop = 0;
+  return { ...result, failures };
+}

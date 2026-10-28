@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import './umas.css';
 import type { DraftUmaAction, PlayerProfileSummary, PlayerStatsScope, PrematchPlayer, PrematchRoster, PrematchTeam, TeamId } from '@umalytics/shared';
 import { missingUmaHistoryLabel } from '../../profiles/profileAvailability';
@@ -75,6 +75,19 @@ export function UmasScene({
     }
   }, [filteredCatalog, selectedUmaId]);
 
+  // Keep the selected tile visible inside the grid (it is the only thing that
+  // scrolls). Adjusts the grid itself, never the page.
+  const gridRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const grid = gridRef.current;
+    const tile = grid?.querySelector<HTMLElement>('.uma-catalog-button.selected');
+    if (grid === null || tile === null || tile === undefined) return;
+    const gridBox = grid.getBoundingClientRect();
+    const tileBox = tile.getBoundingClientRect();
+    if (tileBox.top < gridBox.top) grid.scrollTop -= gridBox.top - tileBox.top + 8;
+    else if (tileBox.bottom > gridBox.bottom) grid.scrollTop += tileBox.bottom - gridBox.bottom + 8;
+  }, [selectedUma?.umaId, filteredCatalog]);
+
   return (
     <section className="umas-scene" aria-label="Uma planner">
       <div className="umas-layout">
@@ -126,7 +139,7 @@ export function UmasScene({
               <span>Try a different search.</span>
             </div>
           ) : (
-            <div className="uma-catalog-grid">
+            <div className="uma-catalog-grid" ref={gridRef}>
               {filteredCatalog.map((uma) => (
                 <UmaCatalogButton
                   key={uma.umaId}

@@ -1,7 +1,8 @@
 {
   "name": "umalytics",
-  "version": "0.5.2",
+  "version": "0.5.3",
   "private": true,
+  "license": "MIT",
   "packageManager": "pnpm@9.15.4",
   "scripts": {
     "dev": "pnpm --filter @umalytics/extension dev",
