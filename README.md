@@ -45,6 +45,6 @@ Chromium behavior has been observed during a live ranked draft on the preceding 
 
 ## Development and feedback
 
-Built with TypeScript, React and WXT. [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) documents tests and reproducible builds. Source and releases live at [kjunodev/umalytics](https://github.com/kjunodev/umalytics).
+Built with TypeScript, React and WXT. [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) documents tests and reproducible builds. Source and releases live at [kjunodev/umalytics](https://github.com/kjunodev/umalytics). Licensed under the [MIT License](LICENSE).
 
 Bug reports should include the version, browser, expected/actual behavior and diagnostics copied soon after the problem. Review the report before posting: its status section can include player IDs, room codes and API error paths. Older download assets retain their original contents.
