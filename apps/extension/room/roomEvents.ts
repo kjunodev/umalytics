@@ -31,7 +31,7 @@ export function decodeRoomEvent(payload: unknown): RoomRecord | null {
     const state = event.state;
     if (!roomRecord(state.team1) || !roomRecord(state.team2) || typeof state.phase !== 'string') return null;
     return { ...base, version: event.version, state: {
-      phase: state.phase.slice(0,40), currentTeam: state.currentTeam,
+      phase: state.phase.slice(0,40), currentTeam: isRoomTeam(state.currentTeam) ? state.currentTeam : undefined,
       team1: cleanDraftTeam(state.team1), team2: cleanDraftTeam(state.team2),
       wildcardMap: cleanItem(state.wildcardMap), rules: cleanRules(state.rules),
       multiplayer: cleanMultiplayer(state.multiplayer)
@@ -41,7 +41,7 @@ export function decodeRoomEvent(payload: unknown): RoomRecord | null {
     if (!isRoomTeam(event.team) || !Number.isSafeInteger(event.revision) || event.revision < 0 || !Array.isArray(event.roster)) return null;
     return { ...base, team: event.team, revision: event.revision, roster: cleanPlayers(event.roster) };
   }
-  if (event.type === 'room.captain.changed') return { ...base, team: event.team,
+  if (event.type === 'room.captain.changed') return { ...base, team: isRoomTeam(event.team) ? event.team : undefined,
     captainActorUserId: typeof event.captainActorUserId === 'string' ? event.captainActorUserId.slice(0,100) : undefined };
   return { ...base, ...(Array.isArray(event.participants) ? { participants: cleanPlayers(event.participants) } : {}),
     ...(Array.isArray(event.rankedQueueRoster) ? { rankedQueueRoster: cleanPlayers(event.rankedQueueRoster) } : {}) };
