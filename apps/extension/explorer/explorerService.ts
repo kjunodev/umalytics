@@ -3,7 +3,7 @@ import type { PlayerProfileSummary, PrematchPlayer } from '@umalytics/shared';
 import { fetchJson, getApiCooldown } from '../profiles/apiClient';
 import { fetchPlayerProfileSummaries, getSeasonLeaderboard } from '../profiles/playerProfileApi';
 import { getCachedPlayerProfiles, rememberCachedPlayerProfiles } from '../storage/profileStorage';
-import { BEST_UMA_SCORE_VERSION, PROFILE_CACHE_TTL_MS, RECENT_HISTORY_VERSION } from '../profiles/profileConstants';
+import { isFreshProfile } from '../profiles/profileCache';
 import { mergeProfileScopes } from '../profiles/profileMerge';
 import { lookupPlayer, parseHistoricalMatch, parseHistoryInput, parsePlayerInput, parsePlayerSearch } from './explorerData';
 import { EXPLORER_PORT, type ExplorerRequest, type ExplorerReply, type ExplorerResult } from './explorerTypes';
@@ -47,12 +47,10 @@ export async function executeExplorerRequest(request: ExplorerRequest, signal: A
   const profiles: Record<string, PlayerProfileSummary> = {};
   const archive = await getCachedPlayerProfiles();
   signal.throwIfAborted();
+  const now = Date.now();
   const pending = request.players.filter(player => {
     const cached = archive[player.discordId];
-    if (cached && !cached.error && !cached.isPartial &&
-      (cached.scopeFetchedAt?.[request.scope] !== undefined || cached.statsScope === request.scope) &&
-      cached.bestUmaScoreVersion === BEST_UMA_SCORE_VERSION && cached.recentHistoryVersion === RECENT_HISTORY_VERSION &&
-      Date.now() - (cached.scopeFetchedAt?.[request.scope] ?? cached.fetchedAt) < PROFILE_CACHE_TTL_MS) {
+    if (cached !== undefined && isFreshProfile(cached, request.scope, now)) {
       profiles[player.discordId] = cached;
       return false;
     }

@@ -118,14 +118,6 @@ function getRetainedProfiles(
   );
 }
 
-function hasCurrentStatsShape(profile: PlayerProfileSummary): boolean {
-  return (
-    profile.currentSeasonStats !== undefined &&
-    profile.allTimeStats !== undefined &&
-    Array.isArray(profile.allTimeStats.allUmas)
-  );
-}
-
 export {
   MAX_AUTOMATIC_RETRIES,
   buildProfileLoadStates,
@@ -136,6 +128,5 @@ export {
   getRetainedProfiles,
   markProfilesForRecovery,
   getLoadingDiscordIds,
-  isPendingProfileState,
-  hasCurrentStatsShape
+  isPendingProfileState
 };

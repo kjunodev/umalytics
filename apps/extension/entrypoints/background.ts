@@ -3,7 +3,7 @@ import { mergeProfileScopes } from '../profiles/profileMerge';
 import { registerExplorerService } from '../explorer/explorerService';
 import { normalizeRosterForDisplay } from '../room/rosterDisplay';
 import { browser } from 'wxt/browser';
-import type { PlayerProfileSummary, PrematchPlayer, PrematchRoster } from '@umalytics/shared';
+import type { PlayerProfileSummary, PlayerStatsScope, PrematchPlayer, PrematchRoster } from '@umalytics/shared';
 import {
   isUmaLyticsMessage,
   type LobbyReconnectResult
@@ -24,12 +24,10 @@ import {
 } from '../storage/profileStorage';
 import type { PlayerProfileLoadState } from '../profiles/profileTypes';
 import {
-  BEST_UMA_SCORE_VERSION,
   MANUAL_PROFILE_REFRESH_COOLDOWN_MS,
-  NEWCOMER_MAX_ALL_TIME_MATCHES,
-  PROFILE_CACHE_TTL_MS,
-  RECENT_HISTORY_VERSION
+  NEWCOMER_MAX_ALL_TIME_MATCHES
 } from '../profiles/profileConstants';
+import { isFreshProfile } from '../profiles/profileCache';
 import { getLatestDraftSnapshot, clearLatestDraftSnapshot, setLatestDraftSnapshot } from '../storage/draftStorage';
 import {
   clearLatestPrematchRoster,
@@ -44,7 +42,6 @@ import {
   buildCompletedProfileState,
   getLoadingDiscordIds,
   getRetainedProfiles,
-  hasCurrentStatsShape,
   hasUsableProfileStats,
   isPendingProfileState,
   markProfilesForRecovery,
@@ -343,7 +340,7 @@ async function handleProfileRefreshRequested(roster: PrematchRoster): Promise<vo
   // run, so do not record a cooldown for a refresh that never ran.
   const displayed = normalizeRosterForDisplay(roster);
   if (displayed !== undefined && activeEnrichment?.finishedAt === undefined &&
-      activeEnrichment?.key === getEnrichmentKey(displayed)) return;
+      activeEnrichment?.key === getEnrichmentKey(displayed, selectedStatsScope)) return;
   lastManualRefreshAt = Date.now();
   await browser.storage.local.set({ profileManualRefreshAt: lastManualRefreshAt });
   void enrichRosterProfiles(roster, { forceRefresh: true }).catch(reportEnrichmentError);
@@ -364,8 +361,10 @@ function enrichRosterProfiles(
 ): Promise<void> {
   void queueTeamIconRefresh();
   roster = normalizeRosterForDisplay(roster)!;
+  // The run keeps the scope it started with; a scope change starts a new run.
+  const scope = selectedStatsScope;
   // Membership controls fetching; team/name/phase changes only update the roster.
-  const key = getEnrichmentKey(roster);
+  const key = getEnrichmentKey(roster, scope);
   if (activeEnrichment?.key === key && (activeEnrichment.finishedAt === undefined ||
       (options.forceRefresh !== true && options.recoveryAttempt === undefined && Date.now() - activeEnrichment.finishedAt < 10_000))) {
     return activeEnrichment.promise;
@@ -375,7 +374,7 @@ function enrichRosterProfiles(
   const runId = ++enrichmentRunId;
   const run = { key, controller, promise: Promise.resolve(), finishedAt: undefined as number | undefined };
   activeEnrichment = run;
-  run.promise = performRosterEnrichment(roster, options, runId, controller.signal).finally(() => {
+  run.promise = performRosterEnrichment(roster, scope, key, options, runId, controller.signal).finally(() => {
     run.finishedAt = Date.now();
   });
   return run.promise;
@@ -383,12 +382,12 @@ function enrichRosterProfiles(
 
 async function performRosterEnrichment(
   roster: PrematchRoster,
+  scope: PlayerStatsScope,
+  key: string,
   options: EnrichmentOptions,
   runId: number,
   signal: AbortSignal
 ): Promise<void> {
-  const scope = selectedStatsScope;
-  const key = getEnrichmentKey(roster);
   if (pendingRecovery !== undefined && pendingRecovery.key !== key) {
     pendingRecovery = undefined;
     await persistProfileRecovery();
@@ -403,7 +402,7 @@ async function performRosterEnrichment(
   const cachedProfiles = { ...cachedArchive, ...cachedSnapshot?.profiles };
   const rosterDiscordIds = [...new Set(roster.players.map((player) => player.discordId))];
   const lookupDiscordIds = rosterDiscordIds.filter(isDiscordSnowflake);
-  const freshProfiles = getFreshProfiles(cachedProfiles, rosterDiscordIds, now);
+  const freshProfiles = getFreshProfiles(cachedProfiles, rosterDiscordIds, scope, now);
   const retainedProfiles = getRetainedProfiles(cachedProfiles, freshProfiles, rosterDiscordIds);
   const missingDiscordIds = lookupDiscordIds.filter(
     (discordId) => options.forceRefresh === true || freshProfiles[discordId] === undefined
@@ -615,8 +614,8 @@ async function fetchNewcomerAllTimeStats(
   }));
 }
 
-function getEnrichmentKey(roster: PrematchRoster): string {
-  return JSON.stringify([selectedStatsScope, roster.matchCode, [...new Set(roster.players.map(player => player.discordId))].sort()]);
+function getEnrichmentKey(roster: PrematchRoster, scope: PlayerStatsScope): string {
+  return JSON.stringify([scope, roster.matchCode, [...new Set(roster.players.map(player => player.discordId))].sort()]);
 }
 
 function persistProfileRecovery(): Promise<void> {
@@ -662,7 +661,7 @@ async function resumeProfileRecovery(): Promise<void> {
   const lock = await getLobbyLockState();
   const roster = normalizeRosterForDisplay(lock?.locked ? lock.roster : await getLatestPrematchRoster());
   if (pendingRecovery !== recovery) return;
-  if (roster === undefined || getEnrichmentKey(roster) !== recovery.key) {
+  if (roster === undefined || getEnrichmentKey(roster, selectedStatsScope) !== recovery.key) {
     pendingRecovery = undefined;
     await persistProfileRecovery();
     return;
@@ -692,25 +691,12 @@ async function writeProfileSnapshot(
 function getFreshProfiles(
   cachedProfiles: Record<string, PlayerProfileSummary>,
   discordIds: string[],
+  scope: PlayerStatsScope,
   now: number
 ): Record<string, PlayerProfileSummary> {
   return Object.fromEntries(
     discordIds
       .map((discordId) => [discordId, cachedProfiles[discordId]] as const)
-      .filter((entry): entry is readonly [string, PlayerProfileSummary] => {
-        const profile = entry[1];
-
-        return (
-          profile !== undefined &&
-          profile.error === undefined &&
-          profile.isPartial !== true &&
-          now - (profile.scopeFetchedAt === undefined ? profile.fetchedAt : profile.scopeFetchedAt[selectedStatsScope] ?? 0) < PROFILE_CACHE_TTL_MS &&
-          hasCurrentStatsShape(profile) &&
-          profile.bestUmaScoreVersion === BEST_UMA_SCORE_VERSION &&
-          profile.recentHistoryVersion === RECENT_HISTORY_VERSION &&
-          profile.currentSeasonStats?.recentHistoryVersion === RECENT_HISTORY_VERSION &&
-          profile.allTimeStats?.recentHistoryVersion === RECENT_HISTORY_VERSION
-        );
-      })
+      .filter((entry): entry is readonly [string, PlayerProfileSummary] => isFreshProfile(entry[1], scope, now))
   );
 }

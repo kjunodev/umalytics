@@ -60,7 +60,7 @@ test('newcomer badge support: no all-time request when the lobby itself is alrea
 test('a roster missing team2 loads with the settling wait',async()=>{
   const h=backgroundHarness();const incomplete=roster('ROOM01',10);
   incomplete.teams={team1:{id:'team1',players:incomplete.players.slice(0,5)}};
-  const pending=h.c.performRosterEnrichment(incomplete,{},0,new AbortController().signal);
+  const pending=h.c.performRosterEnrichment(incomplete,'currentSeason',h.c.getEnrichmentKey(incomplete,'currentSeason'),{},0,new AbortController().signal);
   await waitUntil(()=>h.fetches.length===1);
   assert.equal(h.fetches[0].options.rosterComplete,false);
   h.fetches[0].gate.resolve();await pending;
@@ -190,6 +190,16 @@ test('a lobby run writes the profile archive once, not after every player summar
   assert.equal(archiveWrites.length-writesBeforeFetch,1,`archive writes after fetching: ${archiveWrites.slice(writesBeforeFetch)}`);
   assert.equal(archiveWrites.at(-1),10,'the single write carries every player');
   assert.equal(Object.keys(await h.c.getCachedPlayerProfiles()).length,10);
+});
+
+test('freshness is judged for the scope the run started with, even if the scope changes mid-run',async()=>{
+  const api=apiHarness();const profiles=await api.c.fetchPlayerProfileSummaries(players(),{scope:'currentSeason'});
+  const h=backgroundHarness();
+  h.c.getPlayerProfileSummaries=async()=>{vm.runInContext("selectedStatsScope = 'allTime'",h.c);return {profiles};};
+  let finished=false;const run=h.c.enrichRosterProfiles(roster()).finally(()=>{finished=true;});
+  await waitUntil(()=>finished||h.fetches.length>0);
+  for(const fetch of h.fetches) fetch.gate.resolve();await run;
+  assert.equal(h.fetches.length,0,'season profiles fetched moments ago are fresh for the season run');
 });
 
 test('manual refresh cooldown survives restart and is not extended by roster updates',async()=>{

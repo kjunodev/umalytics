@@ -38,7 +38,10 @@ test('a failed archive read is retried instead of failing every later lookup',as
 test('scope merge retains timestamps, and an unfetched scope is not considered fresh',()=>{
   const h=backgroundHarness();const p={discordId:players(1)[0].discordId,fetchedAt:h.now,error:undefined,bestUmaScoreVersion:17,recentHistoryVersion:6,
     currentSeasonStats:{allUmas:[],recentHistoryVersion:6},allTimeStats:{allUmas:[],matches:4,recentHistoryVersion:6},scopeFetchedAt:{allTime:h.now}};
-  assert.equal(Object.keys(h.c.getFreshProfiles({[p.discordId]:p},[p.discordId],h.now)).length,0);
+  assert.equal(Object.keys(h.c.getFreshProfiles({[p.discordId]:p},[p.discordId],'currentSeason',h.now)).length,0);
+  assert.equal(Object.keys(h.c.getFreshProfiles({[p.discordId]:p},[p.discordId],'allTime',h.now)).length,1,'the fetched scope is fresh');
+  assert.equal(h.c.isFreshProfile({...p,scopeFetchedAt:undefined,statsScope:'currentSeason'},'allTime',h.now),false,
+    'an older profile without per-scope times is fresh only for the scope it was fetched in');
   const merged=h.c.mergeProfileScopes(p,{...p,scopeFetchedAt:{currentSeason:h.now+100},allTimeStats:{allUmas:[]}});
   assert.equal(merged.allTimeStats.matches,4);assert.equal(merged.scopeFetchedAt.allTime,h.now);
   assert.equal(merged.scopeFetchedAt.currentSeason,h.now+100);
