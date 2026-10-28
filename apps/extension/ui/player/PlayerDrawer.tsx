@@ -110,10 +110,11 @@ export function PlayerDrawer({
   const [historyState, setHistoryState] = useState<HistoryState>({ key: historyKey, pagerPage: 0, apiPages: {}, loading: false });
   const historyLoaded = historyState.key === historyKey && historyState.pagerPage > 0;
   const historyFirstApiPage = historyState.apiPages[1];
+  // History is display-only: badges come from the history-free profile.
+  const notableBadges = getNotableBadges(displayedProfile);
   const detailProfile = historyLoaded && historyFirstApiPage !== undefined
     ? withDetailHistory(displayedProfile, historyFirstApiPage.matches, historyFirstApiPage.total, historyFirstApiPage.summary)
     : displayedProfile;
-  const notableBadges = getNotableBadges(detailProfile);
   const last5 = historyLoaded ? (detailProfile?.recentMatches ?? []).slice(0, 5) : [];
   const knownTitle = typeof profile?.title === 'string' && profile.title.length > 0 ? profile.title : undefined;
   const [fetchedTitle, setFetchedTitle] = useState<{ discordId: string; title: string | null } | undefined>(undefined);

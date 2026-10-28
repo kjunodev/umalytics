@@ -255,11 +255,12 @@ function buildNewcomerBadge(allTimeMatches: number): NotableBadge {
   };
 }
 
+// Ranked Uma lists only. Match history is display-only and never decides
+// privacy, card state or badges.
 export function hasDisplayableProfileLists(profile: PlayerProfileSummary | undefined): boolean {
   return (
     (profile?.topUmas?.length ?? 0) > 0 ||
     (profile?.bestUmas?.length ?? 0) > 0 ||
-    (profile?.allUmas?.length ?? 0) > 0 ||
-    (profile?.recentMatches?.length ?? 0) > 0
+    (profile?.allUmas?.length ?? 0) > 0
   );
 }
