@@ -515,8 +515,11 @@ async function performRosterEnrichment(
             Date.now()
           );
 
+          // The archive is written once per run (below), not per player: each
+          // write rewrites the whole archive and fans out to storage listeners.
+          // Until then the room snapshot holds these profiles, and the next
+          // run moves that snapshot into the archive before replacing it.
           await publish();
-          await rememberCachedPlayerProfiles({ [summary.discordId]: profilesByDiscordId[summary.discordId]! });
         }
       }
     );
@@ -535,14 +538,13 @@ async function performRosterEnrichment(
     }
 
     await publish();
-    await rememberCachedPlayerProfiles(profilesByDiscordId);
 
     if (scope === 'currentSeason') {
       await fetchNewcomerAllTimeStats(roster.players, profilesByDiscordId, signal);
       if (signal.aborted || runId !== enrichmentRunId) return;
       await publish();
-      await rememberCachedPlayerProfiles(profilesByDiscordId);
     }
+    await rememberCachedPlayerProfiles(profilesByDiscordId);
   } catch (caught) {
     if (signal.aborted || runId !== enrichmentRunId) {
       return;

@@ -176,6 +176,22 @@ test('a refresh pressed while the same roster is still loading does not start th
   h.fetches[1].gate.resolve();await tick();
 });
 
+test('a lobby run writes the profile archive once, not after every player summary',async()=>{
+  const h=backgroundHarness();const archiveWrites=[];const remember=h.c.rememberCachedPlayerProfiles;
+  h.c.rememberCachedPlayerProfiles=async profiles=>{archiveWrites.push(Object.keys(profiles).length);return remember(profiles);};
+  const run=h.c.enrichRosterProfiles(roster('ROOM01',10));await tick();
+  const writesBeforeFetch=archiveWrites.length;
+  const fetch=h.fetches[0];const summaries={};
+  for(const player of fetch.players) {
+    summaries[player.discordId]=summaryFor(player,{fetchedAt:h.now,matches:40,currentSeasonStats:{matches:40},allTimeStats:{matches:40}});
+    await fetch.options.onSummary(summaries[player.discordId]);
+  }
+  fetch.gate.resolve(summaries);await run;
+  assert.equal(archiveWrites.length-writesBeforeFetch,1,`archive writes after fetching: ${archiveWrites.slice(writesBeforeFetch)}`);
+  assert.equal(archiveWrites.at(-1),10,'the single write carries every player');
+  assert.equal(Object.keys(await h.c.getCachedPlayerProfiles()).length,10);
+});
+
 test('manual refresh cooldown survives restart and is not extended by roster updates',async()=>{
   const stored={profileManualRefreshAt:Date.now()}; const h=backgroundHarness({stored});
   await h.c.restoreManualRefresh(); await h.c.handleProfileRefreshRequested(roster());
