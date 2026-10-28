@@ -1,8 +1,6 @@
 import { decodeRoomEvent, RoomEventState, summarizeRoomEvent } from '../room/roomEvents';
 import { canReuseSyncedRoster } from '../room/rosterIdentity';
 import { browser } from 'wxt/browser';
-import { injectScript } from '#imports';
-import type { ScriptPublicPath } from '#imports';
 import type { DraftSnapshot, PrematchRoster } from '@umalytics/shared';
 import { extractMatchCodeFromUrl } from '../room/matchDetection';
 import {
@@ -24,7 +22,6 @@ import { extractPrematchRosterFromSyncedDraftState } from '../room/playerExtract
 import { isRecord } from '../room/recordReaders';
 
 const SYNCED_DRAFT_STATE_MESSAGE_TYPE = 'umalytics:synced-draft-state';
-const PAGE_HOOK_SCRIPT_PATH = '/pageHook.js' as ScriptPublicPath;
 const CONTENT_SCRIPT_CLEANUP_KEY = '__umalyticsContentScriptCleanup';
 const ROOM_DOM_SCAN_DEBOUNCE_MS = 100;
 const ROOM_DOM_RETRY_DELAYS_MS = [250, 1_000, 2_500, 5_000, 10_000, 20_000] as const;
@@ -55,7 +52,7 @@ let isContentScriptActive = true;
 export default defineContentScript({
   matches: ['https://drafter.uma.guide/*'],
   runAt: 'document_start',
-  async main() {
+  main() {
     const pageWindow = window as UmaLyticsWindow;
     const previousCleanup = pageWindow[CONTENT_SCRIPT_CLEANUP_KEY];
 
@@ -78,18 +75,9 @@ export default defineContentScript({
 
     installRoomDomObserver();
     scheduleRoomDomRetries();
-
-    try {
-      await injectScript(PAGE_HOOK_SCRIPT_PATH, { keepInDom: true });
-      requestCapturedRoomEvents();
-    } catch (caught) {
-      if (isExtensionContextInvalidatedError(caught)) {
-        deactivateContentScript();
-        return;
-      }
-
-      throw caught;
-    }
+    // The page hook is a separate MAIN-world content script (roomHook.content),
+    // installed at document start. Ask it to replay anything it already captured.
+    requestCapturedRoomEvents();
   }
 });
 
