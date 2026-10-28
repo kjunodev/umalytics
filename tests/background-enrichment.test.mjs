@@ -162,6 +162,20 @@ test('unchanged warm rosters do not republish profiles or reset their age across
   assert.equal(h.snapshots.at(-1).matchCode,'NEXT01'); assert.equal(h.fetches.length,0);
 });
 
+test('a refresh pressed while the same roster is still loading does not start the 20 s cooldown',async()=>{
+  const h=backgroundHarness();const first=h.c.enrichRosterProfiles(roster());await tick();
+  assert.equal(h.fetches.length,1);
+  await h.c.handleProfileRefreshRequested(roster());await tick();
+  assert.equal(h.fetches.length,1,'the in-flight run continues');
+  assert.equal(h.stored.profileManualRefreshAt,undefined,'no cooldown is recorded for a refresh that did not run');
+  h.fetches[0].gate.resolve();await first;
+  h.advance(1000);
+  await h.c.handleProfileRefreshRequested(roster());await tick();
+  assert.equal(h.fetches.length,2,'refresh works as soon as the run finishes');
+  assert.equal(h.fetches[1].players.length,5);assert.equal(h.stored.profileManualRefreshAt,h.now);
+  h.fetches[1].gate.resolve();await tick();
+});
+
 test('manual refresh cooldown survives restart and is not extended by roster updates',async()=>{
   const stored={profileManualRefreshAt:Date.now()}; const h=backgroundHarness({stored});
   await h.c.restoreManualRefresh(); await h.c.handleProfileRefreshRequested(roster());

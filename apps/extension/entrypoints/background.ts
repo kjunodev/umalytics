@@ -339,6 +339,11 @@ async function handleProfileRefreshRequested(roster: PrematchRoster): Promise<vo
   if (Date.now() - lastManualRefreshAt < MANUAL_PROFILE_REFRESH_COOLDOWN_MS) {
     return;
   }
+  // The same roster is still loading: enrichRosterProfiles would return that
+  // run, so do not record a cooldown for a refresh that never ran.
+  const displayed = normalizeRosterForDisplay(roster);
+  if (displayed !== undefined && activeEnrichment?.finishedAt === undefined &&
+      activeEnrichment?.key === getEnrichmentKey(displayed)) return;
   lastManualRefreshAt = Date.now();
   await browser.storage.local.set({ profileManualRefreshAt: lastManualRefreshAt });
   void enrichRosterProfiles(roster, { forceRefresh: true }).catch(reportEnrichmentError);
