@@ -14,7 +14,7 @@
     "sync:umas": "node scripts/sync-uma-data.mjs"
   },
   "devDependencies": {
-    "typescript": "^5.7.2",
+    "typescript": "^7.0.2",
     "linkedom": "0.18.13"
   },
   "engines": {

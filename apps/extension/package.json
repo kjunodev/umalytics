@@ -24,7 +24,7 @@
     "@vitejs/plugin-react": "^4",
     "@wxt-dev/module-react": "^1.2.2",
     "playwright": "^1.48.0",
-    "typescript": "^5.7.2",
+    "typescript": "^7.0.2",
     "vite": "^6",
     "wxt": "^0.20.27"
   }
