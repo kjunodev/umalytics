@@ -6,7 +6,7 @@ import type { HistoricalMatch } from '../../explorer/explorerTypes';
 import { mergeExplorerProfiles } from '../../explorer/explorerState';
 
 type Profiles = Record<string, PlayerProfileSummary>;
-type HistoryScene = ComponentType<{ snapshot: DraftSnapshot; roster: PrematchRoster; profiles: Profiles; statsScope: PlayerStatsScope; scene: 'lobby' | 'draft' | 'umas'; loading: boolean; navigation: number; onOpenPlayer?: (player: PrematchPlayer | undefined) => void; onOpenMatch?: (matchCode: string) => void; teamIcons?: EsportsTeamIconMap }>;
+type HistoryScene = ComponentType<{ snapshot: DraftSnapshot; roster: PrematchRoster; profiles: Profiles; statsScope: PlayerStatsScope; scene: 'lobby' | 'draft' | 'umas'; loading: boolean; navigation: number; onOpenMatch?: (matchCode: string) => void; teamIcons?: EsportsTeamIconMap }>;
 
 function useProfiles(players: PrematchPlayer[], scope: PlayerStatsScope) {
   const [profiles, setProfiles] = useState<Profiles>({});
@@ -47,14 +47,13 @@ export function HistoryView({ Scene, scene, scope, navigation, onMatchCodeChange
   const [match, setMatch] = useState<HistoricalMatch>();
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [openedPlayer, setOpenedPlayer] = useState<PrematchPlayer>();
   const request = useRef<AbortController | undefined>(undefined);
   const { profiles, loading: profilesLoading, error: profileError, retry } = useProfiles(match?.roster.players ?? EMPTY_PLAYERS, scope);
   useEffect(() => () => request.current?.abort(), []);
   const load = async (value = input) => {
     request.current?.abort();
     const controller = new AbortController(); request.current = controller;
-    setLoading(true); setError(''); setMatch(undefined); setOpenedPlayer(undefined); onMatchCodeChange(undefined);
+    setLoading(true); setError(''); setMatch(undefined); onMatchCodeChange(undefined);
     try {
       const result = await loadHistoricalMatch(value, controller.signal);
       if (!controller.signal.aborted) { setMatch(result); onMatchCodeChange(result.matchCode); }
@@ -82,7 +81,7 @@ export function HistoryView({ Scene, scene, scope, navigation, onMatchCodeChange
       {match.warnings.map(warning => <p className="history-message" role="status" key={warning}>{warning}</p>)}
       {profilesLoading && <p className="history-message" role="status">Loading current player stats… The completed draft is ready.</p>}
       {profileError && <p className="explorer-error" role="status">{profileError} <button type="button" disabled={profilesLoading} onClick={retry}>Retry stats</button></p>}
-      <div className="history-scene"><Scene key={match.matchCode} snapshot={match.draft} roster={match.roster} profiles={profiles} statsScope={scope} scene={scene} loading={profilesLoading} navigation={navigation} onOpenPlayer={setOpenedPlayer} onOpenMatch={openMatch} teamIcons={teamIcons} /></div>
+      <div className="history-scene"><Scene key={match.matchCode} snapshot={match.draft} roster={match.roster} profiles={profiles} statsScope={scope} scene={scene} loading={profilesLoading} navigation={navigation} onOpenMatch={openMatch} teamIcons={teamIcons} /></div>
     </>}
   </section>;
 }

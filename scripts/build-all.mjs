@@ -31,6 +31,7 @@ for (const browser of ['chrome', 'firefox']) {
   if (manifest.version !== version || (browser === 'chrome' && (manifest.version_name ?? manifest.version) !== versionName)) throw new Error('Version mismatch');
   if (manifest.name !== 'UmaLytics') throw new Error('Extension name mismatch');
   if (browser === 'firefox' && manifest.browser_specific_settings?.gecko?.id !== 'umalytics@kjunodev') throw new Error('Firefox ID mismatch');
+  if (browser === 'firefox' && manifest.browser_specific_settings?.gecko?.strict_min_version !== '128.0') throw new Error('Firefox minimum version mismatch');
   const family = browser === 'chrome' ? 'chromium' : 'firefox';
   const destination = path.join(releaseRoot, family);
   fs.cpSync(output, destination, { recursive: true });

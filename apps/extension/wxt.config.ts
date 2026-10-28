@@ -4,7 +4,7 @@ export default defineConfig({
   manifestVersion: 3,
   manifest: {
     browser_specific_settings: {
-      gecko: { id: 'umalytics@kjunodev' }
+      gecko: { id: 'umalytics@kjunodev', strict_min_version: '128.0' }
     },
     name: 'UmaLytics',
     version: '0.5.3',
