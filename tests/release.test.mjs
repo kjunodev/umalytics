@@ -88,6 +88,19 @@ test('release workflow allows only kjunodev/umalytics on main with write permiss
   assert(workflow.includes('tag="v${version}"'));
 });
 
+test('release workflow restores the script, test and workflow from the same commit after checking out the tag',()=>{
+  const workflow=fs.readFileSync(new URL('../.github/workflows/release.yml',import.meta.url),'utf8');
+  const step=workflow.slice(workflow.indexOf('Select immutable release source'),workflow.indexOf('pnpm/action-setup'));
+  const checkout=step.indexOf('git checkout --detach "$tag"');
+  assert(checkout>0);
+  for(const [file,saved] of [['scripts/publish-release.mjs','umalytics-publish-release.mjs'],['tests/release.test.mjs','umalytics-release.test.mjs'],['.github/workflows/release.yml','umalytics-release.yml']]) {
+    const save=step.indexOf(`cp ${file} "$RUNNER_TEMP/${saved}"`);
+    const restore=step.indexOf(`cp "$RUNNER_TEMP/${saved}" ${file}`);
+    assert(save>=0&&save<checkout,`${file} must be saved before the tag checkout`);
+    assert(restore>checkout,`${file} must be restored after the tag checkout`);
+  }
+});
+
 test('local packaging uses the canonical ZIP names without any GitHub calls on either platform',()=>{
   for(const platform of ['linux','win32']) {
     const r=run({packageOnly:true,platform,repository:undefined});assert.equal(r.error,undefined);
