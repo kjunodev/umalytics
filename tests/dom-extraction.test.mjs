@@ -56,3 +56,34 @@ test('DOM fallback preserves visible combined map numbers and leaves vetoes unnu
   const maps=c.extractDomMaps('team1',document.querySelector('section'));
   assert.equal(maps[0].order,3);assert.equal(maps[1].order,undefined);assert.equal(maps[1].status,'vetoed');
 });
+
+test('room code comes only from dedicated room-code elements, never arbitrary text',()=>{
+  const code=body=>{const h=domHarness(body);return h.c.extractRoomCodeFromRoomDom(h.document);};
+  // Chat, names and wrappers that merely mention a room code are not identity.
+  assert.equal(code('<div><p>hey join room code ABC-123 everyone</p></div>'),undefined);
+  assert.equal(code('<div id="chat"><span>Alice</span><span>room code ABC-123 lol</span></div>'),undefined);
+  assert.equal(code('<div><span>Room code</span> ABC-123 and more</div>'),undefined);
+  assert.equal(code('<div><span>Room code:</span><p>ABC-123</p></div>'),undefined);
+  // The real copy button wins over any spoofed text.
+  assert.equal(code('<p>Room code ZZZ-999</p><button aria-label="Copy room code">6XN-84X</button>'),'6XN84X');
+  assert.equal(code('<button title="Copy room code">Room code: 6XN-84X</button>'),'6XN84X');
+  // A leaf element that is exactly the label plus code is accepted, unless labels conflict.
+  assert.equal(code('<div><span>Room code: abc-123</span></div>'),'ABC123');
+  assert.equal(code('<span>Room code ABC-123</span><p>Room code ZZZ-999</p>'),undefined);
+});
+
+test('DOM uma images keep only drafter-hosted URLs',()=>{
+  const {document}=parseHTML('<section><div class="aspect-square"><img alt="Hosted Uma" src="/assets/chara_stand_100101_100101.webp"></div><div class="aspect-square"><img alt="Foreign Uma" src="https://tracker.example/pixel.png"></div></section>');
+  const c=context();evaluate(c,'umaPortraits');evaluate(c,'draftExtraction');
+  const umas=c.extractDomUmaActions('team1',document.querySelector('section'));
+  assert.equal(umas.length,2);
+  assert.equal(umas[0].imageUrl,'https://drafter.uma.guide/assets/chara_stand_100101_100101.webp');
+  assert.equal(umas[1].name,'Foreign Uma');assert.equal('imageUrl' in umas[1],false);
+});
+
+test('synced draft traversal survives cyclic page objects',()=>{
+  const c=context({cleanTeamName:x=>x});evaluate(c,'matchDetection');evaluate(c,'syncPayload');evaluate(c,'umaPortraits');evaluate(c,'draftExtraction');
+  const state={syncedDraftState_multiplayer:{roomCode:'M95Z2Z',team1:{pickedUmas:[{id:'100101',name:'Uma',team:'team1'}]}}};
+  state.syncedDraftState_multiplayer.self=state;state.syncedDraftState_multiplayer.team1.loop=state.syncedDraftState_multiplayer;
+  assert.doesNotThrow(()=>c.extractDraftSnapshotFromSyncedDraftState(state));
+});

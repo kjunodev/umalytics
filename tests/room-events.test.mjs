@@ -10,6 +10,15 @@ test('room code normalization supports host display and join/spectate routes',()
   assert.equal(c.normalizeMatchCode('Room 6XN84X secret'),undefined);
 });
 
+test('decoded events only carry real team ids',()=>{
+  const {c}=roomHarness();
+  assert.equal(c.decodeRoomEvent(matchEvent()).state.currentTeam,'team1');
+  const odd=matchEvent();odd.state.currentTeam='<script>';
+  assert.equal(c.decodeRoomEvent(odd).state.currentTeam,undefined);
+  assert.equal(c.decodeRoomEvent({type:'room.captain.changed',matchId:'M95Z2Z',team:'team2',captainActorUserId:'1'}).team,'team2');
+  assert.equal(c.decodeRoomEvent({type:'room.captain.changed',matchId:'M95Z2Z',team:{x:1},captainActorUserId:'1'}).team,undefined);
+});
+
 test('two-player presence for fifteen simulated minutes cannot erase a ten-player draft roster',()=>{
   const {state}=roomHarness();state.apply(matchEvent(),'M95Z2Z');
   for(let minute=0;minute<15;minute++){

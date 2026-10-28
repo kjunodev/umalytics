@@ -26,13 +26,7 @@ export default defineConfig({
       }
     },
     permissions: ['storage', 'scripting', 'alarms'],
-    host_permissions: ['https://drafter-api.uma.guide/*', 'https://drafter.uma.guide/*'],
-    web_accessible_resources: [
-      {
-        resources: ['pageHook.js'],
-        matches: ['https://drafter.uma.guide/*']
-      }
-    ]
+    host_permissions: ['https://drafter-api.uma.guide/*', 'https://drafter.uma.guide/*']
   },
   modules: ['@wxt-dev/module-react']
 });

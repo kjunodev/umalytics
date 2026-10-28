@@ -238,19 +238,25 @@ function extractSyncedTiebreakerMap(value: unknown): DraftTiebreakerMap | undefi
   return tiebreakerMap;
 }
 
+const MAX_DRAFT_WALK_DEPTH = 24;
+
 function walkDraftRecords(
   value: unknown,
   path: string[],
-  visit: (record: Record<string, unknown>, path: string[]) => void
+  visit: (record: Record<string, unknown>, path: string[]) => void,
+  seen = new WeakSet<object>()
 ): void {
-  if (Array.isArray(value)) {
-    value.forEach((item, index) => {
-      walkDraftRecords(item, [...path, String(index)], visit);
-    });
+  // Page-supplied objects can be cyclic or absurdly deep; visit each once.
+  if (!isRecord(value) || path.length > MAX_DRAFT_WALK_DEPTH || seen.has(value)) {
     return;
   }
 
-  if (!isRecord(value)) {
+  seen.add(value);
+
+  if (Array.isArray(value)) {
+    value.forEach((item, index) => {
+      walkDraftRecords(item, [...path, String(index)], visit, seen);
+    });
     return;
   }
 
@@ -261,7 +267,7 @@ function walkDraftRecords(
       continue;
     }
 
-    walkDraftRecords(child, [...path, key], visit);
+    walkDraftRecords(child, [...path, key], visit, seen);
   }
 }
 
@@ -365,6 +371,7 @@ function extractDomUmaActions(team: TeamId, panel: HTMLElement): DraftUmaAction[
         ? 'ban'
         : 'pick';
     const umaId = extractUmaIdFromImageUrl(image.src);
+    const imageUrl = resolveDrafterImageUrl(image.src);
     const displayName = umaId === undefined ? name : getUmaDisplayName(umaId, name);
     const key = `${kind}:${team}:${umaId ?? name}`;
 
@@ -378,7 +385,7 @@ function extractDomUmaActions(team: TeamId, panel: HTMLElement): DraftUmaAction[
       team,
       ...(umaId === undefined ? {} : { umaId }),
       name: displayName,
-      imageUrl: image.src,
+      ...(imageUrl === undefined ? {} : { imageUrl }),
       order: actions.length + 1
     });
   }
