@@ -3,13 +3,18 @@ import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import { loadModule } from './support/harness.mjs';
 
-function harness({ storedBounds, workArea, existingWindowId } = {}) {
+// `session` (when given) is shared between harnesses to model storage.session
+// surviving an MV3 service-worker restart; module state does not survive.
+function harness({ storedBounds, workArea, existingWindowId, session, contexts } = {}) {
   const storage = {};
   if (storedBounds !== undefined) storage.scoutWindowBounds = storedBounds;
   const calls = { create: [], update: [] };
 
   const browser = {
-    runtime: { getURL: (relativePath) => `chrome-extension://umalytics${relativePath}` },
+    runtime: {
+      getURL: (relativePath) => `chrome-extension://umalytics${relativePath}`,
+      ...(contexts === undefined ? {} : { async getContexts(filter) { calls.getContexts = filter; return contexts; } })
+    },
     storage: {
       local: {
         async get(key) {
@@ -18,7 +23,12 @@ function harness({ storedBounds, workArea, existingWindowId } = {}) {
         async set(values) {
           Object.assign(storage, values);
         }
-      }
+      },
+      ...(session === undefined ? {} : { session: {
+        async get(key) { return key in session ? { [key]: session[key] } : {}; },
+        async set(values) { Object.assign(session, structuredClone(values)); },
+        async remove(key) { delete session[key]; }
+      } })
     },
     windows: {
       async create(options) {
@@ -182,4 +192,47 @@ test('default sizing is capped to the last-focused browser window, not chrome.sy
 test('no last-focused window available (e.g. browser.windows.getLastFocused rejects) falls back to the plain 1500x900 default', async () => {
   const { c } = harness();
   assert.deepEqual(plain(await c.resolveInitialScoutBounds()), { width: 1500, height: 900 });
+});
+
+test('after a worker restart, clicking the icon focuses the open scout window instead of opening a second one', async () => {
+  const session = {};
+  const before = harness({ existingWindowId: 42, session });
+  await before.c.createOrFocusScoutWindow();
+  assert.equal(before.calls.create.length, 1);
+
+  // The service worker idles out: module memory is gone, storage.session is not.
+  const after = harness({ existingWindowId: 42, session });
+  await after.c.createOrFocusScoutWindow();
+  assert.equal(after.calls.create.length, 0, 'no second scout window');
+  assert.equal(after.calls.update.length, 1);
+  assert.equal(after.calls.update[0][0], 42);
+});
+
+test('after a worker restart, moving the scout window still saves its bounds', async () => {
+  const session = {};
+  await harness({ existingWindowId: 42, session }).c.createOrFocusScoutWindow();
+  const after = harness({ existingWindowId: 42, session });
+  after.c.handleScoutWindowBoundsChanged({ id: 42, left: 30, top: 30, width: 1520, height: 920 });
+  await new Promise((resolve) => setTimeout(resolve, 600));
+  assert.deepEqual(plain(after.storage.scoutWindowBounds), { left: 30, top: 30, width: 1520, height: 920 });
+});
+
+test('a scout window closed while the worker was asleep is forgotten, so the next click opens a new one', async () => {
+  const session = {};
+  await harness({ existingWindowId: 42, session }).c.createOrFocusScoutWindow();
+  const after = harness({ session });
+  await after.c.handleScoutWindowRemoved(42);
+  assert.equal(session.scoutWindowId, undefined);
+  await after.c.createOrFocusScoutWindow();
+  assert.equal(after.calls.update.length, 0, 'no attempt to focus the closed window');
+  assert.equal(after.calls.create.length, 1);
+});
+
+test('without a remembered id, an open scout page is found through runtime.getContexts', async () => {
+  const { c, calls } = harness({ existingWindowId: 7, session: {},
+    contexts: [{ contextType: 'TAB', windowId: 7, documentUrl: 'chrome-extension://umalytics/scout.html' }] });
+  await c.createOrFocusScoutWindow();
+  assert.equal(calls.create.length, 0);
+  assert.equal(calls.update[0][0], 7);
+  assert.deepEqual(Array.from(calls.getContexts.documentUrls), ['chrome-extension://umalytics/scout.html']);
 });

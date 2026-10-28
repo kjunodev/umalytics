@@ -115,13 +115,13 @@ export default defineBackground(() => {
   });
 
   browser.windows?.onRemoved.addListener((windowId) => {
-    handleScoutWindowRemoved(windowId);
+    void handleScoutWindowRemoved(windowId).catch(reportEnrichmentError);
   });
 
   // Chrome-only (no Firefox equivalent): remembers the scout window's size
   // and position as the user drags/resizes it, so the next open restores it.
   browser.windows?.onBoundsChanged?.addListener((window) => {
-    handleScoutWindowBoundsChanged(window);
+    void handleScoutWindowBoundsChanged(window).catch(reportEnrichmentError);
   });
 
   void initialization.then(handleLobbyReconnectRequested).catch(reportEnrichmentError);
