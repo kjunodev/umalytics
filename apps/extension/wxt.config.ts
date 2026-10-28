@@ -7,8 +7,8 @@ export default defineConfig({
       gecko: { id: 'umalytics@kjunodev' }
     },
     name: 'UmaLytics',
-    version: '0.5.2',
-    version_name: '0.5.2',
+    version: '0.5.3',
+    version_name: '0.5.3',
     description: 'Prematch scouting companion for Uma Drafter.',
     icons: {
       16: 'icon/16.png',

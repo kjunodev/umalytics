@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.3
+
+- Scroll the Umas catalog inside its own panel: the toolbar stays in place and the detail panel scrolls on its own.
+- Publish releases only from kjunodev/umalytics.
+- License the project under the MIT License.
+
 ## 0.5.2
 
 - Show the correct portraits for seasonal and alternate outfits, including New Year and Anime Kitasan Black.
