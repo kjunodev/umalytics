@@ -71,7 +71,14 @@ let reconnecting: Promise<LobbyReconnectResult> | undefined;
 let activeEnrichment: { key: string; controller: AbortController; promise: Promise<void>; finishedAt?: number } | undefined;
 let profileWrites = Promise.resolve();
 let rosterWrites = Promise.resolve();
+// The MV3 worker can restart at any time; storage.session keeps the selected
+// drafter tab across restarts (and forgets it when the browser closes).
+const SELECTED_DRAFTER_TAB_SESSION_KEY = 'selectedDrafterTabId';
 let selectedDrafterTabId: number | undefined;
+let markDrafterTabChosen: () => void = () => {};
+// Settles once a drafter tab has been restored or chosen (or none exists), so
+// a restarted worker never accepts room messages from an arbitrary tab first.
+const drafterTabChosen = new Promise<void>(resolve => { markDrafterTabChosen = resolve; });
 let navigationRunId = 0;
 let lastManualRefreshAt = 0;
 const RECOVERY_ALARM = 'umalytics-profile-recovery';
@@ -88,9 +95,12 @@ configureScoutWindow({ handleLobbyReconnectRequested, reportEnrichmentError });
 
 export default defineBackground(() => {
   registerExplorerService(() => initialization);
-  initialization = Promise.all([restoreManualRefresh(), restoreProfileRecovery(), browser.storage.local.get('statsScope').then(values => {
-    selectedStatsScope = values.statsScope === 'allTime' ? 'allTime' : 'currentSeason';
-  })]).then(() => {});
+  // Every restore falls back to its default on failure; initialization itself
+  // always settles, or every handler awaiting it would fail for the worker's life.
+  initialization = settleStartupTasks([restoreManualRefresh(), restoreProfileRecovery(), restoreSelectedDrafterTab(),
+    browser.storage.local.get('statsScope').then(values => {
+      selectedStatsScope = values.statsScope === 'allTime' ? 'allTime' : 'currentSeason';
+    })]);
   browser.storage.onChanged.addListener((changes, area) => {
     if (area !== 'local' || !changes.statsScope) return;
     selectedStatsScope = changes.statsScope.newValue === 'allTime' ? 'allTime' : 'currentSeason';
@@ -125,7 +135,7 @@ export default defineBackground(() => {
   });
 
   void initialization.then(handleLobbyReconnectRequested).catch(reportEnrichmentError);
-  void initialization.then(() => queueTeamIconRefresh());
+  void initialization.then(() => queueTeamIconRefresh()).catch(reportEnrichmentError);
 
   browser.runtime.onInstalled.addListener(() => {
     void reconnectOpenDrafterTabs();
@@ -142,6 +152,10 @@ export default defineBackground(() => {
     }
 
     if (message.type === 'diagnostic-trace-requested') return getDiagnosticTrace();
+    // Resolves as soon as the tab is set, before the startup scan awaits this
+    // tab's own roster acknowledgement, so it cannot deadlock.
+    if (message.type === 'diagnostic-event' || message.type === 'prematch-roster-detected' ||
+        message.type === 'draft-snapshot-detected') await drafterTabChosen;
     if (message.type === 'diagnostic-event') {
       if (sender.tab?.id === selectedDrafterTabId) recordDiagnostic(message.event);
       return;
@@ -211,7 +225,7 @@ async function handleActiveDrafterTab(tabId: number): Promise<void> {
     if (navigationId !== navigationRunId) return;
     const matchCode = getTabMatchCode(tab);
     if (previous !== undefined && matchCode !== undefined && previous.matchCode !== matchCode) await clearActiveLobbyState();
-    if (navigationId === navigationRunId) selectedDrafterTabId = tabId;
+    if (navigationId === navigationRunId) selectDrafterTab(tabId);
   });
   rosterWrites = select.catch(reportEnrichmentError);
   await select;
@@ -239,7 +253,10 @@ async function handlePrematchRosterDetected(roster: PrematchRoster): Promise<voi
 
 function handleLobbyReconnectRequested(): Promise<LobbyReconnectResult> {
   if (reconnecting !== undefined) return reconnecting;
-  reconnecting = reconnectLobby().finally(() => { reconnecting = undefined; });
+  reconnecting = reconnectLobby().finally(() => {
+    reconnecting = undefined;
+    markDrafterTabChosen();
+  });
   return reconnecting;
 }
 
@@ -251,7 +268,7 @@ async function reconnectLobby(): Promise<LobbyReconnectResult> {
     return { activeLobby: false };
   }
 
-  selectedDrafterTabId = activeTab.id;
+  selectDrafterTab(activeTab.id);
 
   const domScanResult = await requestRoomDomScan(activeTab.id, { force: true });
   const activeMatchCode = domScanResult?.matchCode ?? getTabMatchCode(activeTab);
@@ -272,17 +289,43 @@ async function reconnectLobby(): Promise<LobbyReconnectResult> {
 
   if (cachedRoster !== undefined && cachedRoster.matchCode !== activeMatchCode) {
     await clearActiveLobbyState();
-    selectedDrafterTabId = activeTab.id;
+    selectDrafterTab(activeTab.id);
   }
 
   return { activeLobby: true, matchCode: activeMatchCode };
+}
+
+function selectDrafterTab(tabId: number | undefined): void {
+  selectedDrafterTabId = tabId;
+  markDrafterTabChosen();
+  try {
+    const session = browser.storage.session;
+    if (session === undefined) return;
+    void (tabId === undefined
+      ? session.remove(SELECTED_DRAFTER_TAB_SESSION_KEY)
+      : session.set({ [SELECTED_DRAFTER_TAB_SESSION_KEY]: tabId })).catch(reportEnrichmentError);
+  } catch (caught) { reportEnrichmentError(caught); }
+}
+
+async function restoreSelectedDrafterTab(): Promise<void> {
+  const value = (await browser.storage.session?.get(SELECTED_DRAFTER_TAB_SESSION_KEY))?.[SELECTED_DRAFTER_TAB_SESSION_KEY];
+  if (Number.isInteger(value) && selectedDrafterTabId === undefined) {
+    selectedDrafterTabId = value as number;
+    markDrafterTabChosen();
+  }
+}
+
+async function settleStartupTasks(tasks: Promise<unknown>[]): Promise<void> {
+  for (const result of await Promise.allSettled(tasks)) {
+    if (result.status === 'rejected') reportEnrichmentError(result.reason);
+  }
 }
 
 async function clearActiveLobbyState(): Promise<void> {
   enrichmentRunId += 1;
   activeEnrichment?.controller.abort(new Error('Lobby changed.'));
   activeEnrichment = undefined;
-  selectedDrafterTabId = undefined;
+  selectDrafterTab(undefined);
   pendingRecovery = undefined;
   await persistProfileRecovery();
   await Promise.all([
