@@ -14,7 +14,7 @@ import fs from 'node:fs';
 import assert from 'node:assert/strict';
 import { createServer } from 'vite';
 import { chromium } from 'playwright';
-import { checkGeometry, checkHeader, checkOpenMenu, checkTeamIconTooltip } from './geometry.mjs';
+import { checkGeometry, checkHeader, checkUmasScene, checkOpenMenu, checkTeamIconTooltip } from './geometry.mjs';
 import { HEADER_COMPACT_MIN_WIDTH, HEADER_FULL_MIN_WIDTH, HEADER_ROW_HEIGHT, HEADER_MIN_SLACK, UI_SCALES } from '../../ui/common/headerLayout.ts';
 
 const dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -25,6 +25,8 @@ const SIZES = [
   [1366, 768], [1625, 1360], [1920, 1080], [2560, 1300]
 ].map(([width, height]) => ({ name: `${width}x${height}`, width, height }));
 const UI_SIZES = ['small', 'default', 'large'];
+// Minimum Umas scene height in layout px (--umas-scene-min-height in umas.css).
+const UMAS_SCENE_MIN_HEIGHT = 480;
 
 // Query string per scene/state — see PreviewApp.tsx's initialStateFromQuery.
 const SCENES = [
@@ -34,6 +36,7 @@ const SCENES = [
   { name: 'draft-complete', query: 'mode=live&scene=draft&draft=complete' },
   { name: 'umas', query: 'mode=live&scene=umas' },
   { name: 'players', query: 'mode=profiles' },
+  { name: 'history-umas', query: 'mode=history&scene=umas' },
   { name: 'history-lobby', query: 'mode=history&scene=lobby' },
   { name: 'history-draft', query: 'mode=history&scene=draft&draft=complete' }
 ];
@@ -109,6 +112,10 @@ async function runCase(page, baseUrl, { uiSize, scene, size }) {
   if (scene.name === 'lobby' || scene.name === 'history-lobby') {
     const crowns = await page.locator('.player-row .captain-crown').count();
     if (crowns !== 2) geometry.failures.push(`expected 2 captain crowns in ${scene.name} at ${size.name} ${uiSize}, found ${crowns}`);
+  }
+  if (scene.name === 'umas' || scene.name === 'history-umas') {
+    const umas = await page.evaluate(checkUmasScene, { floor: UMAS_SCENE_MIN_HEIGHT });
+    geometry.failures.push(...umas.failures.map(failure => `${failure} at ${size.name} ${uiSize} ${scene.name}`));
   }
   const fileName = `${scene.name}_${size.name}_${uiSize}.png`;
   await page.screenshot({ path: path.join(outDir, fileName) });
@@ -306,6 +313,28 @@ async function verifyInteractions(page, baseUrl) {
     'surface chip keeps its text');
   await narrow.evaluate(el => el.remove());
   console.log('PASS draft column alignment, single-line race chips, and icon-only weather fallback');
+
+  // Umas scene: negative control (the unbounded layout this replaced must be
+  // caught), then a selection made far down the catalog stays inside the grid.
+  await page.setViewportSize({ width: 1366, height: 768 });
+  await page.goto(`${baseUrl}/?mode=live&scene=umas&uiSize=default`);
+  await page.locator('.uma-catalog-button').first().waitFor();
+  assert.deepEqual((await page.evaluate(checkUmasScene, { floor: UMAS_SCENE_MIN_HEIGHT })).failures, []);
+  const unbounded = await page.addStyleTag({ content: '.app-shell { height: auto !important; } .app-scene-area, .umas-scene, .umas-layout { display: block !important; }' });
+  assert((await page.evaluate(checkUmasScene, { floor: UMAS_SCENE_MIN_HEIGHT })).failures.length > 0,
+    'Umas scene check must catch an unbounded scene that scrolls the whole page');
+  await unbounded.evaluate(el => el.remove());
+  const tiles = page.locator('.uma-catalog-button');
+  const lastTile = tiles.last();
+  await lastTile.focus();
+  await lastTile.click();
+  const inGrid = await page.evaluate(() => {
+    const grid = document.querySelector('.uma-catalog-grid').getBoundingClientRect();
+    const tile = document.querySelector('.uma-catalog-button.selected').getBoundingClientRect();
+    return tile.top >= grid.top - 1 && tile.bottom <= grid.bottom + 1;
+  });
+  assert.ok(inGrid, 'a selected tile far down the catalog stays visible inside the grid');
+  console.log('PASS Umas scene negative control and selected tile visibility');
 }
 
 // Sweeps the window width across both header thresholds at every UI size, for

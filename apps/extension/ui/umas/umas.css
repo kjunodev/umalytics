@@ -1,12 +1,50 @@
+/*
+ * Height model. The Umas scene fills the window below the header: the catalog
+ * toolbar stays put and only the tile grid scrolls, and the detail panel scrolls
+ * inside itself. The page height is bounded here, only while this scene is on
+ * screen, so Lobby/Draft/Players keep their natural, page-scrolling layouts.
+ * The root is CSS-zoomed (--ui-scale) and viewport units are not, so 100vh is
+ * divided by the scale to land on exactly one window. The header's height is
+ * never assumed: the shell is a flex column and the scene takes what is left.
+ * Below --umas-scene-min-height the scene stops shrinking and the page scrolls.
+ */
+.app-shell:has(.umas-scene) {
+  --umas-scene-min-height: 480px;
+  height: calc(100vh / var(--ui-scale));
+  padding-bottom: 0;
+}
+
+/* The bottom padding lives in a spacer so it still follows the scene when the
+   page scrolls on a short window. */
+.app-shell:has(.umas-scene)::after {
+  content: '';
+  flex: 0 0 22px;
+}
+
+.app-shell:has(.umas-scene) > .app-scene-area:has(.umas-scene),
+.app-shell:has(.umas-scene) .explorer-view:has(.umas-scene),
+.app-shell:has(.umas-scene) .history-scene:has(.umas-scene) {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  min-height: var(--umas-scene-min-height);
+  min-width: 0;
+}
+
 .umas-scene {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
   min-height: 0;
   overflow: hidden;
 }
 
 .umas-layout {
-  align-items: start;
+  flex: 1 1 0;
+  align-items: stretch;
   display: grid;
   grid-template-columns: minmax(0, 1.75fr) minmax(320px, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   gap: 16px;
   min-height: 0;
 }
@@ -23,7 +61,7 @@
 
 .uma-catalog-panel {
   display: grid;
-  grid-template-rows: auto auto;
+  grid-template-rows: auto minmax(0, 1fr);
 }
 
 .uma-catalog-toolbar {
@@ -187,7 +225,7 @@
 .uma-catalog-empty,
 .uma-detail-panel.empty { display: grid; align-content: center; justify-items: center; gap: 8px; color: var(--text-secondary); padding: 16px; }
 
-.uma-detail-panel { display: grid; grid-template-rows: auto auto auto; align-content: start; }
+.uma-detail-panel { display: grid; grid-template-rows: auto auto minmax(0, 1fr); align-content: start; }
 .uma-detail-heading { display: flex; align-items: center; gap: 14px; padding: 18px 16px; }
 .uma-detail-title { min-width: 0; }
 .uma-detail-title h3 { font: 600 24px/1.1 var(--font-display); margin: 0 0 7px; overflow-wrap: anywhere; }
@@ -225,8 +263,18 @@
   .uma-catalog-controls .uma-search { flex-basis: 100%; }
 }
 
+/* Stacked single column: both panels keep their natural height and the page
+   scrolls; the catalog grid gets a fixed window of its own. */
 @media (max-width: 620px) {
+  .app-shell:has(.umas-scene) { height: auto; padding-bottom: 14px; }
+  .app-shell:has(.umas-scene)::after { content: none; }
+  .app-shell:has(.umas-scene) > .app-scene-area:has(.umas-scene),
+  .app-shell:has(.umas-scene) .explorer-view:has(.umas-scene),
+  .app-shell:has(.umas-scene) .history-scene:has(.umas-scene) { min-height: 0; }
+  .umas-scene { overflow: visible; }
   .umas-layout { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto; }
+  .uma-catalog-grid { max-height: 420px; }
+  .uma-detail-team-grid { overflow-y: visible; }
   .uma-detail-heading { padding: 10px 12px; }
   .uma-detail-summary { margin: 0 12px 10px; padding: 6px 0; }
   .uma-detail-team-grid { padding: 0 12px 12px; }
