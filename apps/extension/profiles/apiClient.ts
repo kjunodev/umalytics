@@ -15,11 +15,15 @@ const API_SERVER_ERROR_BACKOFF_MS = 10 * 1000;
 const API_REQUEST_TIMEOUT_MS = 10 * 1000;
 export const PROFILE_SUMMARY_TIMEOUT_MS = 60 * 1000;
 const DEFAULT_REQUEST_INTERVAL_MS = 350;
+const MAX_REQUEST_INTERVAL_MS = 2000;
 const PACING_RECOVERY_SUCCESS_STREAK = 20;
 const PACING_RECOVERY_FACTOR = 0.75;
 let baseRequestIntervalMs = DEFAULT_REQUEST_INTERVAL_MS;
 let requestStartIntervalMs = baseRequestIntervalMs;
 let consecutiveSuccessCount = 0;
+// Up to three requests are in flight, so one rate limit can return several
+// 429s; the spacing doubles once per rate-limit cooldown, not once per 429.
+let rateLimitBackoffUntil = 0;
 const requestQueue = new RequestQueue(3, requestStartIntervalMs);
 
 
@@ -33,9 +37,17 @@ let persistentCacheWriteInFlight = false;
 let persistentCacheDirty = false;
 
 export function getApiCooldown(): ApiCooldown | undefined { return apiCooldown; }
+
+/** Restores a cooldown saved before a worker restart. One that has already
+ * ended is ignored, including its slowed pacing. */
 export function restoreApiCooldown(value: ApiCooldown): void {
+  if (!(value.until > Date.now())) return;
+  applyApiCooldown(value);
+}
+
+function applyApiCooldown(value: ApiCooldown): void {
   if (value.until > (apiCooldown?.until ?? 0)) apiCooldown = value;
-  requestStartIntervalMs = Math.max(requestStartIntervalMs, Math.min(2000, value.startIntervalMs ?? baseRequestIntervalMs));
+  requestStartIntervalMs = Math.max(requestStartIntervalMs, Math.min(MAX_REQUEST_INTERVAL_MS, value.startIntervalMs ?? baseRequestIntervalMs));
   consecutiveSuccessCount = 0;
   requestQueue.setStartInterval(requestStartIntervalMs);
 }
@@ -162,8 +174,13 @@ async function fetchJsonOnce<T>(path: string, signal: AbortSignal, priority: Req
           const delayMs = Number.isFinite(seconds) ? seconds * 1000
             : Number.isFinite(dateMs) ? Math.max(0, dateMs - Date.now())
             : response.status === 429 ? API_RATE_LIMIT_BACKOFF_MS : API_SERVER_ERROR_BACKOFF_MS;
-          restoreApiCooldown({ until: Date.now() + Math.max(1000, delayMs), status: response.status, path,
-            startIntervalMs: response.status === 429 ? Math.min(2000, requestStartIntervalMs * 2) : requestStartIntervalMs });
+          const until = Date.now() + Math.max(1000, delayMs);
+          let startIntervalMs = requestStartIntervalMs;
+          if (response.status === 429 && Date.now() >= rateLimitBackoffUntil) {
+            startIntervalMs = Math.min(MAX_REQUEST_INTERVAL_MS, requestStartIntervalMs * 2);
+            rateLimitBackoffUntil = until;
+          }
+          applyApiCooldown({ until, status: response.status, path, startIntervalMs });
         }
         throw new ApiRequestError(response.status, `Request failed (HTTP ${response.status}): ${path}`);
       }
@@ -182,8 +199,14 @@ async function fetchJsonOnce<T>(path: string, signal: AbortSignal, priority: Req
       if (isPersistentResponse(path)) persistResponses();
       return value;
       } catch (error) {
-        if (!(error instanceof ApiRequestError)) recordDiagnostic({ kind: 'request', endpoint,
-          reason: signal?.aborted ? 'cancelled' : /timed out/i.test(getErrorMessage(error, '')) ? 'timeout' : 'network-error', queueMs: startedAt - queuedAt, networkMs: Date.now() - startedAt });
+        if (!(error instanceof ApiRequestError)) {
+          recordDiagnostic({ kind: 'request', endpoint,
+            reason: signal?.aborted ? 'cancelled' : /timed out/i.test(getErrorMessage(error, '')) ? 'timeout' : 'network-error', queueMs: startedAt - queuedAt, networkMs: Date.now() - startedAt });
+          // A timeout or network failure breaks the success streak; a caller's
+          // cancellation says nothing about the API. (429/5xx reset it when
+          // the cooldown is applied; 403/404 are answers, not failures.)
+          if (!signal.aborted) consecutiveSuccessCount = 0;
+        }
         throw error;
       } finally { budget.dispose(); }
     }, priority);
