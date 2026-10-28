@@ -23,7 +23,13 @@ interface WorkArea {
   height: number;
 }
 
+// The MV3 service worker idles out after ~30 s and loses module state, so the
+// scout window id is also kept in storage.session (cleared when the browser
+// closes, like the window itself).
+const SCOUT_WINDOW_ID_SESSION_KEY = 'scoutWindowId';
+
 let scoutWindowId: number | undefined;
+let scoutWindowIdLoad: Promise<number | undefined> | undefined;
 let openingWindow: Promise<void> | undefined;
 let boundsSaveTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -58,14 +64,15 @@ async function createOrFocusScoutWindow(): Promise<void> {
   // The UI can render cached data before any page scan or network request finishes.
   void requestLobbyReconnect().catch(reportScoutWindowError);
 
-  if (scoutWindowId !== undefined) {
+  const trackedWindowId = await getTrackedScoutWindowId();
+  if (trackedWindowId !== undefined) {
     try {
       // Focus only. Resizing here would undo a size or position the user
       // deliberately set, every time they reopen the scout window.
-      await browser.windows.update(scoutWindowId, { focused: true });
+      await browser.windows.update(trackedWindowId, { focused: true });
       return;
     } catch {
-      scoutWindowId = undefined;
+      if (scoutWindowId === trackedWindowId) setTrackedScoutWindowId(undefined);
     }
   }
 
@@ -77,7 +84,50 @@ async function createOrFocusScoutWindow(): Promise<void> {
     ...bounds
   });
 
-  scoutWindowId = scoutWindow?.id;
+  setTrackedScoutWindowId(scoutWindow?.id);
+}
+
+function getTrackedScoutWindowId(): Promise<number | undefined> {
+  if (scoutWindowId !== undefined) return Promise.resolve(scoutWindowId);
+  scoutWindowIdLoad ??= findScoutWindowId().finally(() => { scoutWindowIdLoad = undefined; });
+  return scoutWindowIdLoad;
+}
+
+async function findScoutWindowId(): Promise<number | undefined> {
+  try {
+    const stored = (await browser.storage.session?.get(SCOUT_WINDOW_ID_SESSION_KEY))?.[SCOUT_WINDOW_ID_SESSION_KEY];
+    if (Number.isInteger(stored)) {
+      scoutWindowId ??= stored as number;
+      return scoutWindowId;
+    }
+  } catch { /* storage.session can be unavailable; fall back to the open contexts. */ }
+
+  // Chrome 116+: find a scout page that is already open, e.g. after the
+  // session value was lost. Needs no extra permission for our own pages.
+  try {
+    if (typeof browser.runtime.getContexts !== 'function') return undefined;
+    const contexts = await browser.runtime.getContexts({
+      contextTypes: ['TAB' as Browser.runtime.ContextType],
+      documentUrls: [browser.runtime.getURL(SCOUT_POPOUT_PATH)]
+    });
+    const windowId = contexts.find((context) => Number.isInteger(context.windowId) && context.windowId >= 0)?.windowId;
+    if (windowId !== undefined && scoutWindowId === undefined) setTrackedScoutWindowId(windowId);
+    return scoutWindowId;
+  } catch {
+    return undefined;
+  }
+}
+
+function setTrackedScoutWindowId(windowId: number | undefined): void {
+  scoutWindowId = windowId;
+  try {
+    const session = browser.storage.session;
+    if (session === undefined) return;
+    const write = windowId === undefined
+      ? session.remove(SCOUT_WINDOW_ID_SESSION_KEY)
+      : session.set({ [SCOUT_WINDOW_ID_SESSION_KEY]: windowId });
+    void write.catch(() => {});
+  } catch { /* storage.session can be unavailable; memory still tracks the window. */ }
 }
 
 // Remembered bounds take priority (restoring exactly where and how big the
@@ -145,16 +195,18 @@ function isScoutWindowBounds(value: unknown): value is ScoutWindowBounds {
   );
 }
 
-function handleScoutWindowRemoved(windowId: number): void {
-  if (windowId === scoutWindowId) {
-    scoutWindowId = undefined;
+// The event can be what wakes the worker, so compare with the remembered id.
+async function handleScoutWindowRemoved(windowId: number): Promise<void> {
+  const trackedWindowId = scoutWindowId ?? await getTrackedScoutWindowId();
+  if (windowId === trackedWindowId && scoutWindowId === trackedWindowId) {
+    setTrackedScoutWindowId(undefined);
   }
 }
 
 // Chrome-only API (no equivalent event in Firefox); background.ts only wires
 // this listener up when it exists.
-function handleScoutWindowBoundsChanged(window: { id?: number; left?: number; top?: number; width?: number; height?: number }): void {
-  if (window.id === undefined || window.id !== scoutWindowId) return;
+async function handleScoutWindowBoundsChanged(window: { id?: number; left?: number; top?: number; width?: number; height?: number }): Promise<void> {
+  if (window.id === undefined || window.id !== (scoutWindowId ?? await getTrackedScoutWindowId())) return;
   const { left, top, width, height } = window;
   if (left === undefined || top === undefined || width === undefined || height === undefined) return;
 

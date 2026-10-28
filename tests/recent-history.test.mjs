@@ -187,7 +187,8 @@ test('opening drawer requests page one, pager pages 2-4 reuse it, page 5 request
   assert.equal(requests[0].page,1);
   assert.equal(findAll(rendered,node=>node.props?.className==='drawer-history-row').length,5);
   assert(find(rendered,node=>node.type==='a' && node.props.href.endsWith('/P1-1')));
-  assert.equal(badgeProfiles.at(-1).historySummary.wins,1);
+  assert.equal(badgeProfiles.at(-1).historySummary,undefined,'badges never see the loaded history');
+  assert.equal(badgeProfiles.at(-1).historyTotal,undefined);
   assert.equal(profileRequests.length,1,'opening drawer requests the profile once, alongside the first history page');
   assert.equal(profileRequests[0].id,p.discordId);
   const detail=c.withDetailHistory(p,page1Matches,21,{wins:1});

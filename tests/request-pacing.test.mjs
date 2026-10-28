@@ -3,6 +3,72 @@ import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import { evaluate, deferred, waitUntil, context, players, apiHarness } from './support/helpers.mjs';
 
+// Runs the real (unpatched) timing code `factor` times faster: timers fire
+// early and Date.now advances `factor` ms per real ms.
+function scaleTime(c,factor) {
+  const realStart=Date.now(),perfStart=performance.now();
+  class ScaledDate extends Date { static now(){return Math.round(realStart+(performance.now()-perfStart)*factor);} }
+  c.Date=ScaledDate;c.setTimeout=(fn,ms=0,...args)=>setTimeout(fn,Math.max(0,ms)/factor,...args);c.clearTimeout=clearTimeout;
+}
+
+test('under slowed 2 s pacing the leaderboard waits behind 10 stats requests without timing out every card',async()=>{
+  const h=apiHarness({latency:2,fast:false});scaleTime(h.c,50);
+  vm.runInContext('requestStartIntervalMs=2000;requestQueue.setStartInterval(2000);',h.c);
+  const result=Object.values(await h.c.fetchPlayerProfileSummaries(players(10),{scope:'currentSeason'}));
+  assert.equal(result.length,10);
+  assert.deepEqual(result.map(summary=>summary.error).filter(Boolean),[]);
+  assert(result.every(summary=>summary.rankUnavailable!==true));
+  assert.equal(h.calls.at(-1),'/api/leaderboard?season=S1','the leaderboard still runs after the stats requests');
+});
+
+test('a failed leaderboard leaves ranks unavailable without marking the player profiles as failed',async()=>{
+  const h=apiHarness({responder:url=>url.pathname==='/api/leaderboard'?{status:404}:undefined});
+  const result=Object.values(await h.c.fetchPlayerProfileSummaries(players(3),{scope:'currentSeason'}));
+  assert.equal(result.length,3);
+  for(const summary of result) {
+    assert.equal(summary.error,undefined);assert.equal(summary.rankUnavailable,true);
+    assert.equal(summary.rank,null);assert.equal(summary.currentSeasonStats.matches,4);
+  }
+});
+
+test('three in-flight requests that all get 429 double the spacing once, not three times',async()=>{
+  const h=apiHarness({fast:false});const gate=deferred();let started=0;
+  h.c.fetch=async()=>{started++;await gate.promise;return {ok:false,status:429,headers:new Headers(),body:null};};
+  const base=vm.runInContext('baseRequestIntervalMs',h.c);
+  const requests=players(3).map(player=>h.c.fetchJson(`/api/stats/players/${player.discordId}/profile`,undefined,'profile').catch(error=>error));
+  await waitUntil(()=>started===3,3000);
+  gate.resolve();await Promise.all(requests);
+  assert.equal(vm.runInContext('requestStartIntervalMs',h.c),base*2);
+  assert.equal(h.c.getApiCooldown().startIntervalMs,base*2);
+});
+
+test('the 0.75x pacing recovery needs 20 consecutive successes: a network failure restarts the count',async()=>{
+  let clock=Date.now();class Clock extends Date {static now(){return clock;}}
+  const h=apiHarness({responder:url=>url.pathname==='/api/seasons'?{status:429,headers:{'retry-after':'1'}}:undefined});
+  h.c.Date=Clock;
+  await h.c.fetchJson('/api/seasons',undefined,'shared').catch(()=>{});
+  const afterBackoff=vm.runInContext('requestStartIntervalMs',h.c);
+  clock=h.c.getApiCooldown().until;
+  const path=i=>`/api/stats/players/${String(100000000000000000n+BigInt(i))}/profile`;
+  for(let i=0;i<19;i++) await h.c.fetchJson(path(i),undefined,'profile');
+  const fetch=h.c.fetch;h.c.fetch=async()=>{throw new TypeError('Failed to fetch');};
+  await assert.rejects(h.c.fetchJson(path(19),undefined,'profile'));
+  h.c.fetch=fetch;
+  await h.c.fetchJson(path(20),undefined,'profile');
+  assert.equal(vm.runInContext('requestStartIntervalMs',h.c),afterBackoff,'19 successes, a failure, then 1 success is not a streak of 20');
+  for(let i=21;i<40;i++) await h.c.fetchJson(path(i),undefined,'profile');
+  assert.equal(vm.runInContext('requestStartIntervalMs',h.c),Math.max(vm.runInContext('baseRequestIntervalMs',h.c),afterBackoff*0.75));
+});
+
+test('a worker restart does not restore slowed pacing from a cooldown that already ended',()=>{
+  const h=apiHarness({fast:false});const base=vm.runInContext('baseRequestIntervalMs',h.c);
+  h.c.restoreApiCooldown({until:Date.now()-60_000,status:429,path:'/api/seasons',startIntervalMs:2000});
+  assert.equal(vm.runInContext('requestStartIntervalMs',h.c),base,'stale pacing is ignored');
+  h.c.restoreApiCooldown({until:Date.now()+20_000,status:429,path:'/api/seasons',startIntervalMs:700});
+  assert.equal(vm.runInContext('requestStartIntervalMs',h.c),700,'pacing from an active cooldown is kept');
+  assert.equal(vm.runInContext('requestStartIntervalMs',apiHarness({fast:false}).c),base);
+});
+
 test('at the 350 ms pace, 10-player stats resolve within ~4 s and the whole lobby within ~4.5 s',async()=>{
   const h=apiHarness({latency:100,fast:false});const resolved=new Map();const start=performance.now();
   await h.c.fetchPlayerProfileSummaries(players(10),{scope:'currentSeason',onProgress:summary=>{

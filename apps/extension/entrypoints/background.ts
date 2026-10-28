@@ -3,7 +3,7 @@ import { mergeProfileScopes } from '../profiles/profileMerge';
 import { registerExplorerService } from '../explorer/explorerService';
 import { normalizeRosterForDisplay } from '../room/rosterDisplay';
 import { browser } from 'wxt/browser';
-import type { PlayerProfileSummary, PrematchPlayer, PrematchRoster } from '@umalytics/shared';
+import type { PlayerProfileSummary, PlayerStatsScope, PrematchPlayer, PrematchRoster } from '@umalytics/shared';
 import {
   isUmaLyticsMessage,
   type LobbyReconnectResult
@@ -24,12 +24,10 @@ import {
 } from '../storage/profileStorage';
 import type { PlayerProfileLoadState } from '../profiles/profileTypes';
 import {
-  BEST_UMA_SCORE_VERSION,
   MANUAL_PROFILE_REFRESH_COOLDOWN_MS,
-  NEWCOMER_MAX_ALL_TIME_MATCHES,
-  PROFILE_CACHE_TTL_MS,
-  RECENT_HISTORY_VERSION
+  NEWCOMER_MAX_ALL_TIME_MATCHES
 } from '../profiles/profileConstants';
+import { isFreshProfile } from '../profiles/profileCache';
 import { getLatestDraftSnapshot, clearLatestDraftSnapshot, setLatestDraftSnapshot } from '../storage/draftStorage';
 import {
   clearLatestPrematchRoster,
@@ -44,7 +42,6 @@ import {
   buildCompletedProfileState,
   getLoadingDiscordIds,
   getRetainedProfiles,
-  hasCurrentStatsShape,
   hasUsableProfileStats,
   isPendingProfileState,
   markProfilesForRecovery,
@@ -71,7 +68,14 @@ let reconnecting: Promise<LobbyReconnectResult> | undefined;
 let activeEnrichment: { key: string; controller: AbortController; promise: Promise<void>; finishedAt?: number } | undefined;
 let profileWrites = Promise.resolve();
 let rosterWrites = Promise.resolve();
+// The MV3 worker can restart at any time; storage.session keeps the selected
+// drafter tab across restarts (and forgets it when the browser closes).
+const SELECTED_DRAFTER_TAB_SESSION_KEY = 'selectedDrafterTabId';
 let selectedDrafterTabId: number | undefined;
+let markDrafterTabChosen: () => void = () => {};
+// Settles once a drafter tab has been restored or chosen (or none exists), so
+// a restarted worker never accepts room messages from an arbitrary tab first.
+const drafterTabChosen = new Promise<void>(resolve => { markDrafterTabChosen = resolve; });
 let navigationRunId = 0;
 let lastManualRefreshAt = 0;
 const RECOVERY_ALARM = 'umalytics-profile-recovery';
@@ -80,6 +84,7 @@ let selectedStatsScope: 'currentSeason' | 'allTime' = 'currentSeason';
 interface EnrichmentOptions { forceRefresh?: boolean; recoveryAttempt?: number }
 let pendingRecovery: ProfileRecovery | undefined;
 let recoveryWrites = Promise.resolve();
+let recoveryTimer: ReturnType<typeof setTimeout> | undefined;
 let initialization = Promise.resolve();
 const historyRequests = new Map<string, AbortController>();
 const profileTitleRequests = new Map<string, AbortController>();
@@ -88,9 +93,12 @@ configureScoutWindow({ handleLobbyReconnectRequested, reportEnrichmentError });
 
 export default defineBackground(() => {
   registerExplorerService(() => initialization);
-  initialization = Promise.all([restoreManualRefresh(), restoreProfileRecovery(), browser.storage.local.get('statsScope').then(values => {
-    selectedStatsScope = values.statsScope === 'allTime' ? 'allTime' : 'currentSeason';
-  })]).then(() => {});
+  // Every restore falls back to its default on failure; initialization itself
+  // always settles, or every handler awaiting it would fail for the worker's life.
+  initialization = settleStartupTasks([restoreManualRefresh(), restoreProfileRecovery(), restoreSelectedDrafterTab(),
+    browser.storage.local.get('statsScope').then(values => {
+      selectedStatsScope = values.statsScope === 'allTime' ? 'allTime' : 'currentSeason';
+    })]);
   browser.storage.onChanged.addListener((changes, area) => {
     if (area !== 'local' || !changes.statsScope) return;
     selectedStatsScope = changes.statsScope.newValue === 'allTime' ? 'allTime' : 'currentSeason';
@@ -115,17 +123,17 @@ export default defineBackground(() => {
   });
 
   browser.windows?.onRemoved.addListener((windowId) => {
-    handleScoutWindowRemoved(windowId);
+    void handleScoutWindowRemoved(windowId).catch(reportEnrichmentError);
   });
 
   // Chrome-only (no Firefox equivalent): remembers the scout window's size
   // and position as the user drags/resizes it, so the next open restores it.
   browser.windows?.onBoundsChanged?.addListener((window) => {
-    handleScoutWindowBoundsChanged(window);
+    void handleScoutWindowBoundsChanged(window).catch(reportEnrichmentError);
   });
 
   void initialization.then(handleLobbyReconnectRequested).catch(reportEnrichmentError);
-  void initialization.then(() => queueTeamIconRefresh());
+  void initialization.then(() => queueTeamIconRefresh()).catch(reportEnrichmentError);
 
   browser.runtime.onInstalled.addListener(() => {
     void reconnectOpenDrafterTabs();
@@ -142,6 +150,10 @@ export default defineBackground(() => {
     }
 
     if (message.type === 'diagnostic-trace-requested') return getDiagnosticTrace();
+    // Resolves as soon as the tab is set, before the startup scan awaits this
+    // tab's own roster acknowledgement, so it cannot deadlock.
+    if (message.type === 'diagnostic-event' || message.type === 'prematch-roster-detected' ||
+        message.type === 'draft-snapshot-detected') await drafterTabChosen;
     if (message.type === 'diagnostic-event') {
       if (sender.tab?.id === selectedDrafterTabId) recordDiagnostic(message.event);
       return;
@@ -211,7 +223,7 @@ async function handleActiveDrafterTab(tabId: number): Promise<void> {
     if (navigationId !== navigationRunId) return;
     const matchCode = getTabMatchCode(tab);
     if (previous !== undefined && matchCode !== undefined && previous.matchCode !== matchCode) await clearActiveLobbyState();
-    if (navigationId === navigationRunId) selectedDrafterTabId = tabId;
+    if (navigationId === navigationRunId) selectDrafterTab(tabId);
   });
   rosterWrites = select.catch(reportEnrichmentError);
   await select;
@@ -239,7 +251,10 @@ async function handlePrematchRosterDetected(roster: PrematchRoster): Promise<voi
 
 function handleLobbyReconnectRequested(): Promise<LobbyReconnectResult> {
   if (reconnecting !== undefined) return reconnecting;
-  reconnecting = reconnectLobby().finally(() => { reconnecting = undefined; });
+  reconnecting = reconnectLobby().finally(() => {
+    reconnecting = undefined;
+    markDrafterTabChosen();
+  });
   return reconnecting;
 }
 
@@ -251,7 +266,7 @@ async function reconnectLobby(): Promise<LobbyReconnectResult> {
     return { activeLobby: false };
   }
 
-  selectedDrafterTabId = activeTab.id;
+  selectDrafterTab(activeTab.id);
 
   const domScanResult = await requestRoomDomScan(activeTab.id, { force: true });
   const activeMatchCode = domScanResult?.matchCode ?? getTabMatchCode(activeTab);
@@ -272,17 +287,43 @@ async function reconnectLobby(): Promise<LobbyReconnectResult> {
 
   if (cachedRoster !== undefined && cachedRoster.matchCode !== activeMatchCode) {
     await clearActiveLobbyState();
-    selectedDrafterTabId = activeTab.id;
+    selectDrafterTab(activeTab.id);
   }
 
   return { activeLobby: true, matchCode: activeMatchCode };
+}
+
+function selectDrafterTab(tabId: number | undefined): void {
+  selectedDrafterTabId = tabId;
+  markDrafterTabChosen();
+  try {
+    const session = browser.storage.session;
+    if (session === undefined) return;
+    void (tabId === undefined
+      ? session.remove(SELECTED_DRAFTER_TAB_SESSION_KEY)
+      : session.set({ [SELECTED_DRAFTER_TAB_SESSION_KEY]: tabId })).catch(reportEnrichmentError);
+  } catch (caught) { reportEnrichmentError(caught); }
+}
+
+async function restoreSelectedDrafterTab(): Promise<void> {
+  const value = (await browser.storage.session?.get(SELECTED_DRAFTER_TAB_SESSION_KEY))?.[SELECTED_DRAFTER_TAB_SESSION_KEY];
+  if (Number.isInteger(value) && selectedDrafterTabId === undefined) {
+    selectedDrafterTabId = value as number;
+    markDrafterTabChosen();
+  }
+}
+
+async function settleStartupTasks(tasks: Promise<unknown>[]): Promise<void> {
+  for (const result of await Promise.allSettled(tasks)) {
+    if (result.status === 'rejected') reportEnrichmentError(result.reason);
+  }
 }
 
 async function clearActiveLobbyState(): Promise<void> {
   enrichmentRunId += 1;
   activeEnrichment?.controller.abort(new Error('Lobby changed.'));
   activeEnrichment = undefined;
-  selectedDrafterTabId = undefined;
+  selectDrafterTab(undefined);
   pendingRecovery = undefined;
   await persistProfileRecovery();
   await Promise.all([
@@ -295,6 +336,11 @@ async function handleProfileRefreshRequested(roster: PrematchRoster): Promise<vo
   if (Date.now() - lastManualRefreshAt < MANUAL_PROFILE_REFRESH_COOLDOWN_MS) {
     return;
   }
+  // The same roster is still loading: enrichRosterProfiles would return that
+  // run, so do not record a cooldown for a refresh that never ran.
+  const displayed = normalizeRosterForDisplay(roster);
+  if (displayed !== undefined && activeEnrichment?.finishedAt === undefined &&
+      activeEnrichment?.key === getEnrichmentKey(displayed, selectedStatsScope)) return;
   lastManualRefreshAt = Date.now();
   await browser.storage.local.set({ profileManualRefreshAt: lastManualRefreshAt });
   void enrichRosterProfiles(roster, { forceRefresh: true }).catch(reportEnrichmentError);
@@ -315,8 +361,10 @@ function enrichRosterProfiles(
 ): Promise<void> {
   void queueTeamIconRefresh();
   roster = normalizeRosterForDisplay(roster)!;
+  // The run keeps the scope it started with; a scope change starts a new run.
+  const scope = selectedStatsScope;
   // Membership controls fetching; team/name/phase changes only update the roster.
-  const key = getEnrichmentKey(roster);
+  const key = getEnrichmentKey(roster, scope);
   if (activeEnrichment?.key === key && (activeEnrichment.finishedAt === undefined ||
       (options.forceRefresh !== true && options.recoveryAttempt === undefined && Date.now() - activeEnrichment.finishedAt < 10_000))) {
     return activeEnrichment.promise;
@@ -326,7 +374,7 @@ function enrichRosterProfiles(
   const runId = ++enrichmentRunId;
   const run = { key, controller, promise: Promise.resolve(), finishedAt: undefined as number | undefined };
   activeEnrichment = run;
-  run.promise = performRosterEnrichment(roster, options, runId, controller.signal).finally(() => {
+  run.promise = performRosterEnrichment(roster, scope, key, options, runId, controller.signal).finally(() => {
     run.finishedAt = Date.now();
   });
   return run.promise;
@@ -334,12 +382,12 @@ function enrichRosterProfiles(
 
 async function performRosterEnrichment(
   roster: PrematchRoster,
+  scope: PlayerStatsScope,
+  key: string,
   options: EnrichmentOptions,
   runId: number,
   signal: AbortSignal
 ): Promise<void> {
-  const scope = selectedStatsScope;
-  const key = getEnrichmentKey(roster);
   if (pendingRecovery !== undefined && pendingRecovery.key !== key) {
     pendingRecovery = undefined;
     await persistProfileRecovery();
@@ -354,7 +402,7 @@ async function performRosterEnrichment(
   const cachedProfiles = { ...cachedArchive, ...cachedSnapshot?.profiles };
   const rosterDiscordIds = [...new Set(roster.players.map((player) => player.discordId))];
   const lookupDiscordIds = rosterDiscordIds.filter(isDiscordSnowflake);
-  const freshProfiles = getFreshProfiles(cachedProfiles, rosterDiscordIds, now);
+  const freshProfiles = getFreshProfiles(cachedProfiles, rosterDiscordIds, scope, now);
   const retainedProfiles = getRetainedProfiles(cachedProfiles, freshProfiles, rosterDiscordIds);
   const missingDiscordIds = lookupDiscordIds.filter(
     (discordId) => options.forceRefresh === true || freshProfiles[discordId] === undefined
@@ -466,8 +514,11 @@ async function performRosterEnrichment(
             Date.now()
           );
 
+          // The archive is written once per run (below), not per player: each
+          // write rewrites the whole archive and fans out to storage listeners.
+          // Until then the room snapshot holds these profiles, and the next
+          // run moves that snapshot into the archive before replacing it.
           await publish();
-          await rememberCachedPlayerProfiles({ [summary.discordId]: profilesByDiscordId[summary.discordId]! });
         }
       }
     );
@@ -486,14 +537,13 @@ async function performRosterEnrichment(
     }
 
     await publish();
-    await rememberCachedPlayerProfiles(profilesByDiscordId);
 
     if (scope === 'currentSeason') {
       await fetchNewcomerAllTimeStats(roster.players, profilesByDiscordId, signal);
       if (signal.aborted || runId !== enrichmentRunId) return;
       await publish();
-      await rememberCachedPlayerProfiles(profilesByDiscordId);
     }
+    await rememberCachedPlayerProfiles(profilesByDiscordId);
   } catch (caught) {
     if (signal.aborted || runId !== enrichmentRunId) {
       return;
@@ -564,12 +614,13 @@ async function fetchNewcomerAllTimeStats(
   }));
 }
 
-function getEnrichmentKey(roster: PrematchRoster): string {
-  return JSON.stringify([selectedStatsScope, roster.matchCode, [...new Set(roster.players.map(player => player.discordId))].sort()]);
+function getEnrichmentKey(roster: PrematchRoster, scope: PlayerStatsScope): string {
+  return JSON.stringify([scope, roster.matchCode, [...new Set(roster.players.map(player => player.discordId))].sort()]);
 }
 
 function persistProfileRecovery(): Promise<void> {
   const value = pendingRecovery;
+  scheduleRecoveryTimer(value);
   const write = recoveryWrites.then(async () => {
     if (value === undefined) await browser.storage.local.remove(RECOVERY_STORAGE_KEY);
     else await browser.storage.local.set({ [RECOVERY_STORAGE_KEY]: value });
@@ -578,6 +629,20 @@ function persistProfileRecovery(): Promise<void> {
   });
   recoveryWrites = write.catch(reportEnrichmentError);
   return write;
+}
+
+// Chrome fires alarms no sooner than 30 s after they are set, but a 5xx or a
+// short Retry-After can make retryAt (shown on the cards) earlier. While the
+// worker is alive, a timer runs the retry on time; the alarm is the backstop
+// for a worker that stopped, and finds nothing due once the timer has run.
+function scheduleRecoveryTimer(recovery: ProfileRecovery | undefined): void {
+  if (recoveryTimer !== undefined) clearTimeout(recoveryTimer);
+  recoveryTimer = undefined;
+  if (recovery === undefined || recovery.exhausted) return;
+  recoveryTimer = setTimeout(() => {
+    recoveryTimer = undefined;
+    void initialization.then(resumeProfileRecovery).catch(reportEnrichmentError);
+  }, Math.max(0, recovery.retryAt - Date.now()));
 }
 
 async function restoreProfileRecovery(): Promise<void> {
@@ -596,7 +661,7 @@ async function resumeProfileRecovery(): Promise<void> {
   const lock = await getLobbyLockState();
   const roster = normalizeRosterForDisplay(lock?.locked ? lock.roster : await getLatestPrematchRoster());
   if (pendingRecovery !== recovery) return;
-  if (roster === undefined || getEnrichmentKey(roster) !== recovery.key) {
+  if (roster === undefined || getEnrichmentKey(roster, selectedStatsScope) !== recovery.key) {
     pendingRecovery = undefined;
     await persistProfileRecovery();
     return;
@@ -626,25 +691,12 @@ async function writeProfileSnapshot(
 function getFreshProfiles(
   cachedProfiles: Record<string, PlayerProfileSummary>,
   discordIds: string[],
+  scope: PlayerStatsScope,
   now: number
 ): Record<string, PlayerProfileSummary> {
   return Object.fromEntries(
     discordIds
       .map((discordId) => [discordId, cachedProfiles[discordId]] as const)
-      .filter((entry): entry is readonly [string, PlayerProfileSummary] => {
-        const profile = entry[1];
-
-        return (
-          profile !== undefined &&
-          profile.error === undefined &&
-          profile.isPartial !== true &&
-          now - (profile.scopeFetchedAt === undefined ? profile.fetchedAt : profile.scopeFetchedAt[selectedStatsScope] ?? 0) < PROFILE_CACHE_TTL_MS &&
-          hasCurrentStatsShape(profile) &&
-          profile.bestUmaScoreVersion === BEST_UMA_SCORE_VERSION &&
-          profile.recentHistoryVersion === RECENT_HISTORY_VERSION &&
-          profile.currentSeasonStats?.recentHistoryVersion === RECENT_HISTORY_VERSION &&
-          profile.allTimeStats?.recentHistoryVersion === RECENT_HISTORY_VERSION
-        );
-      })
+      .filter((entry): entry is readonly [string, PlayerProfileSummary] => isFreshProfile(entry[1], scope, now))
   );
 }

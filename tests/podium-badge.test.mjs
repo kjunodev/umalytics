@@ -22,6 +22,21 @@ const baseProfile = (podiums, matches) => ({
   topUmas: [], bestUmas: [], allUmas: [], recentMatches: [{}]
 });
 
+test('an unknown rank (leaderboard unavailable) never earns rank-based badges like Underrated', () => {
+  const c = badgesContext();
+  const strong = { discordId: '1', matches: 40, pointsPerGame: 6.5, rank: null, statsPrivate: false, topUmas: [], bestUmas: [], allUmas: [] };
+  assert.equal(c.getNotableBadges(strong).some(b => b.kind === 'underrated'), true, 'a genuinely unranked player still qualifies');
+  assert.equal(c.getNotableBadges({ ...strong, rankUnavailable: true }).some(b => b.kind === 'underrated'), false);
+});
+
+test('an unknown rank is labelled unknown, never Unranked', () => {
+  const c = vm.createContext({});
+  loadModule(c, 'uiCommonFormat');
+  assert.equal(c.formatRank({ rank: null }, false), 'Unranked');
+  assert.equal(c.formatRank({ rank: null, rankUnavailable: true }, false), 'Rank unknown');
+  assert.equal(c.formatRank({ rank: 3, rankUnavailable: true }, false), '#3');
+});
+
 test('podiumRegular badge is absent just below the per-game threshold', () => {
   const c = badgesContext();
   const profile = baseProfile(279, 100);

@@ -118,9 +118,12 @@ function service(globals = {}) {
     getSeasonLeaderboard: async () => ({ activeSeasonId: 'S1', entries: [{ rank: 1, userId: '100000000000000099', displayName: 'Leader', rating: 1700, rd: 50, wins: 12, losses: 8 }] }),
     getApiCooldown: () => undefined, fetchJson: async path => { calls.push(path); return fixture; },
     ...globals });
-  load(h, 'explorerTypes'); load(h, 'explorerService');
+  load(h, 'explorerTypes'); load(h, 'profileCache'); load(h, 'explorerService');
   return { h, calls };
 }
+
+// Current-format per-scope stats, as the shared freshness rule requires.
+const scopeStats = () => ({ currentSeasonStats: { allUmas: [], recentHistoryVersion: 6 }, allTimeStats: { allUmas: [], recentHistoryVersion: 6 } });
 
 test('lookup validates request size, IDs, page, and scope before fetching', () => {
   const { h } = service();
@@ -149,7 +152,7 @@ test('history and exact ID lookup do not invoke live enrichment or write live st
 
 test('fresh scope-specific archive hits avoid profile requests; partial/wrong scope refetch', async () => {
   const id = '100000000000000099'; let fetched = 0;
-  const cached = {discordId:id,statsScope:'allTime',fetchedAt:Date.now(),bestUmaScoreVersion:17,recentHistoryVersion:6};
+  const cached = {discordId:id,statsScope:'allTime',fetchedAt:Date.now(),bestUmaScoreVersion:17,recentHistoryVersion:6,...scopeStats()};
   const { h } = service({getCachedPlayerProfiles:async()=>({[id]:cached}), fetchPlayerProfileSummaries:async players=>{fetched++;return {[id]:cached};}});
   await h.executeExplorerRequest({kind:'profiles',scope:'allTime',players:[{discordId:id}]},new AbortController().signal,()=>{});
   assert.equal(fetched,0);
@@ -164,13 +167,27 @@ test('a cached profile can reuse a fresh previously fetched scope after switchin
   const id = '100000000000000099'; let fetched = 0;
   const now = Date.now();
   const cached = { discordId: id, statsScope: 'allTime', fetchedAt: now,
-    scopeFetchedAt: { currentSeason: now, allTime: now }, bestUmaScoreVersion: 17, recentHistoryVersion: 6 };
+    scopeFetchedAt: { currentSeason: now, allTime: now }, bestUmaScoreVersion: 17, recentHistoryVersion: 6, ...scopeStats() };
   const { h } = service({ getCachedPlayerProfiles: async () => ({ [id]: cached }),
     fetchPlayerProfileSummaries: async () => { fetched++; return {}; } });
   const result = await h.executeExplorerRequest({ kind: 'profiles', scope: 'currentSeason', players: [{ discordId: id }] },
     new AbortController().signal, () => {});
   assert.equal(result[id], cached);
   assert.equal(fetched, 0);
+});
+
+test('lookups and the lobby share one freshness rule: an old-format archive profile is refetched', async () => {
+  const id = '100000000000000099'; let fetched = 0; const now = Date.now();
+  const stats = { allUmas: [], recentHistoryVersion: 6 };
+  const current = { discordId: id, statsScope: 'allTime', fetchedAt: now, scopeFetchedAt: { allTime: now },
+    bestUmaScoreVersion: 17, recentHistoryVersion: 6, currentSeasonStats: stats, allTimeStats: stats };
+  const oldFormat = { ...current, allTimeStats: { allUmas: [], recentHistoryVersion: 5 } };
+  for (const [cached, expected] of [[current, 0], [oldFormat, 1]]) {
+    fetched = 0;
+    const { h } = service({ getCachedPlayerProfiles: async () => ({ [id]: cached }), fetchPlayerProfileSummaries: async () => { fetched++; return {}; } });
+    await h.executeExplorerRequest({ kind: 'profiles', scope: 'allTime', players: [{ discordId: id }] }, new AbortController().signal, () => {});
+    assert.equal(fetched, expected);
+  }
 });
 
 test('cancelled lookup does not publish late profiles or save the result', async () => {

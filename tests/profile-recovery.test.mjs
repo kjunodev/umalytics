@@ -1,6 +1,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { tick, players, roster, apiHarness, backgroundHarness } from './support/helpers.mjs';
+import { tick, players, roster, apiHarness, backgroundHarness as realTimerHarness, waitUntil } from './support/helpers.mjs';
+
+// The harness clock only moves when a test advances it, so the background's
+// recovery timer is captured here instead of running on real time.
+function backgroundHarness(options) {
+  const h=realTimerHarness(options);const timers=[];
+  h.c.setTimeout=(fn,ms)=>{timers.push({fn,ms,cleared:false});return timers.length;};
+  h.c.clearTimeout=id=>{if(timers[id-1])timers[id-1].cleared=true;};
+  h.timers=timers;
+  return h;
+}
 
 function failBatch(h,index=0) {
   const cooldown={until:h.now+30000,status:429,path:'/api/stats/players/fixture/profile'};
@@ -48,6 +58,23 @@ test('persistent API failures stop after two automatic retries until manual refr
   assert.equal(restarted.snapshots.at(-1).loadingDiscordIds.length,0,'restart repairs queued cards after retry exhaustion');
   const manual=h.c.enrichRosterProfiles(roster(),{forceRefresh:true});await tick();
   assert.equal(h.fetches.length,4);h.fetches[3].gate.resolve();await manual;
+});
+
+test('a retry due sooner than the 30 s alarm minimum runs at the time shown on the cards',async()=>{
+  const h=backgroundHarness();const timers=h.timers;
+  const first=h.c.enrichRosterProfiles(roster());await tick();
+  const cooldown={until:h.now+10000,status:503,path:'/api/stats/players/fixture/stats'};
+  h.c.getApiCooldown=()=>cooldown;
+  h.fetches[0].gate.resolve(Object.fromEntries(h.fetches[0].players.map(p=>[p.discordId,{discordId:p.discordId,fetchedAt:h.now,error:'Request failed (HTTP 503): /x'}])));
+  await first;
+  const state=h.snapshots.at(-1).profileStates[players()[0].discordId];
+  assert.equal(state.retryAt,cooldown.until,'cards show the real retry time');
+  assert.equal(h.alarms.size,1,'the alarm stays as a backstop if the worker stops');
+  const timer=timers.find(entry=>!entry.cleared&&entry.ms===10000);
+  assert(timer,'a timer is armed for the published retry time');
+  h.advance(10000);timer.fn();
+  await waitUntil(()=>h.fetches.length===2);
+  h.fetches[1].gate.resolve();
 });
 
 test('room changes cancel a pending recovery without fetching the old team',async()=>{
