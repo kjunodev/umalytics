@@ -144,7 +144,9 @@ export function getNotableBadges(profile: PlayerProfileSummary | undefined): Not
     });
   }
 
+  // Needs a known rank: when the leaderboard did not load, rank is unknown, not unranked.
   if (
+    profile.rankUnavailable !== true &&
     profile.pointsPerGame !== undefined &&
     profile.pointsPerGame !== null &&
     profile.pointsPerGame >= UNDERRATED_MIN_PPG &&

@@ -3,6 +3,34 @@ import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import { evaluate, deferred, waitUntil, context, players, apiHarness } from './support/helpers.mjs';
 
+// Runs the real (unpatched) timing code `factor` times faster: timers fire
+// early and Date.now advances `factor` ms per real ms.
+function scaleTime(c,factor) {
+  const realStart=Date.now(),perfStart=performance.now();
+  class ScaledDate extends Date { static now(){return Math.round(realStart+(performance.now()-perfStart)*factor);} }
+  c.Date=ScaledDate;c.setTimeout=(fn,ms=0,...args)=>setTimeout(fn,Math.max(0,ms)/factor,...args);c.clearTimeout=clearTimeout;
+}
+
+test('under slowed 2 s pacing the leaderboard waits behind 10 stats requests without timing out every card',async()=>{
+  const h=apiHarness({latency:2,fast:false});scaleTime(h.c,50);
+  vm.runInContext('requestStartIntervalMs=2000;requestQueue.setStartInterval(2000);',h.c);
+  const result=Object.values(await h.c.fetchPlayerProfileSummaries(players(10),{scope:'currentSeason'}));
+  assert.equal(result.length,10);
+  assert.deepEqual(result.map(summary=>summary.error).filter(Boolean),[]);
+  assert(result.every(summary=>summary.rankUnavailable!==true));
+  assert.equal(h.calls.at(-1),'/api/leaderboard?season=S1','the leaderboard still runs after the stats requests');
+});
+
+test('a failed leaderboard leaves ranks unavailable without marking the player profiles as failed',async()=>{
+  const h=apiHarness({responder:url=>url.pathname==='/api/leaderboard'?{status:404}:undefined});
+  const result=Object.values(await h.c.fetchPlayerProfileSummaries(players(3),{scope:'currentSeason'}));
+  assert.equal(result.length,3);
+  for(const summary of result) {
+    assert.equal(summary.error,undefined);assert.equal(summary.rankUnavailable,true);
+    assert.equal(summary.rank,null);assert.equal(summary.currentSeasonStats.matches,4);
+  }
+});
+
 test('at the 350 ms pace, 10-player stats resolve within ~4 s and the whole lobby within ~4.5 s',async()=>{
   const h=apiHarness({latency:100,fast:false});const resolved=new Map();const start=performance.now();
   await h.c.fetchPlayerProfileSummaries(players(10),{scope:'currentSeason',onProgress:summary=>{
