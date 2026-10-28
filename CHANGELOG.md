@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.5.4
+
+- Read the room code only from the lobby's own room-code elements, so other text on the page can no longer be mistaken for a room, and handle room changes and reconnects more reliably.
+- Focus the open scouting window instead of opening a second one, and keep its size and position after the browser has been idle.
+- Stop a slow leaderboard from making every profile show "timed out"; an unknown rank now shows "Rank unknown".
+- Make rate-limit recovery gentler and steadier: slow down once per pause, speed up gradually and retry when the cards say.
+- Keep loaded match history from changing the badges of a player whose stats are hidden.
+- Require Firefox 128 or later.
+- Rewrite the privacy notes to list exactly what is requested and stored.
+
 ## 0.5.3
 
 - Scroll the Umas catalog inside its own panel: the toolbar stays in place and the detail panel scrolls on its own.
