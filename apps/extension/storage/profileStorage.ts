@@ -14,6 +14,10 @@ export async function getCachedPlayerProfiles(): Promise<Record<string, PlayerPr
   return archiveLoad ??= browser.storage.local.get(PROFILE_ARCHIVE_KEY).then(values => {
     profileArchive = mergeProfileCache({}, (values[PROFILE_ARCHIVE_KEY] ?? {}) as Record<string, PlayerProfileSummary>, Date.now());
     return profileArchive;
+  }, (error: unknown) => {
+    // Never memoise a failed read: the next lookup tries storage again.
+    archiveLoad = undefined;
+    throw error;
   });
 }
 

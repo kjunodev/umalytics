@@ -200,7 +200,6 @@ export function getDiagnostics(
   draftSnapshot: DraftSnapshot | undefined,
   profileSnapshot: PlayerProfileSummariesSnapshot | undefined,
   teams: PrematchTeam[],
-  loadingProfiles: number,
   statsScope: PlayerStatsScope,
   now: number,
   isLobbyLocked: boolean,

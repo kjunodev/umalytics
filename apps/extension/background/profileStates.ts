@@ -81,13 +81,13 @@ function getProfileLoadStatus(profile: PlayerProfileSummary): PlayerProfileLoadS
   return 'loaded';
 }
 
+// Ranked stats only: match history is display-only and never counts as stats.
 function hasUsableProfileStats(profile: PlayerProfileSummary): boolean {
   return (
     typeof profile.matches === 'number' ||
     (profile.topUmas?.length ?? 0) > 0 ||
     (profile.bestUmas?.length ?? 0) > 0 ||
     (profile.allUmas?.length ?? 0) > 0 ||
-    (profile.recentMatches?.length ?? 0) > 0 ||
     (typeof profile.currentSeasonStats?.matches === 'number' && profile.currentSeasonStats.matches > 0) ||
     (typeof profile.allTimeStats?.matches === 'number' && profile.allTimeStats.matches > 0)
   );
@@ -118,14 +118,6 @@ function getRetainedProfiles(
   );
 }
 
-function hasCurrentStatsShape(profile: PlayerProfileSummary): boolean {
-  return (
-    profile.currentSeasonStats !== undefined &&
-    profile.allTimeStats !== undefined &&
-    Array.isArray(profile.allTimeStats.allUmas)
-  );
-}
-
 export {
   MAX_AUTOMATIC_RETRIES,
   buildProfileLoadStates,
@@ -136,6 +128,5 @@ export {
   getRetainedProfiles,
   markProfilesForRecovery,
   getLoadingDiscordIds,
-  isPendingProfileState,
-  hasCurrentStatsShape
+  isPendingProfileState
 };

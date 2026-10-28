@@ -1,5 +1,33 @@
-import type { PlayerProfileSummary } from '@umalytics/shared';
+import type { PlayerProfileSummary, PlayerStatsScope } from '@umalytics/shared';
 import { mergeProfileScopes } from './profileMerge';
+import { BEST_UMA_SCORE_VERSION, PROFILE_CACHE_TTL_MS, RECENT_HISTORY_VERSION } from './profileConstants';
+
+/** The one freshness rule for the lobby and lookups: a complete, current-format
+ * profile whose stats for `scope` were fetched within the cache TTL. The scope
+ * is passed explicitly, never read from the live setting. */
+export function isFreshProfile(profile: PlayerProfileSummary | undefined, scope: PlayerStatsScope, now: number): boolean {
+  if (profile === undefined || profile.error !== undefined || profile.isPartial === true) return false;
+  // Older profiles have no per-scope timestamps; fetchedAt only covers the scope they were shown in.
+  const scopeFetchedAt = profile.scopeFetchedAt !== undefined
+    ? profile.scopeFetchedAt[scope]
+    : profile.statsScope === scope ? profile.fetchedAt : undefined;
+  return (
+    scopeFetchedAt !== undefined && now - scopeFetchedAt < PROFILE_CACHE_TTL_MS &&
+    hasCurrentStatsShape(profile) &&
+    profile.bestUmaScoreVersion === BEST_UMA_SCORE_VERSION &&
+    profile.recentHistoryVersion === RECENT_HISTORY_VERSION &&
+    profile.currentSeasonStats?.recentHistoryVersion === RECENT_HISTORY_VERSION &&
+    profile.allTimeStats?.recentHistoryVersion === RECENT_HISTORY_VERSION
+  );
+}
+
+export function hasCurrentStatsShape(profile: PlayerProfileSummary): boolean {
+  return (
+    profile.currentSeasonStats !== undefined &&
+    profile.allTimeStats !== undefined &&
+    Array.isArray(profile.allTimeStats.allUmas)
+  );
+}
 
 const MAX_PROFILE_AGE_MS = 24 * 60 * 60 * 1000;
 const MAX_CACHED_PROFILES = 100;

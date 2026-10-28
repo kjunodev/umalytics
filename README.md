@@ -1,50 +1,75 @@
 # UmaLytics
 
-UmaLytics opens a separate scouting window beside [Uma Drafter](https://drafter.uma.guide). See the players in team slots, their available ranked statistics, and the confirmed live draft.
+[![Verify build](https://github.com/kjunodev/umalytics/actions/workflows/verify.yml/badge.svg)](https://github.com/kjunodev/umalytics/actions/workflows/verify.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-**0.5.3 — manual installation and updates.**
+A scouting companion for [Uma Drafter](https://drafter.uma.guide): a browser extension that opens a separate window beside your lobby and shows who you are playing, how they perform and what the draft looks like.
 
-| Browser | Download |
+![The UmaLytics lobby with a player's details open: stats, an Uma table and match history](docs/images/lobby-drawer.png)
+
+## Download
+
+Latest release: v0.5.4. Each release has a Chromium and a Firefox ZIP and a `SHA256SUMS.txt` for checking them.
+
+| Browser | Package |
 | --- | --- |
-| Chrome, Edge, Brave, Opera GX | [Chromium download](https://github.com/kjunodev/umalytics/releases/tag/v0.5.3) |
-| Firefox / LibreWolf | [Firefox download](https://github.com/kjunodev/umalytics/releases/tag/v0.5.3) — temporary installation |
+| Chrome, Edge, Brave, Opera GX | [Chromium ZIP](https://github.com/kjunodev/umalytics/releases/tag/v0.5.4), loaded as an unpacked extension |
+| Firefox 128 or later, LibreWolf | [Firefox ZIP](https://github.com/kjunodev/umalytics/releases/tag/v0.5.4), loaded as a temporary add-on (unsigned, so load it again after a browser restart) |
 
-[Install or update](docs/INSTALL.md) · [Changes](CHANGELOG.md) · [Privacy](PRIVACY.md) · [Report a bug](https://github.com/kjunodev/umalytics/issues/new?template=bug_report.md)
+Step-by-step instructions: [Install or update UmaLytics](docs/INSTALL.md). Release history: [CHANGELOG](CHANGELOG.md).
 
-## Start scouting
+## What it does
 
-1. Extract the package and follow the installation guide.
-2. Open or refresh Uma Drafter, then enter a room or spectate a draft.
-3. Click the UmaLytics extension icon. Use Lobby for player cards, Draft for confirmed selections, and Umas for team experience.
-4. Choose Season or All-time. Leave Lobby Lock unlocked to follow room changes; lock it only when you want to keep the displayed players fixed.
+Enter a room or spectate a draft on Uma Drafter, then click the UmaLytics icon. The header switches between **Live**, **History** and **Players**, and between the **Lobby**, **Draft** and **Umas** scenes. Choose **Season** or **All-time** statistics at any time.
 
-## What is included
+- **Live lobby:** one card per player in team order, with rank and rating, a few badges (for example One-trick, Deep pool, Podium regular, Underrated and Newcomer), record, win rate, points per game, MVP count, their top three Umas and their Uma League team icon. Players who keep their statistics private are shown as private.
+- **Player details:** open any card for a drawer with the player's title, a sortable table of their Umas and paged match history. A match code in the history opens that match in History.
+- **Draft:** teams, races and picks side by side, with a phase bar, race conditions, bans, vetoes, the tiebreaker map and how much experience each team has on every pick.
+- **Umas:** a searchable, sortable catalog of every Uma with the lobby's and each team's experience on it.
+- **History:** load a completed match by its code or match-page URL and view it in the same scenes.
+- **Players:** search the season leaderboard, or open anyone by profile URL or Discord ID.
+- **Also:** Lobby Lock keeps the displayed players fixed, a UI size setting (Small, Default, Large) adapts the window to your display, and the window remembers its size and position in Chromium browsers.
 
-Version 0.4.0 adds **Live / History / Profiles** navigation in a fixed header. History accepts a match code or match-page URL and offers the same **Lobby / Draft / Umas** scenes as Live, including player details and matching pick portraits. Profiles accepts a username, Discord ID or profile URL and opens single-player scouting details. All modes use the header's **Season / All-time** control and retain their own scope selection.
+![The Draft scene: picks, bans and vetoes for both teams around the race list](docs/images/draft.png)
 
-History keeps its selected match separate from the live lobby. Any accompanying player statistics are current, not historical snapshots. Name searches show selectable directory matches (up to 50); refine the name or use an exact ID if needed. Neither feature requires an active lobby. Results remain while switching views, but match/search selections reset when the scouting window closes. Unavailable saved drafts and API errors are shown explicitly.
+![The Umas catalog with the lobby's experience for the selected Uma](docs/images/umas.png)
 
-- Starting-room trainer identification, with player identities kept independent of companion images and spectators excluded from the roster.
-- Versioned room events and DOM fallback for lobby and draft detection.
-- Cached player summaries, selected-scope loading, and explicit hidden/unavailable states. A lobby uses paced per-player stats requests, plus a season request and a leaderboard request; lobby cards make no profile or match-history request. Switching scope loads the other scope.
-- Paced API requests, request cancellation on room changes, and bounded automatic recovery after rate limits.
-- Confirmed picks, bans, vetoes, map order and a tiebreaker view.
-- Local diagnostics that you can copy when reporting a problem.
+The screenshots come from the repository's preview harness and use fixture data only.
 
 ## Privacy
 
-This extension respects hidden ranked stats. Opening a player's details requests their profile once for their title and the first history page for recent results; Load more requests additional history pages, including for players with hidden stats. Lobby cards have no title or history data. Match history is displayed but never used to calculate ranked statistics. Loading a completed match by code displays that match's available draft. Identity, rank or rating may still appear when separately exposed by the site; hidden detailed statistics remain unavailable, including in profile lookup.
+UmaLytics has no backend and no analytics, and nothing is uploaded automatically. It asks Uma Drafter's public API for the stats of the players in your room and keeps recent results, preferences and a small sanitized diagnostic trace in your browser's extension storage. Match history is display-only: it is never used to calculate statistics, badges or the Private state, and statistics a player has hidden stay hidden. The full list of what is requested and stored is in [PRIVACY.md](PRIVACY.md).
 
-The extension contacts Uma Drafter's services with player identifiers. Scouting state and a bounded diagnostic trace stay in local extension storage. There is no UmaLytics backend, analytics service or automatic diagnostic upload. See [PRIVACY.md](PRIVACY.md).
+## How it works
 
-## Expectations
+UmaLytics is a Manifest V3 extension built with TypeScript, React and [WXT](https://wxt.dev). The parts worth looking at:
 
-This is a testing release. Cached data can appear quickly; uncached data depends on the upstream API. HTTP 429 pauses requests rather than bypassing the server's limits. Site changes can affect detection. A player whose room exposes no verified identity cannot be looked up reliably.
+- **Room detection:** a MAIN-world page hook decodes the site's realtime room events and forwards only whitelisted fields, with a DOM-based fallback. A content script validates the room identity, serializes updates and rejects stale or foreign events.
+- **Background service worker:** all API traffic runs through one paced, cancellable queue with rate-limit backoff and a bounded automatic retry. Caches are bounded, and the state that matters (the scouting window, the selected tab, rate-limit recovery, cached responses) survives MV3 service-worker restarts.
+- **Data boundary:** match history can be displayed but cannot feed the statistics code. Tests enforce that boundary.
+- **Tests:** about 350 Node tests, plus a Playwright layout harness that renders every scene from fixtures and checks geometry across ten viewport sizes and three UI sizes.
+- **Delivery:** CI runs the tests, type check and build on every pull request (and the layout harness on pull requests), and releases are published automatically with checksums.
 
-Chromium behavior has been observed during a live ranked draft on the preceding candidate. The 0.5.1 changes have automated regression coverage; see [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for exact checks and limits. Firefox remains an unsigned temporary add-on, not a permanent store installation. Human team cards currently assume up to five slots per side; complete support for every custom mode is not claimed.
+Details: [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
 
-## Development and feedback
+## Development
 
-Built with TypeScript, React and WXT. [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) documents tests and reproducible builds. Source and releases live at [kjunodev/umalytics](https://github.com/kjunodev/umalytics). Licensed under the [MIT License](LICENSE).
+Node 24 and pnpm 9.15.4. No backend, API key or environment file is needed.
 
-Bug reports should include the version, browser, expected/actual behavior and diagnostics copied soon after the problem. Review the report before posting: its status section can include player IDs, room codes and API error paths. Older download assets retain their original contents.
+```sh
+pnpm install --frozen-lockfile
+pnpm test
+pnpm typecheck
+pnpm build:all
+pnpm --filter @umalytics/extension preview   # layout harness with fixture data
+```
+
+See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for the architecture, the test layout and the release process.
+
+## Feedback
+
+Found a bug or a wrong detection? [Open an issue](https://github.com/kjunodev/umalytics/issues/new?template=bug_report.md) with your browser, the UmaLytics version, what you expected and what happened. If you attach diagnostics from Copy diagnostics, review them first: they can contain room codes and player IDs.
+
+## License
+
+[MIT](LICENSE)

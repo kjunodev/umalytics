@@ -14,7 +14,6 @@ const root = fileURLToPath(new URL('../../apps/extension/', import.meta.url));
 export const MODULES = {
   background: 'entrypoints/background.ts',
   content: 'entrypoints/content.ts',
-  pageHook: 'entrypoints/pageHook.ts',
   scoutApp: 'entrypoints/scout/App.tsx',
   uiCommonTokensCss: 'ui/common/tokens.css',
   uiCommonBaseCss: 'ui/common/base.css',
@@ -107,7 +106,6 @@ const PRELOADS = {
   profileCache: ['profileMerge'],
   explorerState: ['profileMerge'],
   explorerService: ['profileMerge'],
-  pageHook: ['pageHookRuntime'],
   content: ['roomEvents', 'rosterIdentity', 'recordReaders'],
   domLobbyExtraction: ['recordReaders', 'teams'],
   draftExtraction: ['recordReaders', 'teams'],

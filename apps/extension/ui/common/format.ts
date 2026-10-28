@@ -5,7 +5,8 @@ export function formatRank(profile: PlayerProfileSummary | undefined, isLoading:
     return `#${profile.rank}`;
   }
 
-  return isLoading ? 'Loading profile' : 'Unranked';
+  if (isLoading) return 'Loading profile';
+  return profile?.rankUnavailable === true ? 'Rank unknown' : 'Unranked';
 }
 
 export function formatRecord(profile: PlayerProfileSummary | undefined): string {

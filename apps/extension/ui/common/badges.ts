@@ -144,7 +144,9 @@ export function getNotableBadges(profile: PlayerProfileSummary | undefined): Not
     });
   }
 
+  // Needs a known rank: when the leaderboard did not load, rank is unknown, not unranked.
   if (
+    profile.rankUnavailable !== true &&
     profile.pointsPerGame !== undefined &&
     profile.pointsPerGame !== null &&
     profile.pointsPerGame >= UNDERRATED_MIN_PPG &&
@@ -255,11 +257,12 @@ function buildNewcomerBadge(allTimeMatches: number): NotableBadge {
   };
 }
 
+// Ranked Uma lists only. Match history is display-only and never decides
+// privacy, card state or badges.
 export function hasDisplayableProfileLists(profile: PlayerProfileSummary | undefined): boolean {
   return (
     (profile?.topUmas?.length ?? 0) > 0 ||
     (profile?.bestUmas?.length ?? 0) > 0 ||
-    (profile?.allUmas?.length ?? 0) > 0 ||
-    (profile?.recentMatches?.length ?? 0) > 0
+    (profile?.allUmas?.length ?? 0) > 0
   );
 }

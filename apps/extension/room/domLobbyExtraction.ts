@@ -21,13 +21,17 @@ export function extractPrematchRosterFromRoomDom(document: Document): PrematchRo
   }
 
   return {
-    ...(roomCode === undefined ? {} : { matchCode: roomCode as MatchCode }),
+    matchCode: roomCode,
     phase: 'room-lobby',
     players,
     teams: Object.fromEntries(teams.map((team) => [team.id, team])) as Record<TeamId, PrematchTeam>
   };
 }
 
+const ROOM_CODE_LABEL_PATTERN = /^room\s+code\s*:?\s*([A-Z0-9]{3}-?[A-Z0-9]{3})$/i;
+
+/** Read the room code only from elements dedicated to showing it. Arbitrary
+ * text (chat, player names, wrapper containers) never establishes identity. */
 export function extractRoomCodeFromRoomDom(document: Document): MatchCode | undefined {
   const copyButtonCode = normalizeRoomCode(
     document.querySelector<HTMLButtonElement>('button[aria-label="Copy room code" i], button[title*="room code" i]')?.textContent
@@ -37,12 +41,16 @@ export function extractRoomCodeFromRoomDom(document: Document): MatchCode | unde
     return copyButtonCode as MatchCode;
   }
 
-  const labeledTextCode = Array.from(document.querySelectorAll<HTMLElement>('button, span, p, div'))
-    .filter((element) => /\broom\s+code\b/i.test(element.textContent ?? ''))
-    .map((element) => normalizeRoomCode(element.textContent))
-    .find((code) => code !== undefined);
+  // Fallback: a leaf element whose whole text is "Room code: ABC-123". The
+  // answer must be unambiguous; conflicting labels mean none can be trusted.
+  const labelledCodes = new Set<MatchCode>();
+  for (const element of Array.from(document.querySelectorAll<HTMLElement>('button, span, p, div'))) {
+    if (element.children.length > 0) continue;
+    const code = normalizeMatchCode(ROOM_CODE_LABEL_PATTERN.exec(normalizeText(element.textContent) ?? '')?.[1]);
+    if (code !== undefined) labelledCodes.add(code);
+  }
 
-  return labeledTextCode as MatchCode | undefined;
+  return labelledCodes.size === 1 ? [...labelledCodes][0] : undefined;
 }
 
 function findTeamSections(document: Document): Array<{ id: TeamId; name?: string; element: HTMLElement }> {
@@ -312,5 +320,5 @@ function normalizeRoomCode(value: string | null | undefined): string | undefined
     return undefined;
   }
 
-  return normalizeMatchCode(text) ?? normalizeMatchCode(/\broom\s+code\b\s*:?\s*([A-Z0-9]{3}-?[A-Z0-9]{3})\b/i.exec(text)?.[1]);
+  return normalizeMatchCode(text) ?? normalizeMatchCode(ROOM_CODE_LABEL_PATTERN.exec(text)?.[1]);
 }

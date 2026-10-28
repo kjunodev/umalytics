@@ -88,7 +88,6 @@ export function DraftScene({
           rosterPlayers={getDraftRosterPlayersForTeam(roster, 'team1')}
           profiles={profiles}
           statsScope={statsScope}
-          historical={historical}
           isCurrentTeam={!historical && snapshot.currentTeam === 'team1'}
         />
         <DraftRacesPanel
@@ -103,7 +102,6 @@ export function DraftScene({
           rosterPlayers={getDraftRosterPlayersForTeam(roster, 'team2')}
           profiles={profiles}
           statsScope={statsScope}
-          historical={historical}
           isCurrentTeam={!historical && snapshot.currentTeam === 'team2'}
         />
       </div>
@@ -171,7 +169,6 @@ export function DraftTeamPanel({
   rosterPlayers,
   profiles,
   statsScope,
-  historical,
   isCurrentTeam
 }: {
   team: DraftTeamSnapshot;
@@ -179,7 +176,6 @@ export function DraftTeamPanel({
   rosterPlayers: PrematchPlayer[];
   profiles: Record<string, PlayerProfileSummary>;
   statsScope: PlayerStatsScope;
-  historical: boolean;
   isCurrentTeam: boolean;
 }) {
   const picks = team.umas.filter((uma) => uma.kind === 'pick');

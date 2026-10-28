@@ -2,16 +2,12 @@ node_modules/
 dist/
 .output/
 .wxt/
-releases/
-release-repo/
 
 *.log
 *.tsbuildinfo
 .env
 .env.*
 !.env.example
-.releases/
-
 .releases/
 .pnpm-store/
 downloads/

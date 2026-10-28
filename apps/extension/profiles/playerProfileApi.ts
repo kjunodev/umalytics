@@ -227,6 +227,7 @@ async function fetchPlayerProfileSummary(
   let currentSeasonStatsPrivate = false;
   let statsPrivate = false;
   let error: string | undefined;
+  let rankUnavailable = false;
   let leaderboard: LeaderboardLookup = { ranksByDiscordId: new Map() };
   let activeSeasonId: string | undefined;
   const seasonReady = seasonPromise.then(value => { activeSeasonId = value.activeSeasonId; return value; });
@@ -270,7 +271,12 @@ async function fetchPlayerProfileSummary(
   activeSeasonId = sharedResults[0].activeSeasonId;
   leaderboard = sharedResults[1];
   const currentSeasonStatsResult = sharedResults[2];
-  if (leaderboard.error !== undefined) error = error ?? leaderboard.error;
+  // Without the season, current-season stats cannot load: that is a profile failure.
+  if (scope !== 'allTime' && activeSeasonId === undefined && sharedResults[0].error !== undefined) {
+    error = error ?? sharedResults[0].error;
+  }
+  // A missing leaderboard only loses rank: it must not fail (and refetch) a usable profile.
+  rankUnavailable = leaderboard.error !== undefined;
   signal.throwIfAborted();
 
   if (currentSeasonStatsResult !== undefined) {
@@ -332,6 +338,7 @@ async function fetchPlayerProfileSummary(
     allTimeStats: allTimeStatsSummary,
     activeSeasonId,
     statsPrivate,
+    ...(rankUnavailable ? { rankUnavailable: true } : {}),
     fetchedAt: Date.now(),
     profileUrl,
     error
@@ -353,12 +360,15 @@ function getActiveSeasonId(): Promise<SeasonLookup> {
     .finally(() => budget.dispose());
 }
 
+// No budget of its own: the season lookup has one, and the leaderboard
+// request's timeout starts when it leaves the queue (fetchJson). A budget
+// started here also counted the wait behind the lobby's stats requests, so
+// slowed pacing timed it out for every player.
 function getActiveLeaderboard(seasonPromise: Promise<SeasonLookup>): Promise<LeaderboardLookup> {
   if (leaderboardRequest !== undefined) return leaderboardRequest;
-  const budget = deadline(undefined, 15_000, 'Season/leaderboard request timed out.');
-  leaderboardRequest = abortable(fetchActiveLeaderboard(seasonPromise, budget.signal), budget.signal)
+  leaderboardRequest = fetchActiveLeaderboard(seasonPromise)
     .catch((caught): LeaderboardLookup => ({ ranksByDiscordId: new Map(), error: getErrorMessage(caught, PROFILE_ERROR_FALLBACK) }))
-    .finally(() => { budget.dispose(); leaderboardRequest = undefined; });
+    .finally(() => { leaderboardRequest = undefined; });
   return leaderboardRequest;
 }
 
@@ -379,8 +389,8 @@ export async function getSeasonLeaderboard(signal: AbortSignal): Promise<SeasonL
     })) };
 }
 
-async function fetchActiveLeaderboard(seasonPromise: Promise<SeasonLookup>, signal: AbortSignal): Promise<LeaderboardLookup> {
-  const season = await abortable(seasonPromise, signal);
+async function fetchActiveLeaderboard(seasonPromise: Promise<SeasonLookup>, signal?: AbortSignal): Promise<LeaderboardLookup> {
+  const season = signal === undefined ? await seasonPromise : await abortable(seasonPromise, signal);
   if (season.activeSeasonId === undefined) {
     return { ranksByDiscordId: new Map(), error: season.error };
   }

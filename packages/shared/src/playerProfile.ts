@@ -101,6 +101,8 @@ export interface PlayerProfileSummary {
   allTimeStats?: PlayerProfileStatsSummary;
   activeSeasonId?: string;
   statsPrivate?: boolean;
+  /** The season leaderboard did not load: rank is unknown, not "unranked". */
+  rankUnavailable?: boolean;
   fetchedAt: number;
   profileUrl: string;
   error?: string;

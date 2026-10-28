@@ -1,8 +1,6 @@
 import { decodeRoomEvent, RoomEventState, summarizeRoomEvent } from '../room/roomEvents';
 import { canReuseSyncedRoster } from '../room/rosterIdentity';
 import { browser } from 'wxt/browser';
-import { injectScript } from '#imports';
-import type { ScriptPublicPath } from '#imports';
 import type { DraftSnapshot, PrematchRoster } from '@umalytics/shared';
 import { extractMatchCodeFromUrl } from '../room/matchDetection';
 import {
@@ -24,9 +22,10 @@ import { extractPrematchRosterFromSyncedDraftState } from '../room/playerExtract
 import { isRecord } from '../room/recordReaders';
 
 const SYNCED_DRAFT_STATE_MESSAGE_TYPE = 'umalytics:synced-draft-state';
-const PAGE_HOOK_SCRIPT_PATH = '/pageHook.js' as ScriptPublicPath;
 const CONTENT_SCRIPT_CLEANUP_KEY = '__umalyticsContentScriptCleanup';
 const ROOM_DOM_SCAN_DEBOUNCE_MS = 100;
+// DOM mutations can arrive continuously; they trigger a scan at most this often.
+const ROOM_DOM_MUTATION_SCAN_INTERVAL_MS = 500;
 const ROOM_DOM_RETRY_DELAYS_MS = [250, 1_000, 2_500, 5_000, 10_000, 20_000] as const;
 type RosterSource = 'dom' | 'synced';
 type UmaLyticsWindow = Window & {
@@ -34,7 +33,6 @@ type UmaLyticsWindow = Window & {
 };
 
 const roomEvents = new RoomEventState();
-const pendingRoomEvents = new Map<string, { event: Record<string, unknown>; at: number }>();
 let lastRosterSignature: string | undefined;
 let lastRosterSource: RosterSource | undefined;
 let lastPublishedRoster: PrematchRoster | undefined;
@@ -48,6 +46,8 @@ let lastIgnoredStaleSyncedMatchCode: string | undefined;
 let activeRoomDomMatchCode: string | undefined;
 let activeRoomPageHref: string | undefined;
 let roomDomScanTimer: number | undefined;
+let roomDomScanDueAt = 0;
+let lastRoomDomScanAt = 0;
 let roomDomRetryTimers: number[] = [];
 let roomDomObserver: MutationObserver | undefined;
 let isContentScriptActive = true;
@@ -55,7 +55,7 @@ let isContentScriptActive = true;
 export default defineContentScript({
   matches: ['https://drafter.uma.guide/*'],
   runAt: 'document_start',
-  async main() {
+  main() {
     const pageWindow = window as UmaLyticsWindow;
     const previousCleanup = pageWindow[CONTENT_SCRIPT_CLEANUP_KEY];
 
@@ -78,18 +78,9 @@ export default defineContentScript({
 
     installRoomDomObserver();
     scheduleRoomDomRetries();
-
-    try {
-      await injectScript(PAGE_HOOK_SCRIPT_PATH, { keepInDom: true });
-      requestCapturedRoomEvents();
-    } catch (caught) {
-      if (isExtensionContextInvalidatedError(caught)) {
-        deactivateContentScript();
-        return;
-      }
-
-      throw caught;
-    }
+    // The page hook is a separate MAIN-world content script (roomHook.content),
+    // installed at document start. Ask it to replay anything it already captured.
+    requestCapturedRoomEvents();
   }
 });
 
@@ -143,9 +134,9 @@ function handleRuntimeMessage(message: unknown): Promise<RoomDomScanResult> | un
 }
 
 function handleWindowMessage(message: unknown, matchCode?: string): Promise<void> {
-  const href = typeof window === 'undefined' ? undefined : window.location.href;
+  const href = window.location.href;
   const run = windowMessageQueue.then(() => {
-    if (href !== undefined && href !== window.location.href) return;
+    if (href !== window.location.href) return;
     return processWindowMessage(message, matchCode);
   });
   windowMessageQueue = run.catch(() => {});
@@ -159,17 +150,10 @@ async function processWindowMessage(message: unknown, matchCode?: string): Promi
 
   if (isRecord(message) && message.type === 'umalytics:room-event' && message.hookVersion === 4) {
     refreshActiveRoomDomMatchCode(matchCode);
+    // Events that arrive before the room identity is visible are kept by the
+    // page hook and replayed on request once refreshActiveRoomDomMatchCode
+    // sees the room, so nothing is buffered here.
     const event = decodeRoomEvent(message.payload);
-    if (event !== null && event.matchId !== activeRoomDomMatchCode) {
-      const key = event.matchId + ':' + event.type + ':' + (event.team ?? '');
-      const previous = pendingRoomEvents.get(key)?.event;
-      const oldVersion = previous?.version ?? previous?.revision;
-      const newVersion = event.version ?? event.revision;
-      if (typeof oldVersion === 'number' && typeof newVersion === 'number' && oldVersion > newVersion) return;
-      pendingRoomEvents.delete(key);
-      pendingRoomEvents.set(key, { event, at: Date.now() });
-      if (pendingRoomEvents.size > 8) pendingRoomEvents.delete(pendingRoomEvents.keys().next().value!);
-    }
     const update = roomEvents.apply(message.payload, activeRoomDomMatchCode);
     void sendDiagnosticEvent({ kind: 'room', reason: update.reason, room: activeRoomDomMatchCode,
       ...summarizeRoomEvent(event), version: roomEvents.version, phase: update.draft?.phase ?? roomEvents.draft?.phase,
@@ -183,9 +167,13 @@ async function processWindowMessage(message: unknown, matchCode?: string): Promi
     return;
   }
 
-  if (message.hookVersion !== 4 || !['console', 'websocket', 'storage'].includes(String(message.source))) return;
+  // The hook forwards only console sync logs on this channel; room events use
+  // their own message type.
+  if (message.hookVersion !== 4 || message.source !== 'console') return;
   refreshActiveRoomDomMatchCode(matchCode);
-  if (roomEvents.draft?.matchCode === activeRoomDomMatchCode && roomEvents.draft !== undefined) return;
+  // Typed room events are authoritative; the console fallback is only for
+  // rooms they have not described yet.
+  if (roomEventsOwnActiveRoom()) return;
   const draftPublication = publishSyncedDraftSnapshot(message.payload, matchCode);
   void draftPublication.catch(error => console.debug('[UmaLytics] Draft sync failed:', error));
 
@@ -204,7 +192,7 @@ async function processWindowMessage(message: unknown, matchCode?: string): Promi
     return;
   }
 
-  await publishRoster({ ...roster, observationSource: String(message.source) }, 'synced');
+  await publishRoster({ ...roster, observationSource: 'console' }, 'synced');
 }
 
 function installRoomDomObserver(): void {
@@ -215,7 +203,7 @@ function installRoomDomObserver(): void {
   queueRoomDomScan();
 
   roomDomObserver = new MutationObserver(() => {
-    queueRoomDomScan();
+    queueRoomDomScan(ROOM_DOM_MUTATION_SCAN_INTERVAL_MS);
   });
 
   roomDomObserver.observe(document.body ?? document.documentElement, {
@@ -242,19 +230,31 @@ function clearRoomDomRetries(): void {
   roomDomRetryTimers = [];
 }
 
-function queueRoomDomScan(): void {
+/** Schedule a DOM scan. `minIntervalMs` spaces scans triggered by continuous
+ * page mutations; events that need prompt attention keep the short debounce. */
+function queueRoomDomScan(minIntervalMs = 0): void {
   if (!isContentScriptActive || document.visibilityState === 'hidden') {
     return;
   }
 
+  const now = Date.now();
+  const dueAt = now + Math.max(ROOM_DOM_SCAN_DEBOUNCE_MS, lastRoomDomScanAt + minIntervalMs - now);
+
+  // A scan that is already due as soon as this one would be covers it.
   if (roomDomScanTimer !== undefined) {
-    return;
+    if (roomDomScanDueAt <= dueAt) {
+      return;
+    }
+
+    window.clearTimeout(roomDomScanTimer);
   }
 
+  roomDomScanDueAt = dueAt;
   roomDomScanTimer = window.setTimeout(() => {
     roomDomScanTimer = undefined;
+    lastRoomDomScanAt = Date.now();
     void publishRoomDomRoster().catch((error) => console.debug('[UmaLytics] DOM update failed:', error));
-  }, ROOM_DOM_SCAN_DEBOUNCE_MS);
+  }, dueAt - now);
 }
 
 function clearPendingRoomDomScan(): void {
@@ -289,12 +289,6 @@ async function publishRoomDomRoster(
 
   refreshActiveRoomDomMatchCode(getCurrentMatchCode() ?? roster.matchCode);
   clearRoomDomRetries();
-  for (const [key, pending] of pendingRoomEvents) {
-    if (Date.now() - pending.at > 30_000) { pendingRoomEvents.delete(key); continue; }
-    if (pending.event.matchId !== activeRoomDomMatchCode) continue;
-    pendingRoomEvents.delete(key);
-    await handleWindowMessage({ type: 'umalytics:room-event', hookVersion: 4, payload: pending.event }, activeRoomDomMatchCode);
-  }
   await publishRoster(roster, 'dom', options);
   return { activeLobby: true, matchCode: roster.matchCode };
 }
@@ -310,6 +304,12 @@ async function publishSyncedDraftSnapshot(payload: unknown, matchCode?: string):
 }
 
 async function publishDomDraftSnapshot(): Promise<void> {
+  // Room events describe the draft precisely; skip the costly DOM extraction
+  // while they own this room.
+  if (roomEventsOwnDraft(getCurrentMatchCode() ?? peekVisibleRoomCode())) {
+    return;
+  }
+
   const snapshot = extractDraftSnapshotFromDraftDom(document);
 
   if (snapshot === null) {
@@ -331,7 +331,7 @@ async function publishDraftSnapshotInOrder(snapshot: DraftSnapshot): Promise<voi
   if (matchCode === undefined) return;
   snapshot = { ...snapshot, matchCode };
   if (isStaleDraftSnapshot(snapshot)) return;
-  if (snapshot.source === 'draft-dom' && roomEvents.draft?.matchCode === matchCode) return;
+  if (snapshot.source === 'draft-dom' && roomEventsOwnDraft(matchCode)) return;
   if (snapshot.source === 'draft-dom' && lastDraftSnapshot?.matchCode === matchCode) {
     // DOM picks/maps can advance, but DOM extraction has no phase/turn fields.
     snapshot = { ...snapshot, phase: snapshot.phase ?? lastDraftSnapshot.phase,
@@ -368,7 +368,9 @@ function publishRoster(roster: PrematchRoster, source: RosterSource, options: { 
     roster = lastPublishedRoster;
     source = 'synced';
   }
-  const key = getRosterSignature(roster);
+  // A forced publish must reach the background even when an identical normal
+  // publish is still in flight, so the two never share a pending entry.
+  const key = (options.force === true ? 'force:' : '') + getRosterSignature(roster);
   const pending = pendingRosters.get(key);
   if (pending !== undefined) return pending;
   const publication = rosterPublishQueue.then(() => publishRosterInOrder(roster, source, options));
@@ -422,6 +424,24 @@ async function publishRosterInOrder(
   lastRosterSignature = rosterSignature;
   lastRosterSource = source;
   lastPublishedRoster = roster;
+}
+
+/** Room events have produced a roster or draft for the room being shown. */
+function roomEventsOwnActiveRoom(): boolean {
+  return activeRoomDomMatchCode !== undefined && roomEvents.matchCode === activeRoomDomMatchCode &&
+    (roomEvents.roster !== undefined || roomEvents.draft !== undefined);
+}
+
+function roomEventsOwnDraft(matchCode: string | undefined): boolean {
+  return matchCode !== undefined && roomEvents.draft !== undefined && roomEvents.draft.matchCode === matchCode;
+}
+
+/** The room shown right now, without changing any active-room state. Mirrors
+ * refreshActiveRoomDomMatchCode, which keeps the previous room only while the
+ * page address is unchanged. */
+function peekVisibleRoomCode(): string | undefined {
+  return extractRoomCodeFromRoomDom(document) ??
+    (window.location.href === activeRoomPageHref ? activeRoomDomMatchCode : undefined);
 }
 
 function isStaleSyncedRoster(roster: PrematchRoster): boolean {

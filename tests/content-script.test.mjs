@@ -34,7 +34,7 @@ test('forced reconnect replays rich synced roster instead of replacing it with p
 
 test('same-room departures and empty rosters remain authoritative; console context is explicit',async()=>{
   const c=context({sendPrematchRoster:async r=>sent.push(r)});const sent=[];
-  evaluate(c,'syncPayload');evaluate(c,'content');
+  evaluate(c,'matchDetection');evaluate(c,'syncPayload');evaluate(c,'content');
   const identified=c.selectRoomSyncedState({roomCode:'M95Z2Z',players:players(2)},'M95Z2Z');
   assert.equal(identified.syncedDraftState_multiplayer.players.length,2);
   assert(c.selectRoomSyncedState({syncedDraftState_multiplayer:{participants:players()}},'M95Z2Z',true));
@@ -48,8 +48,8 @@ test('same-room departures and empty rosters remain authoritative; console conte
 test('content keeps ten players when a later unscoped two-player payload arrives',async()=>{
   const sent=[];const c=context({cleanTeamName:x=>x,document:{},extractRoomCodeFromRoomDom:()=> 'M95Z2Z',
     extractDraftSnapshotFromSyncedDraftState:()=>null,sendPrematchRoster:async r=>sent.push(r)});
-  evaluate(c,'syncPayload');evaluate(c,'playerExtraction');evaluate(c,'content');
-  const event=(players,roomCode)=>({type:'umalytics:synced-draft-state',hookVersion:4,source:'websocket',payload:{syncedDraftState_multiplayer:{roomCode,rankedQueueRoster:players}}});
+  evaluate(c,'matchDetection');evaluate(c,'syncPayload');evaluate(c,'playerExtraction');evaluate(c,'content');
+  const event=(players,roomCode)=>({type:'umalytics:synced-draft-state',hookVersion:4,source:'console',payload:{syncedDraftState_multiplayer:{roomCode,rankedQueueRoster:players}}});
   await c.handleWindowMessage(event(players(10),'M95Z2Z'),'M95Z2Z');
   await c.handleWindowMessage(event(players(2),undefined),'M95Z2Z');
   assert.equal(sent.length,1);assert.equal(sent[0].players.length,10);
@@ -61,13 +61,63 @@ test('content keeps ten players when a later unscoped two-player payload arrives
   assert.equal(c.isStaleSyncedRoster({matchCode:'NEXT01'}),false);
 });
 
-test('room events arriving before DOM identity are replayed only for the matching room',async()=>{
-  const h=contentRoomHarness();await h.send(matchEvent({version:4}));
-  await h.send(matchEvent({version:2,members:players(2)})); // Older buffered snapshot cannot win.
+test('room events arriving before DOM identity are re-requested from the hook and applied only for the matching room',async()=>{
+  const h=contentRoomHarness();const requests=[];h.c.window.postMessage=m=>requests.push(m);
+  // These reach the content script before any room is visible; nothing is buffered here.
+  await h.send(matchEvent({version:4}));
   await h.send(matchEvent({room:'OTHER1',version:9,members:players(2)}));
   assert.equal(h.sent.length,0);
   h.show('M95Z2Z',roster('M95Z2Z',10));await h.c.publishRoomDomRoster();
-  assert.equal(h.sent.length,1);assert.equal(h.sent[0].players.length,10);assert.equal(h.sent[0].observationSource,'room-events');
+  assert.equal(requests.filter(m=>m.type==='umalytics:request-room-events').length,1);
+  // The hook answers with the matching room only; an older snapshot cannot win.
+  await h.send(matchEvent({version:4}));
+  await h.send(matchEvent({version:2,members:players(2)}));
+  assert.equal(h.sent.at(-1).players.length,10);assert.equal(h.sent.at(-1).observationSource,'room-events');
+});
+
+test('a forced publish is not merged into an identical normal publish that is still pending',async()=>{
+  const gate=deferred();let sends=0;
+  const c=context({sendPrematchRoster:()=>{sends++;return gate.promise;}});evaluate(c,'content');
+  const normal=c.publishRoster(roster(),'synced'),forced=c.publishRoster(roster(),'synced',{force:true});
+  const forcedAgain=c.publishRoster(roster(),'synced',{force:true});
+  gate.resolve();await Promise.all([normal,forced,forcedAgain]);
+  assert.equal(sends,2,'one normal send and one coalesced forced send');
+});
+
+test('console sync cannot replace a roster built from room events, even before any draft snapshot',async()=>{
+  const h=contentRoomHarness();h.show('M95Z2Z',roster('M95Z2Z',10));
+  await h.send({type:'room.presence.updated',matchId:'M95Z2Z',participants:players(10)});
+  assert.equal(h.sent.length,1);assert.equal(vm.runInContext('roomEvents.draft',h.c),undefined);
+  await h.c.handleWindowMessage({type:'umalytics:synced-draft-state',source:'console',hookVersion:4,
+    payload:{syncedDraftState_multiplayer:{roomCode:'M95Z2Z',rankedQueueRoster:players(2)}}});
+  assert.equal(h.sent.length,1);assert.equal(h.sent[0].players.length,10);
+  // Sources the hook never sends are ignored outright.
+  for(const source of ['websocket','storage'])
+    await h.c.handleWindowMessage({type:'umalytics:synced-draft-state',source,hookVersion:4,payload:{syncedDraftState_multiplayer:{roomCode:'NEXT01',rankedQueueRoster:players(2)}}});
+  assert.equal(h.sent.length,1);
+});
+
+test('DOM draft extraction is skipped while room events own the draft of the visible room',async()=>{
+  const h=contentRoomHarness();let extractions=0;h.c.extractDraftSnapshotFromDraftDom=()=>{extractions++;return null;};
+  h.show('M95Z2Z',roster('M95Z2Z',10));
+  await h.c.publishRoomDomRoster();assert.equal(extractions,1);
+  await h.send(matchEvent());
+  await h.c.publishRoomDomRoster();assert.equal(extractions,1);
+  h.show('NEXT01',roster('NEXT01'));await h.c.publishRoomDomRoster();assert.equal(extractions,2);
+});
+
+test('mutation-driven scans are spaced out while focus and visibility scans stay prompt',async()=>{
+  const h=contentRoomHarness();const timers=[];let now=10_000;
+  class FakeDate extends Date { static now(){return now;} }
+  Object.assign(h.c,{Date:FakeDate,document:{visibilityState:'visible'}});
+  h.c.window.setTimeout=(fn,delay)=>{timers.push({fn,delay});return timers.length;};
+  h.c.window.clearTimeout=id=>{timers[id-1].cleared=true;};
+  const live=()=>timers.filter(t=>!t.cleared);
+  h.c.queueRoomDomScan(500);assert.equal(live().at(-1).delay,100,'first mutation after quiet is not delayed beyond the debounce');
+  now+=100;live().at(-1).fn();await tick();
+  now+=50;h.c.queueRoomDomScan(500);assert.equal(live().at(-1).delay,450,'a mutation burst waits for the 500 ms spacing');
+  const pending=live().at(-1);h.c.queueRoomDomScan(500);assert.equal(live().at(-1),pending,'repeat mutations share the pending scan');
+  h.c.queueRoomDomScan();assert.equal(pending.cleared,true);assert.equal(live().at(-1).delay,100,'focus asks for a prompt scan');
 });
 
 test('overlapping snapshot/assignment acknowledgements cannot resurrect an older roster',async()=>{

@@ -212,13 +212,12 @@ export default function App() {
       draftSnapshot,
       profileSnapshot,
       teamGroups,
-      loadingProfiles,
       statsScope,
       now,
       isLobbyLocked,
       lobbyLock?.lockedAt
     ),
-    [displayedRoster, draftSnapshot, isLobbyLocked, loadingProfiles, lobbyLock?.lockedAt, now, profileSnapshot, statsScope, teamGroups]
+    [displayedRoster, draftSnapshot, isLobbyLocked, lobbyLock?.lockedAt, now, profileSnapshot, statsScope, teamGroups]
   );
 
   useEffect(() => {

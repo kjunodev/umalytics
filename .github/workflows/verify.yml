@@ -21,3 +21,28 @@ jobs:
       - run: pnpm test
       - run: pnpm typecheck
       - run: pnpm build:all
+  layout:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      PREVIEW_BROWSER: chromium
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @umalytics/extension exec playwright install --with-deps chromium
+      - run: pnpm --filter @umalytics/extension preview:shots
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: layout-shots
+          path: apps/extension/dev/preview/.shots
+          if-no-files-found: ignore
+          retention-days: 7

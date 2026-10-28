@@ -9,7 +9,7 @@ pnpm typecheck
 pnpm build:all
 ~~~
 
-The extension's postinstall/typecheck prepares WXT generated types. Keep separate dependencies on each machine and use the committed lockfile.
+The extension's postinstall/typecheck prepares WXT generated types. Always install from the committed lockfile. TypeScript runs with `noUnusedLocals` and `noUnusedParameters`, so dead code fails `pnpm typecheck`.
 
 ## Commands
 
@@ -30,36 +30,51 @@ The extension's postinstall/typecheck prepares WXT generated types. Keep separat
 | Area | Files |
 | --- | --- |
 | Profile API | `profile-api`, `request-pacing`, `profile-cache`, `profile-recovery`, `team-icons` |
-| Background | `background-enrichment`, `scout-window`, `diagnostic-recorder` |
+| Background | `background-enrichment`, `background-lifecycle`, `scout-window`, `diagnostic-recorder` |
 | Room and content | `room-events`, `roster-extraction`, `dom-extraction`, `content-script`, `page-hook`, `casual-room-replay` |
 | History and players | `explorer`, `explorer-scenes`, `explorer-transport`, `recent-history`, `history-display-rules`, `players-data` |
-| UI | `lobby-cards`, `draft-scene`, `uma-data`, `uma-experience`, `profile-usability`, `podium-badge`, `ui-size`, `ui-polish-0-5-1` |
+| UI | `lobby-cards`, `draft-scene`, `uma-data`, `uma-experience`, `umas-scroll`, `profile-usability`, `podium-badge`, `ui-size`, `ui-polish-0-5-1` |
 | Release | `release` (the publish script) |
 
 Tests load extension sources through `tests/support/harness.mjs`, which strips imports and exports and evaluates the TypeScript (Node 24 type stripping) in a `vm` context. Its `MODULES` map names every source file the suite loads, and `PRELOADS` lists the modules each one needs first, so a moved or split file only changes the map. `playerProfileApi` is listed as three files (`profiles/apiClient.ts`, `profiles/profileApiMapping.ts`, `profiles/playerProfileApi.ts`) that are evaluated together. `tests/support/helpers.mjs` holds the shared API, background, room, DOM and content harnesses; `tests/fixtures/` holds recorded JSON.
 
-Generated bundles live in apps/extension/.output. Checked build snapshots live in .releases; latest.json describes the latest pair. There is one extension build for each browser. Match history can be fetched and displayed, including for players with hidden stats, but never used to calculate ranked statistics.
+Generated bundles live in apps/extension/.output. `pnpm build:all` also copies the verified Chromium and Firefox builds into `.releases/`, a local folder that is not tracked; `.releases/latest.json` describes the latest pair. There is one extension build for each browser. Match history can be fetched and displayed, including for players with hidden stats, but never used to calculate ranked statistics.
 
 ## Architecture
 
 | Component | Responsibility |
 | --- | --- |
-| Page hook | Decode supported room events; forward whitelisted fields; retain a specific sync-console fallback |
-| Content script | Establish visible room identity, serialize updates, reject old/foreign events, and apply DOM fallback |
+| Page hook | A MAIN-world content script (`roomHook.content.ts`, installed once at document start) that decodes supported room events and forwards whitelisted fields; retains a specific sync-console fallback |
+| Content script | Establish visible room identity (from dedicated room-code elements only), serialize updates, reject old/foreign events, and apply DOM fallback |
 | Room event reducer | Separate presence from authoritative membership; track snapshot versions and team revisions |
 | Background | Follow the active drafter tab, cancel obsolete work, pace requests, recover from rate limits and manage caches |
 | Scout | Render local snapshots, selected-scope statistics and confirmed draft selections |
-| Shared package | TypeScript contracts across extension contexts |
+| Shared package | TypeScript contracts across extension contexts (private, never published) |
 
-Fresh complete profiles are reused for 15 minutes. The reusable archive is bounded to 100 profiles and approximately 4 MiB, and trims entries older than 24 hours when processed. The local diagnostic trace is capped at 200 sanitized entries. These limits apply to the archive/trace, not every byte of extension storage.
+The MV3 service worker can stop and restart at any time, so state that must survive a restart is stored outside module memory. The scout window id and the selected drafter tab id live in `storage.session`, so a restarted worker focuses the existing window instead of opening a second one and keeps accepting room messages from the same tab. Seasons, leaderboard and `/profile` responses are also kept in `storage.session`. The rate-limit recovery state and the manual-refresh cooldown live in `storage.local`.
 
-Lobby enrichment uses paced per-player stats requests for the selected Season or All-time scope, plus seasons and leaderboard requests. Switching scope loads the other stats scope. Lobby cards make no profile or history request. Opening details requests the player's profile for their title and a 20-entry history page, including for hidden-stats players. Load more fetches additional pages. History responses are cached for five minutes and never feed the statistics mapper.
+Fresh complete profiles are reused for 15 minutes. The reusable archive is bounded to 100 profiles and approximately 4 MiB, trims entries older than 24 hours when processed, and is written once per lobby run. The local diagnostic trace is capped at 200 sanitized entries. These limits apply to the archive/trace, not every byte of extension storage. [PRIVACY.md](../PRIVACY.md) lists every stored item.
 
-Requests start at least 350 ms apart. A 429 doubles the pacing interval, capped at 2000 ms; after 20 consecutive successes it recovers toward 350 ms by ×0.75, never below the base.
+Lobby enrichment uses paced per-player stats requests for the selected Season or All-time scope, plus seasons and leaderboard requests. In Season scope, a player under 10 season games also gets one lowest-priority all-time stats request for the Newcomer badge. Switching scope loads the other stats scope. Lobby cards make no profile or history request. Opening details requests the player's profile for their title and a 20-entry history page, including for hidden-stats players. Load more fetches additional pages. History responses are cached in memory for five minutes and never feed the statistics mapper. Other responses (stats, match and search lookups) are cached in memory for 60 seconds; seasons and leaderboard for 10 minutes and `/profile` for 24 hours (the seasons, leaderboard and at most 200 profile responses are also persisted in `storage.session`).
+
+If the leaderboard request fails, the profile still loads from the stats responses and shows "Rank unknown" instead of failing.
+
+Request pacing and recovery (`profiles/apiClient.ts`, `background/profileStates.ts`):
+
+- Requests start at least 350 ms apart, with at most three in flight.
+- A 429 or 5xx pauses all requests: for the time in Retry-After, otherwise 30 s after a 429 and 10 s after a 5xx.
+- A 429 doubles the pacing interval, at most once per rate-limit cooldown (several in-flight requests can return a 429 together), capped at 2000 ms.
+- After 20 consecutive successes the interval recovers toward 350 ms by x0.75, never below the base. Timeouts and network errors restart the count; a caller's cancellation does not.
+- The cooldown and slowed pacing are saved so a restarted worker keeps them, but a cooldown that has already ended is not restored.
+- Players that failed because of the pause are retried automatically at most twice (a timer while the worker is alive, an alarm as the backstop); after that the cards ask for a manual Refresh.
+
+## Continuous integration
+
+`.github/workflows/verify.yml` has two jobs. `verify` (the required check) runs `pnpm test`, `pnpm typecheck` and `pnpm build:all` on every push to `main` and pull request. `layout` runs on pull requests only: it installs Playwright's Chromium, runs `pnpm --filter @umalytics/extension preview:shots`, and uploads the screenshots as an artifact when it fails. `.github/dependabot.yml` opens at most one grouped pull request a month per ecosystem (npm and GitHub Actions) for minor and patch updates; major updates arrive separately.
 
 ## Release checks
 
-The release workflow (`.github/workflows/release.yml`) publishes automatically: on a push to `main` in `kjunodev/umalytics` that changes `package.json` or `scripts/publish-release.mjs`, it reruns `pnpm test`, `pnpm typecheck` and `pnpm build:all`, then packages and uploads the Chromium/Firefox ZIPs and `SHA256SUMS.txt` to a GitHub release in that repository for that version. Other repositories cannot publish through this workflow. Before changing download links, build and verify the exact ZIPs; preserve older versioned assets. Update README, docs/INSTALL.md and CHANGELOG together. Candidate release objects, if created later, should be marked as pre-releases.
+The release workflow (`.github/workflows/release.yml`) publishes automatically: on a push to `main` in `kjunodev/umalytics` that changes `package.json` or `scripts/publish-release.mjs`, it reruns `pnpm test`, `pnpm typecheck` and `pnpm build:all`, then packages and uploads the Chromium/Firefox ZIPs and `SHA256SUMS.txt` to a GitHub release in that repository for that version. Other repositories cannot publish through this workflow. Before changing download links, build and verify the exact ZIPs; preserve older versioned assets. Update the README download links, .github/release-notes/<version>.md and CHANGELOG together; docs/INSTALL.md is version-neutral. Candidate release objects, if created later, should be marked as pre-releases.
 
 Firefox currently emits a data-collection declaration warning. Permanent/store distribution requires an accurate declaration and signing work; do not suppress the warning and describe the result as store-ready.
 
@@ -73,10 +88,6 @@ Automated tests use fixtures and mocked browser/network dependencies; passing th
 - **Reconnects** — close and reopen the scouting window (or reload the tab) mid-room/mid-draft and confirm state resumes without duplicate or missing entries.
 - **Room changes** — switch rooms and confirm caches and displayed roster reset to the new room instead of showing stale data.
 - **Long sessions** — automated fixtures do not run a real soak test; manually leave a session open for an extended period and confirm requests keep pacing/recovering correctly and the diagnostic trace stays bounded.
-- **Firefox** — load the production build (`apps/extension/.output/firefox-mv3/manifest.json`) as a temporary add-on; there is no installed Firefox live-draft test in CI, so this needs manual coverage each release.
+- **Firefox** (128 or later) — load the production build (`apps/extension/.output/firefox-mv3/manifest.json`) as a temporary add-on; there is no installed Firefox live-draft test in CI, so this needs manual coverage each release.
 
 When filing a bug report, include: browser and version, extension version, whether the issue occurred in a starting room or in a draft, expected vs. actual behavior, and diagnostics copied promptly after reproducing (review diagnostics before sharing — they can contain room codes and player IDs). No special arranged beta lobby is required.
-
-## Working across machines
-
-Before edits, check git status and pull the latest source. Commit only source, tests and documentation. Do not commit local caches, diagnostics, credentials, generated development folders or unrelated workspace files. Build from the same commit on both machines.
