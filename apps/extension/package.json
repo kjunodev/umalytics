@@ -25,7 +25,7 @@
     "@wxt-dev/module-react": "^1.2.2",
     "playwright": "^1.48.0",
     "typescript": "^5.7.2",
-    "vite": "^6",
+    "vite": "^8",
     "wxt": "^0.20.27"
   }
 }
