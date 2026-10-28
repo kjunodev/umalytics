@@ -34,7 +34,7 @@ test('forced reconnect replays rich synced roster instead of replacing it with p
 
 test('same-room departures and empty rosters remain authoritative; console context is explicit',async()=>{
   const c=context({sendPrematchRoster:async r=>sent.push(r)});const sent=[];
-  evaluate(c,'syncPayload');evaluate(c,'content');
+  evaluate(c,'matchDetection');evaluate(c,'syncPayload');evaluate(c,'content');
   const identified=c.selectRoomSyncedState({roomCode:'M95Z2Z',players:players(2)},'M95Z2Z');
   assert.equal(identified.syncedDraftState_multiplayer.players.length,2);
   assert(c.selectRoomSyncedState({syncedDraftState_multiplayer:{participants:players()}},'M95Z2Z',true));
@@ -48,7 +48,7 @@ test('same-room departures and empty rosters remain authoritative; console conte
 test('content keeps ten players when a later unscoped two-player payload arrives',async()=>{
   const sent=[];const c=context({cleanTeamName:x=>x,document:{},extractRoomCodeFromRoomDom:()=> 'M95Z2Z',
     extractDraftSnapshotFromSyncedDraftState:()=>null,sendPrematchRoster:async r=>sent.push(r)});
-  evaluate(c,'syncPayload');evaluate(c,'playerExtraction');evaluate(c,'content');
+  evaluate(c,'matchDetection');evaluate(c,'syncPayload');evaluate(c,'playerExtraction');evaluate(c,'content');
   const event=(players,roomCode)=>({type:'umalytics:synced-draft-state',hookVersion:4,source:'websocket',payload:{syncedDraftState_multiplayer:{roomCode,rankedQueueRoster:players}}});
   await c.handleWindowMessage(event(players(10),'M95Z2Z'),'M95Z2Z');
   await c.handleWindowMessage(event(players(2),undefined),'M95Z2Z');

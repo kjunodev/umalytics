@@ -1,10 +1,13 @@
+import { normalizeMatchCode } from './matchDetection';
+
 type SyncRecord = Record<string, unknown>;
 
 export function readPayloadRoomCode(value: unknown): string | undefined {
   if (!isSyncRecord(value)) return undefined;
   for (const key of ['roomCode', 'matchCode', 'code', 'roomId', 'matchId']) {
     const candidate = value[key];
-    if (typeof candidate === 'string' && /^[A-Z0-9]{6}$/i.test(candidate)) return candidate.toUpperCase();
+    const code = normalizeMatchCode(candidate);
+    if (code !== undefined) return code;
   }
   return undefined;
 }

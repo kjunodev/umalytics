@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { evaluate, context, players } from './support/helpers.mjs';
 
 test('team normalization resolves final/initial teams and drops spectators without slots',()=>{
-  const c=context({cleanTeamName:x=>x});evaluate(c,'syncPayload');evaluate(c,'playerExtraction');
+  const c=context({cleanTeamName:x=>x});evaluate(c,'matchDetection');evaluate(c,'syncPayload');evaluate(c,'playerExtraction');
   evaluate(c,'rosterDisplay');
   const fixture={syncedDraftState_multiplayer:{roomId:'ROOM01',participants:players().map((p,i)=>i<2?{...p,team:undefined,finalTeam:'team1'}:p)}};
   const r=c.normalizeRosterForDisplay(c.extractPrematchRosterFromSyncedDraftState(fixture));
@@ -15,7 +15,7 @@ test('team normalization resolves final/initial teams and drops spectators witho
 });
 
 test('explicit spectator roles and cleared current slots override historical teams',()=>{
-  const c=context({cleanTeamName:x=>x});evaluate(c,'syncPayload');evaluate(c,'playerExtraction');
+  const c=context({cleanTeamName:x=>x});evaluate(c,'matchDetection');evaluate(c,'syncPayload');evaluate(c,'playerExtraction');
   const fixture=players(5);
   fixture[0]={...fixture[0],role:'Spectator'};
   fixture[1]={...fixture[1],roomRole:'spectator',role:'captain'};
@@ -26,7 +26,7 @@ test('explicit spectator roles and cleared current slots override historical tea
 });
 
 test('unscoped or foreign socket/storage rosters cannot replace the M95Z2Z team',()=>{
-  const c=context();evaluate(c,'syncPayload');
+  const c=context();evaluate(c,'matchDetection');evaluate(c,'syncPayload');
   const small={rankedQueueRoster:players(2).map(p=>({...p,team:'team2'}))};
   assert.equal(c.selectRoomSyncedState(small,'M95Z2Z'),null);
   assert.equal(c.selectRoomSyncedState({roomCode:'OTHER1',data:small},'M95Z2Z'),null);
@@ -38,9 +38,16 @@ test('unscoped or foreign socket/storage rosters cannot replace the M95Z2Z team'
 });
 
 test('synced payload traversal is bounded and rejects cyclic/foreign nested data',()=>{
-  const c=context();evaluate(c,'syncPayload');const cycle={};cycle.self=cycle;
+  const c=context();evaluate(c,'matchDetection');evaluate(c,'syncPayload');const cycle={};cycle.self=cycle;
   assert.equal(c.selectRoomSyncedState(cycle,'M95Z2Z'),null);
   assert.equal(c.selectRoomSyncedState({roomCode:'OTHER1',data:{players:players()}},'M95Z2Z',true),null);
   const data={roomCode:'M95Z2Z',roomId:'cec650b6-a357-4d35-9133-7b6db44ae46f'};
   assert.equal(c.readPayloadRoomCode(data),'M95Z2Z');
+});
+
+test('hyphenated foreign room codes count as scoped and cannot borrow the console room',()=>{
+  const c=context();evaluate(c,'matchDetection');evaluate(c,'syncPayload');
+  assert.equal(c.readPayloadRoomCode({roomCode:'abc-123'}),'ABC123');
+  assert.equal(c.selectRoomSyncedState({roomCode:'ABC-123',players:players(2)},'M95Z2Z',true),null);
+  assert.equal(c.selectRoomSyncedState({roomCode:'M95-Z2Z',players:players(2)},'M95Z2Z',true).syncedDraftState_multiplayer.roomCode,'M95Z2Z');
 });
