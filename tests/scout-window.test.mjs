@@ -1,4 +1,4 @@
-import test from 'node:test';
+import test from './support/clock-test.mjs';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import { loadModule } from './support/harness.mjs';

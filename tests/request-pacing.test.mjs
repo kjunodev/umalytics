@@ -1,20 +1,15 @@
-import test from 'node:test';
+import test from './support/clock-test.mjs';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import { evaluate, deferred, waitUntil, context, players, apiHarness } from './support/helpers.mjs';
 
-// Runs the real (unpatched) timing code `factor` times faster: timers fire
-// early and Date.now advances `factor` ms per real ms.
-function scaleTime(c,factor) {
-  const realStart=Date.now(),perfStart=performance.now();
-  class ScaledDate extends Date { static now(){return Math.round(realStart+(performance.now()-perfStart)*factor);} }
-  c.Date=ScaledDate;c.setTimeout=(fn,ms=0,...args)=>setTimeout(fn,Math.max(0,ms)/factor,...args);c.clearTimeout=clearTimeout;
-}
-
 test('under slowed 2 s pacing the leaderboard waits behind 10 stats requests without timing out every card',async()=>{
-  const h=apiHarness({latency:2,fast:false});scaleTime(h.c,50);
+  const h=apiHarness({latency:100,fast:false});
   vm.runInContext('requestStartIntervalMs=2000;requestQueue.setStartInterval(2000);',h.c);
   const result=Object.values(await h.c.fetchPlayerProfileSummaries(players(10),{scope:'currentSeason'}));
+  const stats=h.calls.flatMap((path,i)=>path.includes('/stats?')?[h.callTimes[i]]:[]);
+  assert.equal(stats.length,10);
+  assert(stats.slice(1).every((time,i)=>time-stats[i]===2000));
   assert.equal(result.length,10);
   assert.deepEqual(result.map(summary=>summary.error).filter(Boolean),[]);
   assert(result.every(summary=>summary.rankUnavailable!==true));
@@ -69,8 +64,7 @@ test('a worker restart does not restore slowed pacing from a cooldown that alrea
   assert.equal(vm.runInContext('requestStartIntervalMs',apiHarness({fast:false}).c),base);
 });
 
-test('at the 350 ms pace, 10-player stats resolve within ~4 s and the whole lobby within ~4.5 s',async(t)=>{
-  t.mock.timers.enable({apis:['Date','setTimeout'],now:1_000_000});
+test('at the 350 ms pace, 10-player stats resolve within ~4 s and the whole lobby within ~4.5 s',async()=>{
   const starts=[];
   const h=apiHarness({latency:100,fast:false,responder:()=>{starts.push(Date.now());}});
   h.c.Date=Date;
@@ -78,13 +72,8 @@ test('at the 350 ms pace, 10-player stats resolve within ~4 s and the whole lobb
   const pending=h.c.fetchPlayerProfileSummaries(players(10),{scope:'currentSeason',onProgress:summary=>{
     if(summary.currentSeasonStats.matches===4 && !resolved.has(summary.discordId)) resolved.set(summary.discordId,Date.now()-start);
   }}).finally(()=>{complete=true;});
-  // Flush promise continuations between clock steps; no real-time deadline is involved.
-  for(let elapsed=0;!complete && elapsed<=10_000;elapsed+=10) {
-    t.mock.timers.tick(10);
-    await new Promise(resolve=>setImmediate(resolve));
-  }
-  assert(complete,'the lobby must complete within 10 seconds of simulated time');
   await pending;
+  assert(complete);
   const lobbyMs=Date.now()-start;
   const times=[...resolved.values()];
   assert.equal(times.length,10);assert(Math.min(...times)<1200);
@@ -109,8 +98,8 @@ test('slow session storage does not occupy queue slots or delay paced starts',as
 
 test('rate limits fail explicitly without sleeping or issuing a retry storm',async()=>{
   const h=apiHarness({responder:url=>url.pathname==='/api/seasons'?{status:429,headers:{'retry-after':'30'}}:undefined});
-  const start=performance.now(); const result=await h.c.fetchPlayerProfileSummaries(players(10));
-  assert(performance.now()-start<500);
+  const start=Date.now(); const result=await h.c.fetchPlayerProfileSummaries(players(10));
+  assert(Date.now()-start<500);
   assert(Object.values(result).every(p=>p.error!==undefined));
   assert(h.calls.length<=6);
 });
@@ -149,7 +138,7 @@ test('HTTP date Retry-After and server failures preserve their recovery deadline
 test('request pacing spaces start times and cancellation does not dispatch abandoned jobs',async()=>{
   const c=context();evaluate(c,'requestQueue');const queue=vm.runInContext('new RequestQueue(3, 30)',c);
   const starts=[];const controller=new AbortController();
-  await Promise.all(Array.from({length:4},()=>queue.run(controller.signal,async()=>{starts.push(performance.now());})));
+  await Promise.all(Array.from({length:4},()=>queue.run(controller.signal,async()=>{starts.push(Date.now());})));
   assert(starts.slice(1).every((time,i)=>time-starts[i]>=27),JSON.stringify(starts));
   const aborter=new AbortController();let called=false;
   const abandoned=queue.run(aborter.signal,async()=>{called=true;});aborter.abort(new Error('Room changed'));
@@ -160,7 +149,7 @@ test('paced starts choose priority first and retain FIFO within each priority',a
   const c=context();evaluate(c,'requestQueue');const queue=vm.runInContext('new RequestQueue(3, 30)',c);
   const signal=new AbortController().signal;const starts=[];
   const jobs=[['background','old'],['profile','profile'],['stats','stats-a'],['history','history'],['shared','shared'],['stats','stats-b'],['leaderboard','leaderboard']];
-  await Promise.all(jobs.map(([priority,name])=>queue.run(signal,async()=>{starts.push([name,performance.now()]);},priority)));
+  await Promise.all(jobs.map(([priority,name])=>queue.run(signal,async()=>{starts.push([name,Date.now()]);},priority)));
   assert.deepEqual(starts.map(([name])=>name),['shared','stats-a','stats-b','leaderboard','profile','history','old']);
   assert(starts.slice(1).every(([,time],i)=>time-starts[i][1]>=27));
 });
