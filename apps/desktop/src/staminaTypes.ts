@@ -41,6 +41,7 @@ export interface StaminaPoint {
   avg_min_hp: number;
 }
 export interface StaminaResult {
+  input: StaminaInput;
   request_id: string;
   curve: StaminaPoint[];
   current: StaminaPoint;

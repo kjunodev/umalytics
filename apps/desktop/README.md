@@ -70,18 +70,21 @@ of a particular lobby: the measured runner is in gate 1, with eight copies
 of its original build in gates 2–9. The opponents keep the input stamina
 throughout the sweep. This gives the engine a field for pace and position
 keep while avoiding assumptions about opponents' builds. All nine runners
-have the selected skills, mood, strategy and aptitudes.
+have the selected mood, strategy and aptitudes. Skills apply to your uma
+only; the field has none. This prevents copied HP-draining skills from
+turning the neutral field into eight attackers.
 
 The sweep includes the exact input stamina and values downward/upward in
-steps of 50, plus clamped endpoints 300 and 1600. It covers the full range
+steps of 50, plus clamped endpoints 300 and 2000. It covers the full range
 so the smallest passing tested value can be reported even when race outcomes
 are not monotonic. Each point runs the same deterministic seeds (default
 200, allowed 1–1000). “95% threshold” means the smallest **tested** stamina
 with at least 95% no HP-out; it is a finite-sample estimate, not an exact
 minimum or a statistical confidence guarantee. “Not reached” means no tested
 value passed. Stats are raw, before the engine's motivation and >1200
-adjustments. Stamina must be 300–1600; other stats 1–2000; aptitude grades
-1 (G)–8 (S); skill levels 1–6, at most 100 distinct known skill IDs.
+adjustments (the portion above 1200 is halved). Stamina must be 300–2000;
+other stats 1–2000; aptitude grades 1 (G)–8 (S); skill levels 1–6, at most
+100 distinct known skill IDs.
 
 Every race uses Champions rules (`race_type = 5`) and daytime (`time = 2`).
 The race identity is the first matching G1 Champions Meeting entry in
@@ -110,9 +113,11 @@ IPC commands (snake_case input/result fields):
   [4 grades], ground: [2 grades], skills?: [{id, level}], seeds?}`. Strategy
   is 1 front runner/2 pace chaser/3 late surger/4 end closer; mood is 1–5.
   Ground/weather/season use the engine's 1-based values shown in the UI.
-  Returns `{request_id, curve: [{stamina, no_hp_out_percent, avg_min_hp}],
+  Returns `{input, request_id, curve: [{stamina, no_hp_out_percent, avg_min_hp}],
   current, threshold, seeds, races, elapsed_ms, ms_per_race, race_instance_id}`;
-  threshold is null when not reached.
+  threshold is null when not reached. `input` is the full input snapshot for
+  the run. Results retain its build and course labels after form edits, with
+  a notice to run again when inputs change.
 - `cancel_stamina_check() -> Result<(), String>` cancels the active request.
 
 Work runs off the UI thread, with races spread across available CPU cores.
