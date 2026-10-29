@@ -69,17 +69,28 @@ test('a worker restart does not restore slowed pacing from a cooldown that alrea
   assert.equal(vm.runInContext('requestStartIntervalMs',apiHarness({fast:false}).c),base);
 });
 
-test('at the 350 ms pace, 10-player stats resolve within ~4 s and the whole lobby within ~4.5 s',async()=>{
-  const h=apiHarness({latency:100,fast:false});const resolved=new Map();const start=performance.now();
-  await h.c.fetchPlayerProfileSummaries(players(10),{scope:'currentSeason',onProgress:summary=>{
-    if(summary.currentSeasonStats.matches===4 && !resolved.has(summary.discordId)) resolved.set(summary.discordId,performance.now()-start);
-  }});
-  const lobbyMs=performance.now()-start;
+test('at the 350 ms pace, 10-player stats resolve within ~4 s and the whole lobby within ~4.5 s',async(t)=>{
+  t.mock.timers.enable({apis:['Date','setTimeout'],now:1_000_000});
+  const starts=[];
+  const h=apiHarness({latency:100,fast:false,responder:()=>{starts.push(Date.now());}});
+  h.c.Date=Date;
+  const resolved=new Map();const start=Date.now();let complete=false;
+  const pending=h.c.fetchPlayerProfileSummaries(players(10),{scope:'currentSeason',onProgress:summary=>{
+    if(summary.currentSeasonStats.matches===4 && !resolved.has(summary.discordId)) resolved.set(summary.discordId,Date.now()-start);
+  }}).finally(()=>{complete=true;});
+  // Flush promise continuations between clock steps; no real-time deadline is involved.
+  for(let elapsed=0;!complete && elapsed<=10_000;elapsed+=10) {
+    t.mock.timers.tick(10);
+    await new Promise(resolve=>setImmediate(resolve));
+  }
+  assert(complete,'the lobby must complete within 10 seconds of simulated time');
+  await pending;
+  const lobbyMs=Date.now()-start;
   const times=[...resolved.values()];
   assert.equal(times.length,10);assert(Math.min(...times)<1200);
   assert(Math.max(...times)<4000,`stats should resolve within ~4s, took ${Math.max(...times)}ms`);
   assert(lobbyMs<4500,`the whole lobby should resolve within ~4.5s, took ${lobbyMs}ms`);
-  assert(h.callTimes.slice(1).every((time,i)=>time-h.callTimes[i]>=300));
+  assert(starts.slice(1).every((time,i)=>time-starts[i]>=350));
 });
 
 test('slow session storage does not occupy queue slots or delay paced starts',async()=>{
