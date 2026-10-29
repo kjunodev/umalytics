@@ -1,4 +1,10 @@
 import { phaseLabel } from './phase';
+import { useEffect, useState } from 'react';
+import { TeamSection, PlayerDrawer, getSelectedPlayerContext } from '@umalytics/ui';
+import { getPlayerKey } from '@umalytics/ui/common/roster';
+import { getDisplayedProfileStats } from '@umalytics/ui/player/playerProfileDisplay';
+import { getTeamGroups } from '@umalytics/core/room/rosterDisplay';
+import { getTeamAverageRating } from '@umalytics/ui/lobby/TeamSection';
 import { isDiscordSnowflake } from '@umalytics/core/room/rosterIdentity';
 import type { DraftSnapshot, PlayerProfileSummary, PlayerStatsScope, PrematchPlayer, PrematchRoster } from '@umalytics/shared';
 
@@ -12,28 +18,35 @@ function Rank({ profile }: { profile?: PlayerProfileSummary }) {
 function Uma({ name, matches }: { name: string; matches?: number }) {
   return <span className="uma-row"><span className="monogram">{name.split(' ').slice(0, 2).map(part => part[0]).join('')}</span><span>{name}</span>{matches !== undefined && <small className="num">{matches}g</small>}</span>;
 }
-export function Lobby({ roster, profiles, compact, scope, emptyStatus }: {
-  roster?: PrematchRoster; profiles: Record<string, PlayerProfileSummary>; compact: boolean; scope: PlayerStatsScope; emptyStatus: string;
+export function Lobby({ roster, profiles, loading, compact, scope, emptyStatus, onOpenMatch, onRetry }: {
+  roster?: PrematchRoster; profiles: Record<string, PlayerProfileSummary>; loading: boolean; compact: boolean; scope: PlayerStatsScope; emptyStatus: string;
+  onOpenMatch: (code: string) => void; onRetry: () => void;
 }) {
+  const [selected, setSelected] = useState<string>();
+  useEffect(() => setSelected(undefined), [roster?.matchCode]);
+  const teams = getTeamGroups(roster);
+  const context = getSelectedPlayerContext(teams, selected);
   if (!roster?.players.length) return <section className="empty-state"><h2>Waiting for your room</h2><p>Open a room on Uma Drafter with local sharing turned on</p><p role="status">{emptyStatus}</p></section>;
-  return <div className="lobby">{compact && <div className="compact-caption"><span>{scope === 'currentSeason' ? 'Season' : 'All-time'} stats</span><span className="label">Rank · W–L · PPG</span></div>}
+  return <>{compact ? <div className="lobby compact-lobby"><div className="compact-caption"><span>{scope === 'currentSeason' ? 'Season' : 'All-time'} stats</span><span className="label">Rank · W–L · PPG</span></div>
     {teamIds.map((team, index) => {
       const players = roster.players.filter(player => player.team === team);
-      const ratings = players.map(player => profiles[player.discordId]).filter((p): p is PlayerProfileSummary => !!p && !p.statsPrivate && !p.error && p.rating != null).map(p => p.rating!);
-      return <section className={`team team-${index + 1}`} key={team}><div className="team-heading"><i/><h2>{roster.teams?.[team].name ?? `Team ${index + 1}`}</h2>{!compact && <span>{players.length} players</span>}<div className="rule"/><span className="num">{compact ? 'Avg' : 'Avg rating'} <b>{ratings.length ? Math.round(ratings.reduce((a, b) => a + b, 0) / ratings.length) : '—'}</b></span></div>
+      const teamGroup = teams.find(group => group.id === team);
+      const average = teamGroup && getTeamAverageRating(teamGroup, profiles);
+      return <section className={`team team-${index + 1}`} key={team}><div className="team-heading"><i/><h2>{roster.teams?.[team].name ?? `Team ${index + 1}`}</h2><div className="rule"/><span className="num">Avg <b>{average ?? '—'}</b></span></div>
         <div className="player-grid">{players.map(player => {
-          const p = profiles[player.discordId]; const message = statusFor(player, p); const usable = p && !message;
+          const p = getDisplayedProfileStats(profiles[player.discordId], scope); const message = statusFor(player, p); const usable = p && !message;
           const record = usable && p.wins != null && p.losses != null ? `${p.wins}–${p.losses}` : '—';
           const ppg = usable && p.pointsPerGame != null ? p.pointsPerGame.toFixed(1) : '—';
           const umas = usable ? p.topUmas?.slice(0, 3) ?? [] : [];
-          return compact ? <button className="player-row" key={player.discordId} aria-label={`${player.displayName}, ${message || `rank ${p?.rank ?? 'unranked'}, ${record}, ${ppg} PPG`}`}>
+          return <button className="compact-player-row" key={player.discordId} onClick={() => setSelected(getPlayerKey(player))} aria-label={`Open details for ${player.displayName}`}>
             <span className="player-identity"><strong>{player.displayName}</strong>{message ? <small>{message}</small> : umas[0] ? <Uma name={umas[0].name}/> : <small>No ranked Uma stats</small>}</span><Rank profile={p}/><span className="num">{record}</span><span className="num">{ppg}</span>
-          </button> : <article className="player-card" key={player.discordId} aria-label={player.displayName}><strong className="player-name">{player.displayName}</strong><div className="badge-area"><Rank profile={p}/></div>
-            <div className="player-stats">{[[usable && p.rating != null ? Math.round(p.rating) : '—', 'Rating'], [record, 'W–L'], [usable && p.winRate != null ? `${Math.round(p.winRate * 100)}%` : '—', 'Win'], [ppg, 'PPG']].map(([value, label]) => <div key={label}><b className="num">{value}</b><span className="label">{label}</span></div>)}</div>
-            {message ? <small className="profile-status">{message}</small> : <div className="top-umas">{umas.map(uma => <Uma key={uma.umaId} name={uma.name} matches={uma.matches}/>)}</div>}
-          </article>;
+          </button>;
         })}</div>{!players.length && <p className="muted">Waiting for players</p>}</section>;
-    })}</div>;
+    })}</div> : <section className="team-list" aria-label="Live lobby teams">{teams.map(team => <TeamSection key={team.id} team={team} profiles={profiles} statsScope={scope}
+      loadingDiscordIds={loading ? roster.players.filter(player => !profiles[player.discordId]).map(player => player.discordId) : []}
+      selectedPlayerKey={selected} onSelectPlayer={setSelected} onRetryProfile={onRetry} canRetryProfile={!loading}/>)}</section>}
+    {context && <PlayerDrawer player={context.player} profile={profiles[context.player.discordId]} onClose={() => setSelected(undefined)}
+      context={{ team: context.team, statsScope: scope, isProfileLoading: loading && !profiles[context.player.discordId], now: Date.now(), inLobby: true, onOpenMatch }}/>}</>;
 }
 
 export function Draft({ draft }: { draft?: DraftSnapshot }) {
@@ -41,7 +54,7 @@ export function Draft({ draft }: { draft?: DraftSnapshot }) {
   const current = draft.currentTeam; const pickPhase = draft.phase === 'uma-pick'; const count = draft.rules?.picks;
   const picked = current ? draft.teams[current].umas.filter(uma => uma.kind === 'pick').length : 0;
   const races = teamIds.flatMap(team => draft.teams[team].maps.filter(map => map.status === 'selected')).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-  return <div className="draft-view"><div className="turn-banner" role="status">{pickPhase && current ? `${draft.teams[current].name ?? current} is picking · Uma pick ${picked + 1}${count ? ` of ${count}` : ''}` : phaseLabel(draft.phase)}</div>
+  return <div className="draft-view compact-draft"><div className="turn-banner" role="status">{pickPhase && current ? `${draft.teams[current].name ?? current} is picking · Uma pick ${picked + 1}${count ? ` of ${count}` : ''}` : phaseLabel(draft.phase)}</div>
     <section className="races"><h2 className="label">Races</h2>{races.map((race, i) => <div className={`race team-${race.team === 'team1' ? 1 : 2}`} key={`${race.team}-${i}`}><i/>{race.name}{race.details ? ` · ${race.details}` : ''}</div>)}{draft.tiebreakerMap && <div className="race">Tiebreaker · {draft.tiebreakerMap.name} {draft.tiebreakerMap.details}</div>}{!races.length && <p className="muted">No races selected yet</p>}</section>
     <div className="draft-teams">{teamIds.map((team, i) => {
       const side = draft.teams[team]; const picks = side.umas.filter(uma => uma.kind === 'pick'); const bans = side.umas.filter(uma => uma.kind !== 'pick');

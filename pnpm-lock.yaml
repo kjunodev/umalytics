@@ -38,6 +38,9 @@ importers:
       '@umalytics/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      '@umalytics/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
       react:
         specifier: ^19.3.1
         version: 19.3.1
