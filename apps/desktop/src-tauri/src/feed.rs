@@ -1,9 +1,19 @@
 use crate::wire::{self, MAX_MESSAGE};
+use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{io, sync::Arc, time::Duration};
 use tauri::Emitter;
-use tokio::{io::AsyncWriteExt, net::TcpListener, sync::Mutex, time::timeout};
+use tokio::{
+    net::{TcpListener, TcpStream},
+    sync::Mutex,
+    task::JoinSet,
+    time::timeout,
+};
+use tokio_tungstenite::{
+    tungstenite::{Error, Message},
+    WebSocketStream,
+};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(untagged)]
@@ -84,23 +94,40 @@ pub struct Feed {
     inner: Arc<Mutex<Inner>>,
 }
 
-async fn emit_status(
-    app: &tauri::AppHandle,
-    inner: &Mutex<Inner>,
-    state: Option<&str>,
-    rejected: bool,
-    accepted: bool,
-) {
+#[derive(Debug)]
+enum FeedEvent {
+    Connected,
+    Disconnected,
+    Left,
+    Rejected,
+    Error,
+    Message(Envelope),
+}
+
+async fn dispatch(app: &tauri::AppHandle, inner: &Mutex<Inner>, event: FeedEvent) {
     let mut inner = inner.lock().await;
-    if let Some(state) = state {
-        inner.status.state = state.into();
-    }
-    inner.status.rejected += u64::from(rejected);
-    inner.status.accepted += u64::from(accepted);
-    // Only counters cross the diagnostic boundary; never log payloads or errors
-    // from parsers, which may contain room codes or account IDs.
-    if rejected {
-        eprintln!("Feed rejected count: {}", inner.status.rejected);
+    match event {
+        FeedEvent::Connected => inner.status.state = "connected".into(),
+        FeedEvent::Disconnected => inner.status.state = "disconnected".into(),
+        FeedEvent::Error => inner.status.state = "error".into(),
+        FeedEvent::Left => {
+            let _ = app.emit(
+                "feed-message",
+                Envelope::Left(Left {
+                    v: 1,
+                    r#type: LeftType::Left,
+                }),
+            );
+        }
+        FeedEvent::Message(message) => {
+            let _ = app.emit("feed-message", message);
+            inner.status.accepted += 1;
+        }
+        FeedEvent::Rejected => {
+            inner.status.rejected += 1;
+            // Parser and transport errors can contain identifiers. Log counts only.
+            eprintln!("Feed rejected count: {}", inner.status.rejected);
+        }
     }
     let _ = app.emit("feed-status", inner.status.clone());
 }
@@ -129,112 +156,162 @@ impl Feed {
         let status = inner.status.clone();
         let state = self.inner.clone();
         tauri::async_runtime::spawn(async move {
-            // One active producer prevents interleaving unrelated room streams.
-            // Other clients remain in the OS backlog until the current one leaves.
-            loop {
-                let Ok((mut stream, _)) = listener.accept().await else {
-                    emit_status(&app, &state, Some("error"), false, false).await;
-                    break;
-                };
-                if !matches!(
-                    timeout(Duration::from_secs(5), wire::handshake(&mut stream)).await,
-                    Ok(Ok(()))
-                ) {
-                    emit_status(&app, &state, None, true, false).await;
-                    continue;
-                }
-                emit_status(&app, &state, Some("connected"), false, false).await;
-                serve(&mut stream, |message| {
-                    let app = app.clone();
-                    let state = state.clone();
-                    async move {
-                        let accepted = message.is_some();
-                        if let Some(message) = message {
-                            let _ = app.emit("feed-message", message);
-                        }
-                        emit_status(&app, &state, None, !accepted, accepted).await;
-                    }
-                })
-                .await;
-                let _ = app.emit(
-                    "feed-message",
-                    Envelope::Left(Left {
-                        v: 1,
-                        r#type: LeftType::Left,
-                    }),
-                );
-                emit_status(&app, &state, Some("disconnected"), false, false).await;
-            }
+            run_listener(listener, |event| {
+                let app = app.clone();
+                let state = state.clone();
+                async move { dispatch(&app, &state, event).await }
+            })
+            .await;
         });
         Ok(status)
     }
 }
 
-async fn serve<S, F, Fut>(stream: &mut S, mut on_message: F)
+type Socket = WebSocketStream<TcpStream>;
+
+async fn disconnect<F, Fut>(active: &mut Option<Socket>, emit: &mut F)
 where
-    S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
-    F: FnMut(Option<Envelope>) -> Fut,
+    F: FnMut(FeedEvent) -> Fut,
     Fut: std::future::Future<Output = ()>,
 {
-    let mut fragmented = false;
-    let mut rejected = false;
-    let mut message = Vec::new();
+    if let Some(mut old) = active.take() {
+        emit(FeedEvent::Left).await;
+        emit(FeedEvent::Disconnected).await;
+        // A stalled peer must not delay takeover indefinitely. Closing only
+        // sends and flushes the close frame; we do not wait for its acknowledgement.
+        let _ = timeout(Duration::from_millis(250), old.close(None)).await;
+    }
+}
+
+async fn run_listener<F, Fut>(listener: TcpListener, mut emit: F)
+where
+    F: FnMut(FeedEvent) -> Fut,
+    Fut: std::future::Future<Output = ()>,
+{
+    let mut handshakes = JoinSet::new();
+    let mut active: Option<Socket> = None;
     loop {
-        let budget = MAX_MESSAGE.saturating_sub(message.len());
-        let frame = match timeout(
-            Duration::from_secs(60 * 30),
-            wire::read_frame(stream, budget),
-        )
-        .await
-        {
-            Ok(Ok(frame)) => frame,
-            _ => break,
-        };
-        if frame.opcode >= 8 {
-            if frame.opcode == 8 {
-                let _ = stream.write_all(&[0x88, 0]).await;
-                break;
+        tokio::select! {
+            // A completed handshake takes precedence over queued old messages.
+            biased;
+            completed = handshakes.join_next(), if !handshakes.is_empty() => {
+                match completed {
+                    Some(Ok(Ok(Ok(socket)))) => {
+                        disconnect(&mut active, &mut emit).await;
+                        active = Some(socket);
+                        emit(FeedEvent::Connected).await;
+                    }
+                    _ => emit(FeedEvent::Rejected).await,
+                }
             }
-            on_message(None).await;
-            // Ping/pong are never forwarded, but answer a valid ping to keep
-            // the transport alive. No application data is echoed elsewhere.
-            if frame.opcode == 9 && frame.fin {
-                if let Some(payload) = frame.payload.filter(|p| p.len() <= 125) {
-                    let mut pong = vec![0x8a, payload.len() as u8];
-                    pong.extend(payload);
-                    if stream.write_all(&pong).await.is_err() {
-                        break;
+            connection = listener.accept() => {
+                match connection {
+                    Ok((stream, _)) if handshakes.len() < 16 => {
+                        handshakes.spawn(async move {
+                            timeout(Duration::from_secs(5), wire::handshake(stream)).await
+                        });
+                    }
+                    Ok(_) => emit(FeedEvent::Rejected).await,
+                    Err(_) => { emit(FeedEvent::Error).await; break; }
+                }
+            }
+            incoming = async {
+                match active.as_mut() {
+                    Some(socket) => socket.next().await,
+                    None => std::future::pending().await,
+                }
+            } => {
+                match incoming {
+                    Some(Ok(Message::Text(text))) => match validate(text.as_bytes()) {
+                        Some(message) => emit(FeedEvent::Message(message)).await,
+                        None => emit(FeedEvent::Rejected).await,
+                    },
+                    Some(Ok(Message::Close(_))) | None => disconnect(&mut active, &mut emit).await,
+                    Some(Err(error)) => {
+                        if !matches!(error, Error::ConnectionClosed | Error::AlreadyClosed) {
+                            emit(FeedEvent::Rejected).await;
+                        }
+                        disconnect(&mut active, &mut emit).await;
+                    }
+                    Some(Ok(_)) => {
+                        emit(FeedEvent::Rejected).await;
+                        // Tungstenite queues automatic pong responses while reading.
+                        if let Some(socket) = active.as_mut() {
+                            if !matches!(timeout(Duration::from_millis(250), socket.flush()).await, Ok(Ok(()))) {
+                                disconnect(&mut active, &mut emit).await;
+                            }
+                        }
                     }
                 }
             }
-            continue;
-        }
-        let valid_opcode = (frame.opcode == 1 && !fragmented) || (frame.opcode == 0 && fragmented);
-        rejected |= !valid_opcode || frame.payload.is_none();
-        if !rejected {
-            message.extend(frame.payload.unwrap_or_default());
-        }
-        if frame.fin {
-            on_message(if rejected { None } else { validate(&message) }).await;
-            message.clear();
-            fragmented = false;
-            rejected = false;
-        } else {
-            fragmented = true;
         }
     }
+    disconnect(&mut active, &mut emit).await;
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tokio::{io::AsyncWriteExt, sync::mpsc};
+    use tokio_tungstenite::{client_async, tungstenite::client::IntoClientRequest};
+
+    const VALID: &str = r#"{"v":1,"roomCode":"CAS7R1","event":{"type":"room.presence.updated"}}"#;
+
+    struct Server {
+        address: std::net::SocketAddr,
+        events: mpsc::UnboundedReceiver<FeedEvent>,
+        task: tokio::task::JoinHandle<()>,
+    }
+    impl Drop for Server {
+        fn drop(&mut self) {
+            self.task.abort();
+        }
+    }
+
+    impl Server {
+        async fn new() -> Self {
+            let listener = TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))
+                .await
+                .unwrap();
+            let address = listener.local_addr().unwrap();
+            let (tx, events) = mpsc::unbounded_channel();
+            let task = tokio::spawn(run_listener(listener, move |event| {
+                tx.send(event).unwrap();
+                std::future::ready(())
+            }));
+            Self {
+                address,
+                events,
+                task,
+            }
+        }
+        async fn connect(&self, origin: &str) -> Result<Socket, Error> {
+            let mut request = format!("ws://{}/", self.address)
+                .into_client_request()
+                .unwrap();
+            request
+                .headers_mut()
+                .insert("origin", origin.parse().unwrap());
+            let stream = TcpStream::connect(self.address).await.unwrap();
+            client_async(request, stream)
+                .await
+                .map(|(socket, _)| socket)
+        }
+        async fn event(&mut self) -> FeedEvent {
+            timeout(Duration::from_secs(3), self.events.recv())
+                .await
+                .unwrap()
+                .unwrap()
+        }
+        async fn departed(&mut self) {
+            assert!(matches!(self.event().await, FeedEvent::Left));
+            assert!(matches!(self.event().await, FeedEvent::Disconnected));
+        }
+    }
 
     #[test]
     fn validates_v1_envelopes() {
-        assert!(validate(
-            br#"{"v":1,"roomCode":"CAS7R1","event":{"type":"room.presence.updated"}}"#
-        )
-        .is_some());
+        assert!(validate(VALID.as_bytes()).is_some());
         assert!(validate(br#"{"v":1,"type":"left"}"#).is_some());
         for bytes in [
             br#"{"v":2,"type":"left"}"#.as_slice(),
@@ -251,26 +328,94 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn rejects_bad_messages_and_keeps_the_connection() {
-        let (mut client, mut server) = tokio::io::duplex(MAX_MESSAGE * 3);
-        let valid = br#"{"v":1,"type":"left"}"#;
-        let mut frames = wire::masked_frame(2, true, b"binary");
-        frames.extend(wire::masked_frame(1, true, b"bad json"));
-        frames.extend(wire::masked_frame(1, true, br#"{"v":2,"type":"left"}"#));
-        frames.extend(wire::masked_frame(1, true, &vec![b'x'; MAX_MESSAGE + 1]));
-        frames.extend(wire::masked_frame(1, true, &[0xff]));
-        frames.extend(wire::masked_frame(1, false, &vec![b'x'; MAX_MESSAGE]));
-        frames.extend(wire::masked_frame(0, true, b"overflow"));
-        frames.extend(wire::masked_frame(1, false, &valid[..10]));
-        frames.extend(wire::masked_frame(0, true, &valid[10..]));
-        client.write_all(&frames).await.unwrap();
-        client.shutdown().await.unwrap();
-        let mut results = Vec::new();
-        serve(&mut server, |message| {
-            results.push(message.is_some());
-            std::future::ready(())
-        })
-        .await;
-        assert_eq!(results, [false, false, false, false, false, false, true]);
+    async fn bad_json_and_nontext_are_counted_without_closing() {
+        let mut server = Server::new().await;
+        let mut client = server.connect(wire::SITE_ORIGIN).await.unwrap();
+        assert!(matches!(server.event().await, FeedEvent::Connected));
+        for message in [
+            Message::text("bad json"),
+            Message::text(r#"{"v":2,"type":"left"}"#),
+            Message::binary(vec![0, 1]),
+        ] {
+            client.send(message).await.unwrap();
+            assert!(matches!(server.event().await, FeedEvent::Rejected));
+        }
+        client.send(Message::text(VALID)).await.unwrap();
+        assert!(matches!(
+            server.event().await,
+            FeedEvent::Message(Envelope::Event(_))
+        ));
+    }
+
+    #[tokio::test]
+    async fn oversized_message_closes_and_valid_message_after_reconnect_works() {
+        let mut server = Server::new().await;
+        let mut first = server.connect(wire::SITE_ORIGIN).await.unwrap();
+        assert!(matches!(server.event().await, FeedEvent::Connected));
+        let _ = first.send(Message::text("x".repeat(MAX_MESSAGE + 1))).await;
+        assert!(matches!(server.event().await, FeedEvent::Rejected));
+        server.departed().await;
+        assert!(!matches!(
+            timeout(Duration::from_secs(3), first.next()).await.unwrap(),
+            Some(Ok(Message::Text(_)))
+        ));
+        let mut next = server.connect(wire::SITE_ORIGIN).await.unwrap();
+        assert!(matches!(server.event().await, FeedEvent::Connected));
+        next.send(Message::text(VALID)).await.unwrap();
+        assert!(matches!(server.event().await, FeedEvent::Message(_)));
+    }
+
+    #[tokio::test]
+    async fn newest_connection_replaces_first_with_left_before_new_messages() {
+        let mut server = Server::new().await;
+        let mut first = server.connect(wire::SITE_ORIGIN).await.unwrap();
+        assert!(matches!(server.event().await, FeedEvent::Connected));
+        first.send(Message::text(VALID)).await.unwrap();
+        assert!(matches!(server.event().await, FeedEvent::Message(_)));
+        // A client that has not finished its handshake cannot block takeover.
+        let _unfinished = TcpStream::connect(server.address).await.unwrap();
+        let mut second = server.connect(wire::SITE_ORIGIN).await.unwrap();
+        server.departed().await;
+        assert!(matches!(server.event().await, FeedEvent::Connected));
+        assert!(matches!(
+            timeout(Duration::from_secs(3), first.next()).await.unwrap(),
+            Some(Ok(Message::Close(_)))
+        ));
+        second
+            .send(Message::text(VALID.replace("CAS7R1", "NEW123")))
+            .await
+            .unwrap();
+        match server.event().await {
+            FeedEvent::Message(Envelope::Event(event)) => assert_eq!(event.room_code, "NEW123"),
+            _ => panic!("Expected the new client's event"),
+        }
+        second.close(None).await.unwrap();
+        server.departed().await;
+    }
+
+    #[tokio::test]
+    async fn failed_handshake_does_not_replace_active_client() {
+        let mut server = Server::new().await;
+        let mut first = server.connect(wire::SITE_ORIGIN).await.unwrap();
+        assert!(matches!(server.event().await, FeedEvent::Connected));
+        assert!(server.connect("https://evil.example").await.is_err());
+        assert!(matches!(server.event().await, FeedEvent::Rejected));
+        first.send(Message::text(VALID)).await.unwrap();
+        assert!(matches!(server.event().await, FeedEvent::Message(_)));
+    }
+
+    #[tokio::test]
+    async fn protocol_error_closes_and_emits_left() {
+        let mut server = Server::new().await;
+        let mut client = server.connect(wire::SITE_ORIGIN).await.unwrap();
+        assert!(matches!(server.event().await, FeedEvent::Connected));
+        // Client frames must be masked. Deliberately send one invalid frame.
+        client
+            .get_mut()
+            .write_all(&[0x81, 0x02, b'{', b'}'])
+            .await
+            .unwrap();
+        assert!(matches!(server.event().await, FeedEvent::Rejected));
+        server.departed().await;
     }
 }
