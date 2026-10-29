@@ -1,3 +1,4 @@
+import { phaseLabel } from './phase';
 import { isDiscordSnowflake } from '@umalytics/core/room/rosterIdentity';
 import type { DraftSnapshot, PlayerProfileSummary, PlayerStatsScope, PrematchPlayer, PrematchRoster } from '@umalytics/shared';
 
@@ -40,7 +41,7 @@ export function Draft({ draft }: { draft?: DraftSnapshot }) {
   const current = draft.currentTeam; const pickPhase = draft.phase === 'uma-pick'; const count = draft.rules?.picks;
   const picked = current ? draft.teams[current].umas.filter(uma => uma.kind === 'pick').length : 0;
   const races = teamIds.flatMap(team => draft.teams[team].maps.filter(map => map.status === 'selected')).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-  return <div className="draft-view"><div className="turn-banner" role="status">{pickPhase && current ? `${draft.teams[current].name ?? current} is picking · Uma pick ${picked + 1}${count ? ` of ${count}` : ''}` : `Draft ${draft.phase?.replaceAll('-', ' ') ?? 'in progress'}`}</div>
+  return <div className="draft-view"><div className="turn-banner" role="status">{pickPhase && current ? `${draft.teams[current].name ?? current} is picking · Uma pick ${picked + 1}${count ? ` of ${count}` : ''}` : phaseLabel(draft.phase)}</div>
     <section className="races"><h2 className="label">Races</h2>{races.map((race, i) => <div className={`race team-${race.team === 'team1' ? 1 : 2}`} key={`${race.team}-${i}`}><i/>{race.name}{race.details ? ` · ${race.details}` : ''}</div>)}{draft.tiebreakerMap && <div className="race">Tiebreaker · {draft.tiebreakerMap.name} {draft.tiebreakerMap.details}</div>}{!races.length && <p className="muted">No races selected yet</p>}</section>
     <div className="draft-teams">{teamIds.map((team, i) => {
       const side = draft.teams[team]; const picks = side.umas.filter(uma => uma.kind === 'pick'); const bans = side.umas.filter(uma => uma.kind !== 'pick');

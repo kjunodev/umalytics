@@ -38,6 +38,16 @@ try {
     await page.evaluate(() => document.fonts.ready);
     const errors = await page.evaluate(() => {
       const errors = [];
+      for (const grid of document.querySelectorAll('.player-grid')) {
+        if (!document.querySelector('.compact')) {
+          const tops = [...grid.children].map(card => Math.round(card.getBoundingClientRect().top));
+          if (new Set(tops).size > 1) errors.push('team cards wrap to a second row');
+        }
+      }
+      for (const label of document.querySelectorAll('.kpi > .label')) {
+        const range = document.createRange(); range.selectNodeContents(label);
+        if (new Set([...range.getClientRects()].map(rect => Math.round(rect.top))).size > 1 || label.scrollWidth > label.clientWidth + 1) errors.push('KPI label wraps or overflows');
+      }
       if (document.documentElement.scrollWidth > innerWidth) errors.push('document horizontal overflow');
       if (document.documentElement.scrollHeight > innerHeight) errors.push('document overflow outside the scrolling content');
       for (const element of document.querySelectorAll('body *')) {
