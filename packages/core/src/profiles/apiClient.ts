@@ -1,4 +1,4 @@
-import { getCoreStorage, recordCoreDiagnostic } from '../platform';
+import { fetchCore, getCoreStorage, recordCoreDiagnostic } from '../platform';
 import { abortable, deadline, RequestQueue } from './requestQueue';
 import type { RequestPriority } from './requestQueue';
 import { getErrorMessage } from '../room/recordReaders';
@@ -159,7 +159,7 @@ async function fetchJsonOnce<T>(path: string, signal: AbortSignal, priority: Req
       try {
       // Do not hold profiles in an invisible sleep, or retry a rate-limited API in a burst.
       assertApiAvailable(path);
-      const response = await fetch(new URL(path, API_ORIGIN), {
+      const response = await fetchCore(new URL(path, API_ORIGIN), {
         cache: 'no-store', credentials: 'omit', signal: budget.signal
       });
       if (!response.ok) {

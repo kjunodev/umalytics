@@ -6,6 +6,42 @@ on:
 permissions:
   contents: read
 jobs:
+  desktop-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      changed: ${{ steps.paths.outputs.changed }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - id: paths
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD: ${{ github.sha }}
+        run: |
+          if [[ -z "$BASE" || "$BASE" =~ ^0+$ ]]; then
+            paths=$(git ls-tree -r --name-only "$HEAD" -- apps/desktop/ packages/core/)
+          else
+            paths=$(git diff --name-only "$BASE" "$HEAD" -- apps/desktop/ packages/core/)
+          fi
+          if [[ -n "$paths" ]]; then echo "changed=true" >> "$GITHUB_OUTPUT"; fi
+  desktop:
+    needs: desktop-changes
+    if: needs.desktop-changes.outputs.changed == 'true'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 9.15.4
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @umalytics/desktop typecheck
+      - run: cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml --locked
+      - run: cargo clippy --manifest-path apps/desktop/src-tauri/Cargo.toml --locked -- -D warnings
   verify:
     runs-on: ubuntu-latest
     steps:
