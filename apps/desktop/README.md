@@ -26,14 +26,17 @@ are not expected to have real API statistics.
 The app listens on `127.0.0.1:38917`. The production Origin must be exactly
 `https://drafter.uma.guide`. The replay Origin,
 `http://umalytics-replay.localhost`, is accepted only in debug builds;
-release builds reject it, with no environment override. One producer is
-processed at a time. The listener starts after frontend event subscriptions
+release builds reject it, with no environment override. Each successful new
+handshake replaces the active producer, closing it and clearing its room
+before serving the new client. Failed handshakes leave the active client intact.
+The listener starts after frontend event subscriptions
 are ready. An unexpected disconnect clears room state and cancels profile work.
 
 Only v1 text envelopes are forwarded. Frames and assembled messages have a
-2 MiB limit. Oversized payloads are drained without allocating their full size,
-and invalid messages increment a counts-only diagnostic. Invalid transport
-framing, EOF, and timeouts end the connection. A port conflict appears in the UI.
+2 MiB limit enforced by tokio-tungstenite. Size and protocol errors close the
+connection; the next client can reconnect. Bad JSON, unsupported envelopes and
+non-text messages increment a counts-only diagnostic. Bad JSON does not close
+the connection. A port conflict appears in the UI.
 
 The debug UI shows status/counters, room, draft phase, each team's roster and
 Uma/map pick and ban counts. The scope selector loads existing core profile
@@ -48,5 +51,6 @@ cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml --locked
 cargo clippy --manifest-path apps/desktop/src-tauri/Cargo.toml --locked -- -D warnings
 ```
 
-`pnpm build:all` builds both extension targets and the desktop frontend.
+`pnpm build:all` builds only the two extension targets.
+`pnpm build:desktop` builds the desktop frontend, independently versioned at 0.1.0.
 Native builds use the Tauri CLI. Packaging, signing and auto-update are disabled.

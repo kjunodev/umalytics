@@ -40,6 +40,10 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @umalytics/desktop typecheck
+      - run: pnpm build:desktop
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/desktop/src-tauri -> target
       - run: cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml --locked
       - run: cargo clippy --manifest-path apps/desktop/src-tauri/Cargo.toml --locked -- -D warnings
   verify:
