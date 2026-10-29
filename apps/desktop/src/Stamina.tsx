@@ -25,7 +25,7 @@ export function Stamina() {
   const [running, setRunning] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [progress, setProgress] = useState<StaminaProgress>();
-  const [result, setResult] = useState<{ data: StaminaResult; build: StaminaInput; course: string }>();
+  const [result, setResult] = useState<{ data: StaminaResult; course: string }>();
   const active = useRef<string | null>(null);
 
   useEffect(() => {
@@ -65,8 +65,8 @@ export function Stamina() {
     setRunning(true); setCancelling(false); setProgress(undefined); setError(''); setResult(undefined);
     try {
       const data = await invoke<StaminaResult>('stamina_check', { input: build });
-      if (active.current === request_id) setResult({ data, build,
-        course: courseLabel(catalog!.courses.find(course => course.id === build.course_set_id)!) });
+      if (active.current === request_id) setResult({ data,
+        course: courseLabel(catalog!.courses.find(course => course.id === data.input.course_set_id)!) });
     } catch (reason) {
       if (active.current === request_id) setError(String(reason));
     } finally {
@@ -86,7 +86,7 @@ export function Stamina() {
   return <section aria-label="Stamina check" className="stamina">
     <h2>Stamina check</h2>
     <p>Estimate the chance of finishing without an HP-out against eight copies of your current build.
-      The threshold is the smallest tested stamina reaching 95%, in steps of 50 from 300 to 1600.</p>
+      The threshold is the smallest tested stamina reaching 95%, in steps of 50 from 300 to 2000.</p>
     <p>Simulated with uma-race-simulator (MIT)</p>
     {!ready && !error && <p role="status">Loading engine data…</p>}
     <form onSubmit={event => { void run(event); }}>
@@ -113,7 +113,7 @@ export function Stamina() {
         <legend>Raw stats and aptitudes</legend>
         <div className="stamina-grid">{(Object.keys(input.stats) as (keyof StaminaInput['stats'])[]).map(stat =>
           <label key={stat}>{({ speed: 'Speed', stamina: 'Stamina', pow: 'Power', guts: 'Guts', wiz: 'Wit' })[stat]}
-            <input type="number" required min={stat === 'stamina' ? 300 : 1} max={stat === 'stamina' ? 1600 : 2000}
+            <input type="number" required min={stat === 'stamina' ? 300 : 1} max={2000}
               value={input.stats[stat]} onChange={event => patch({ stats: { ...input.stats, [stat]: Number(event.target.value) } })} />
           </label>)}</div>
         {(['distance', 'style', 'ground'] as const).map(group => <div className="aptitudes" key={group}>
@@ -141,7 +141,7 @@ export function Stamina() {
             onChange={level => patch({ skills: input.skills.map(s => s.id === skill.id ? { ...s, level } : s) })} />
           <button type="button" onClick={() => patch({ skills: input.skills.filter(s => s.id !== skill.id) })}>Remove skill {skill.id}</button>
         </div>)}
-        <p>Skills are applied to all nine runners. Add them in the intended processing order; levels range from 1 to 6.</p>
+        <p>Skills apply to your uma only; the field has none. Add them in the intended processing order; levels range from 1 to 6.</p>
       </fieldset>
       <div className="stamina-actions">
         <label>Seeds per stamina<input type="number" min="1" max="1000" required value={input.seeds} disabled={running}
@@ -156,17 +156,20 @@ export function Stamina() {
     </div>}
     {error && <p role="alert">{error}</p>}
     {result && <div aria-live="polite">
+      {JSON.stringify({ ...input, request_id: '' }) !== JSON.stringify({ ...result.data.input, request_id: '' }) &&
+        <p role="status">Inputs changed since this run; press Run to update</p>}
       <h3>Results · {result.course}</h3>
-      <p>Build: Speed {result.build.stats.speed}, Stamina {result.build.stats.stamina}, Power {result.build.stats.pow},
-        Guts {result.build.stats.guts}, Wit {result.build.stats.wiz} · {styles[result.build.running_style - 1]}</p>
+      <p>{['Good', 'Soft', 'Hard', 'Bad'][result.data.input.ground_condition - 1]} ground · {['Sunny', 'Cloudy', 'Rainy', 'Snow'][result.data.input.weather - 1]} · {['Spring', 'Summer', 'Fall', 'Winter', 'Cherry Blossom'][result.data.input.season - 1]} · Race instance {result.data.race_instance_id}</p>
+      <p>Build: Speed {result.data.input.stats.speed}, Stamina {result.data.input.stats.stamina}, Power {result.data.input.stats.pow},
+        Guts {result.data.input.stats.guts}, Wit {result.data.input.stats.wiz} · {styles[result.data.input.running_style - 1]}</p>
       <p>Current stamina {result.data.current.stamina}: <strong>{result.data.current.no_hp_out_percent.toFixed(1)}% no HP-out</strong></p>
-      <p>95% threshold: <strong>{result.data.threshold ?? 'Not reached (300–1600)'}</strong> · smallest tested value; finite-seed estimate.</p>
+      <p>95% threshold: <strong>{result.data.threshold ?? 'Not reached (300–2000)'}</strong> · smallest tested value; finite-seed estimate.</p>
       <p>{result.data.races.toLocaleString()} races · {result.data.seeds} seeds per stamina · {(result.data.elapsed_ms / 1000).toFixed(2)} s total · {result.data.ms_per_race.toFixed(2)} ms/race (wall time across cores)</p>
       <div className="stamina-table"><table>
         <caption>No HP-out through the goal-crossing engine tick</caption>
         <thead><tr><th>Stamina</th><th>% no HP-out</th><th>Avg minimum HP</th></tr></thead>
         <tbody>{result.data.curve.map(point => <tr key={point.stamina} className={point.stamina === result.data.threshold ? 'threshold' : ''}>
-          <th scope="row">{point.stamina}{point.stamina === result.data.current.stamina ? ' (current)' : ''}{point.stamina === result.data.threshold ? ' (95% threshold)' : ''}</th>
+          <th scope="row">{point.stamina}{point.stamina === result.data.input.stats.stamina ? ' (current)' : ''}{point.stamina === result.data.threshold ? ' (95% threshold)' : ''}</th>
           <td>{point.no_hp_out_percent.toFixed(1)}%</td><td>{point.avg_min_hp.toFixed(2)}</td>
         </tr>)}</tbody>
       </table></div>

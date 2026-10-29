@@ -238,7 +238,7 @@ fn validate(input: &Input, engine: &Engine) -> Result<i32, String> {
     ] {
         range(name, value, 1, 2000)?;
     }
-    range("Stamina", input.stats.stamina, 300, 1600)?;
+    range("Stamina", input.stats.stamina, 300, 2000)?;
     for grade in input
         .distance
         .iter()
@@ -330,6 +330,7 @@ pub struct Point {
 
 #[derive(Debug, Serialize)]
 pub struct CheckResult {
+    input: Input,
     request_id: String,
     curve: Vec<Point>,
     current: Point,
@@ -349,14 +350,14 @@ pub struct Progress {
 }
 
 fn sweep(stamina: i32) -> Vec<i32> {
-    let mut values = BTreeSet::from([300, 1600, stamina]);
+    let mut values = BTreeSet::from([300, 2000, stamina]);
     let mut value = stamina - 50;
     while value > 300 {
         values.insert(value);
         value -= 50;
     }
     value = stamina + 50;
-    while value < 1600 {
+    while value < 2000 {
         values.insert(value);
         value += 50;
     }
@@ -397,6 +398,11 @@ fn race_input(input: &Input, instance: i32) -> RaceInput {
         race_instance_id: instance,
         horses: (1..=9)
             .map(|gate| HorseInput {
+                skills: if gate == 1 {
+                    build.skills.clone()
+                } else {
+                    vec![]
+                },
                 popularity: gate,
                 frame_order: gate,
                 ..build.clone()
@@ -533,7 +539,7 @@ fn run(
         .map(|p| p.stamina);
     let elapsed_ms = start.elapsed().as_secs_f64() * 1000.0;
     Ok(CheckResult {
-        request_id: input.request_id,
+        request_id: input.request_id.clone(),
         curve,
         current,
         threshold,
@@ -542,6 +548,7 @@ fn run(
         elapsed_ms,
         ms_per_race: elapsed_ms / total as f64,
         race_instance_id: instance,
+        input,
     })
 }
 
@@ -629,6 +636,11 @@ mod tests {
         let mut bad = valid.clone();
         bad.stats.stamina = 299;
         cases.push(bad);
+        let mut capped = valid.clone();
+        capped.stats.stamina = 2000;
+        assert!(validate(&capped, engine).is_ok());
+        capped.stats.stamina = 2001;
+        cases.push(capped);
         let mut bad = valid.clone();
         bad.stats.speed = 2001;
         cases.push(bad);
@@ -661,10 +673,10 @@ mod tests {
 
     #[test]
     fn sweep_includes_exact_current_and_bounds() {
-        for stamina in [300, 323, 800, 1599, 1600] {
+        for stamina in [300, 323, 800, 1999, 2000] {
             let values = sweep(stamina);
             assert_eq!(values.first(), Some(&300));
-            assert_eq!(values.last(), Some(&1600));
+            assert_eq!(values.last(), Some(&2000));
             assert!(values.contains(&stamina));
             assert!(values.windows(2).all(|w| (1..=50).contains(&(w[1] - w[0]))));
         }
@@ -717,6 +729,31 @@ mod tests {
     }
 
     #[test]
+    fn skills_belong_only_to_measured_runner() {
+        let mut input = input();
+        input.skills.push(SelectedSkill {
+            id: 200331,
+            level: 1,
+        });
+        let field = race_input(&input, validate(&input, engine().unwrap()).unwrap());
+        assert_eq!(field.horses[0].skills.len(), 1);
+        assert_eq!(field.horses[0].skills[0].skill_id, 200331);
+        for horse in &field.horses[1..] {
+            assert!(horse.skills.is_empty());
+            assert_eq!(horse.speed, input.stats.speed);
+            assert_eq!(horse.stamina, input.stats.stamina);
+            assert_eq!(horse.pow, input.stats.pow);
+            assert_eq!(horse.guts, input.stats.guts);
+            assert_eq!(horse.wiz, input.stats.wiz);
+            assert_eq!(horse.running_style, input.running_style);
+            assert_eq!(horse.motivation, input.motivation);
+            assert_eq!(horse.proper_distance, input.distance);
+            assert_eq!(horse.proper_running_style, input.style);
+            assert_eq!(horse.proper_ground, input.ground);
+        }
+    }
+
+    #[test]
     fn deterministic_curve_and_neutral_field() {
         let input = input();
         let field = race_input(&input, validate(&input, engine().unwrap()).unwrap());
@@ -724,8 +761,12 @@ mod tests {
         assert!(field.horses.iter().all(|h| h.stamina == 800));
         assert_eq!((field.time, field.race_type), (2, 5));
         let a = run(input.clone(), &AtomicBool::new(false), &|_| {}).unwrap();
+        assert_eq!(
+            serde_json::to_value(&a.input).unwrap(),
+            serde_json::to_value(&input).unwrap()
+        );
         let b = run(input, &AtomicBool::new(false), &|_| {}).unwrap();
-        assert_eq!(a.races, 27 * 8);
+        assert_eq!(a.races, 35 * 8);
         assert_eq!(a.current.stamina, 800);
         assert_eq!(a.threshold, b.threshold);
         for (a, b) in a.curve.iter().zip(&b.curve) {
@@ -760,7 +801,7 @@ mod tests {
             }
         });
         assert!(result.unwrap_err().contains("cancelled"));
-        assert!(completed.load(Ordering::Relaxed) < 27 * 8);
+        assert!(completed.load(Ordering::Relaxed) < 35 * 8);
     }
 
     #[test]
