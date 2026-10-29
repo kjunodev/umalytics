@@ -30,13 +30,13 @@ import {
 } from '../../storage/lobbyLockStorage';
 import { getTeamIconSnapshot, TEAM_ICON_MAP_STORAGE_KEY } from '../../storage/teamIconStorage';
 import { sendLobbyReconnectRequest, sendProfileRefreshRequest } from '../../runtime/messaging';
-import { formatRelativeAge } from '../../ui/common/format';
-import { DraftScene } from '../../ui/draft/DraftScene';
-import { HistoryView, type RequestedMatch } from '../../ui/history/ExplorerViews';
-import { HistoricalScene, getSelectedPlayerContext, type AppScene } from '../../ui/history/HistoricalScene';
-import { TeamSection } from '../../ui/lobby/TeamSection';
-import { PlayerDrawer } from '../../ui/player/PlayerDrawer';
-import { PlayersView } from '../../ui/players/PlayersView';
+import { formatRelativeAge } from '@umalytics/ui/common/format';
+import { DraftScene } from '@umalytics/ui/draft/DraftScene';
+import { HistoryView, type RequestedMatch } from '@umalytics/ui/history/ExplorerViews';
+import { HistoricalScene, getSelectedPlayerContext, type AppScene } from '@umalytics/ui/history/HistoricalScene';
+import { TeamSection } from '@umalytics/ui/lobby/TeamSection';
+import { PlayerDrawer } from '@umalytics/ui/player/PlayerDrawer';
+import { PlayersView } from '@umalytics/ui/players/PlayersView';
 import {
   formatDiagnosticsForClipboard,
   formatRoomEventSummary,
@@ -53,7 +53,7 @@ import {
   ROOM_EVENT_SUMMARY_LIMIT
 } from '../../ui/scoutData';
 import { AppHeader } from '../../ui/shell/AppHeader';
-import { UmasScene } from '../../ui/umas/UmasScene';
+import { UmasScene } from '@umalytics/ui/umas/UmasScene';
 
 const STATS_SCOPE_STORAGE_KEY = 'statsScope';
 const ACTIVE_CLOCK_REFRESH_MS = 1_000;

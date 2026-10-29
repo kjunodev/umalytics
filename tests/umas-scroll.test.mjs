@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
-const css = fs.readFileSync(new URL('../apps/extension/ui/umas/umas.css', import.meta.url), 'utf8');
+const css = fs.readFileSync(new URL('../packages/ui/src/umas/umas.css', import.meta.url), 'utf8');
 const rule = selector => {
   const start = css.indexOf(`${selector} {`);
   assert.notEqual(start, -1, `rule for ${selector}`);
@@ -31,7 +31,7 @@ test('Umas scene stops shrinking at its minimum height and covers History mode',
 
 test('the bounded height only applies while the Umas scene is on screen', () => {
   for (const file of ['shell/shell.css', 'lobby/lobby.css', 'draft/draft.css', 'players/players.css']) {
-    const other = fs.readFileSync(new URL(`../apps/extension/ui/${file}`, import.meta.url), 'utf8');
+    const other = fs.readFileSync(new URL(file.startsWith('shell/') ? `../apps/extension/ui/${file}` : `../packages/ui/src/${file}`, import.meta.url), 'utf8');
     assert.doesNotMatch(other, /umas-scene|--umas-scene-min-height/, file);
   }
   assert.doesNotMatch(css, /^\.app-shell \{/m);

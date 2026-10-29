@@ -32,6 +32,7 @@ function harness() {
   loadFunction(c, playerDisplaySyntax, 'withDetailHistory');
   loadFunction(c, playerDrawerSyntax, 'apiPageForPagerPage');
   loadFunction(c, playerDrawerSyntax, 'apiPageRowOffset');
+  c.useUiServices = () => c;
   loadFunction(c, playerDrawerSyntax, 'PlayerDrawer');
   loadFunction(c, teamSectionSyntax, 'getCardProfile');
   loadFunction(c, scoutDataSyntax, 'isDisplayableStoredProfile');

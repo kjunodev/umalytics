@@ -9,12 +9,7 @@ import type {
   PrematchTeam
 } from '@umalytics/shared';
 import './playerDrawer.css';
-import {
-  cancelPlayerHistoryPageRequest,
-  cancelPlayerProfileRequest,
-  sendPlayerHistoryPageRequest,
-  sendPlayerProfileRequest
-} from '../../runtime/messaging';
+import { useUiServices } from '../services';
 import { getFallbackUmaImageUrl, UmaImage } from '../common/UmaImage';
 import { getNotableBadges } from '../common/badges';
 import { formatDecimal, formatNumber, formatPercent, formatRank, formatRecord } from '../common/format';
@@ -96,6 +91,7 @@ export function PlayerDrawer({
   onClose: () => void;
   context: PlayerDrawerContext;
 }) {
+  const { cancelPlayerHistoryPageRequest, cancelPlayerProfileRequest, sendPlayerHistoryPageRequest, sendPlayerProfileRequest } = useUiServices();
   const { team, statsScope, isProfileLoading, now, teamIcon, onOpenMatch } = context;
   const inLobby = context.inLobby ?? team !== undefined;
   const displayedProfile = getDisplayedProfileStats(profile, statsScope);

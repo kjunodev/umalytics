@@ -12,7 +12,6 @@
 
 html {
   scrollbar-gutter: stable;
-  zoom: var(--ui-scale);
 }
 
 body {

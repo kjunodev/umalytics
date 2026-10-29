@@ -80,6 +80,7 @@ test('UI CSS never truncates names with ellipsis', () => {
     }
   }
   check(uiRoot);
+  check(path.resolve(uiRoot, '../../../packages/ui/src'));
 });
 
 

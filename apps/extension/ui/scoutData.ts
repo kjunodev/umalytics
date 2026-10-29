@@ -6,8 +6,8 @@ import { isRecord } from '@umalytics/core/room/recordReaders';
 import { normalizeRosterForDisplay } from '@umalytics/core/room/rosterDisplay';
 import type { PlayerProfileLoadState, PlayerProfileSummariesSnapshot } from '@umalytics/core/profiles/profileTypes';
 import type { LobbyLockState } from '../storage/lobbyLockStorage';
-import { formatRelativeAge, formatStatsScopeShortLabel } from './common/format';
-import { getDisplayedProfileStats } from './player/playerProfileDisplay';
+import { formatRelativeAge, formatStatsScopeShortLabel } from '@umalytics/ui/common/format';
+import { getDisplayedProfileStats } from '@umalytics/ui/player/playerProfileDisplay';
 
 export const APP_MANIFEST = browser.runtime.getManifest();
 export const APP_VERSION_LABEL = formatAppVersionLabel(APP_MANIFEST);

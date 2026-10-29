@@ -113,7 +113,8 @@ test('desktop sizing uses fixed tokens and natural height, with width-only colum
   }
   assert.match(base, /grid-template-rows:\s*repeat\(3, 40px\)/);
   assert.match(base, /\.best-uma-portrait\s*\{[^}]*width:\s*36px;[^}]*height:\s*36px/s);
-  assert.match(base, /zoom:\s*var\(--ui-scale\)/);
+  assert.match(shell, /zoom:\s*var\(--ui-scale\)/);
+  assert.doesNotMatch(base, /\bzoom\s*:/, 'root zoom belongs to the extension shell');
   assert.match(tokens, /--row-md:\s*44px/);
   assert.match(tokens, /--row-lg:\s*46px/);
   assert.match(tokens, /--row-sm:\s*30px/);

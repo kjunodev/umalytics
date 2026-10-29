@@ -1,14 +1,15 @@
 import { useEffect, useRef, useState, type ComponentType } from 'react';
 import './history.css';
 import type { DraftSnapshot, EsportsTeamIconMap, PlayerProfileSummary, PlayerStatsScope, PrematchPlayer, PrematchRoster } from '@umalytics/shared';
-import { loadHistoricalMatch, loadExplorerProfiles } from '../../explorer/explorerClient';
+import { useUiServices } from '../services';
 import type { HistoricalMatch } from '@umalytics/core/explorer/explorerTypes';
-import { mergeExplorerProfiles } from '../../explorer/explorerState';
+import { mergeExplorerProfiles } from './explorerState';
 
 type Profiles = Record<string, PlayerProfileSummary>;
 type HistoryScene = ComponentType<{ snapshot: DraftSnapshot; roster: PrematchRoster; profiles: Profiles; statsScope: PlayerStatsScope; scene: 'lobby' | 'draft' | 'umas'; loading: boolean; navigation: number; onOpenMatch?: (matchCode: string) => void; teamIcons?: EsportsTeamIconMap }>;
 
 function useProfiles(players: PrematchPlayer[], scope: PlayerStatsScope) {
+  const { loadExplorerProfiles } = useUiServices();
   const [profiles, setProfiles] = useState<Profiles>({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -43,6 +44,7 @@ const EMPTY_PLAYERS: PrematchPlayer[] = [];
 export interface RequestedMatch { code: string; nonce: number }
 
 export function HistoryView({ Scene, scene, scope, navigation, onMatchCodeChange, teamIcons, requestedMatch }: { Scene: HistoryScene; scene: 'lobby' | 'draft' | 'umas'; scope: PlayerStatsScope; navigation: number; onMatchCodeChange: (code: string | undefined) => void; teamIcons?: EsportsTeamIconMap; requestedMatch?: RequestedMatch }) {
+  const { loadHistoricalMatch } = useUiServices();
   const [input, setInput] = useState('');
   const [match, setMatch] = useState<HistoricalMatch>();
   const [error, setError] = useState('');

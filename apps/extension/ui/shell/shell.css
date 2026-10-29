@@ -1,3 +1,7 @@
+html {
+  zoom: var(--ui-scale);
+}
+
 .app-shell {
   background: var(--bg-page);
   color: var(--text-primary);

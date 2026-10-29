@@ -8,6 +8,7 @@ import ts from 'typescript';
 import { loadFunction, loadModule, parseTsxModule } from './support/harness.mjs';
 
 const ROOT = fileURLToPath(new URL('../apps/extension/', import.meta.url));
+const UI = fileURLToPath(new URL('../packages/ui/src/', import.meta.url));
 const CORE = fileURLToPath(new URL('../packages/core/src/', import.meta.url));
 const FORBIDDEN = /historyDerived|recentForm|EstimatedChip|buildStatsSummaryFromHistory|buildUmaEntriesFromHistory|fetchBatchPlayerProfileSummaries|\/batch\?|__UMALYTICS_[A-Z_]*PROFILE_DATA__/i;
 
@@ -19,7 +20,7 @@ function sourceFiles(dir) {
 }
 
 test('extension source displays history without converting it to ranked statistics', () => {
-  for (const file of [...sourceFiles(ROOT), ...sourceFiles(CORE)]) {
+  for (const file of [...sourceFiles(ROOT), ...sourceFiles(CORE), ...sourceFiles(UI)]) {
     const source = fs.readFileSync(file, 'utf8');
     assert.doesNotMatch(source, FORBIDDEN, path.relative(ROOT, file));
   }
@@ -78,7 +79,7 @@ test('UI code never passes a history-merged profile to badge or privacy decision
   const DECISIONS = new Set(['getNotableBadges', 'hasDisplayableProfileLists', 'hasUsableProfileStats', 'getCardState',
     'getProfileDataStatus', 'getStatsMessage', 'getPlayerNote', 'getProfileLoadStatus']);
   const offenders = [];
-  for (const file of sourceFiles(path.join(ROOT, 'ui'))) {
+  for (const file of [...sourceFiles(path.join(ROOT, 'ui')), ...sourceFiles(UI)]) {
     const syntax = ts.createSourceFile(file, fs.readFileSync(file, 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
     const tainted = new Set();
     const collect = node => {

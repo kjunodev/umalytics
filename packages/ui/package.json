@@ -1,0 +1,89 @@
+{
+  "name": "@umalytics/ui",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./*.css": "./src/*.css",
+    "./common/TeamIcon": {
+      "types": "./src/common/TeamIcon.tsx",
+      "default": "./src/common/TeamIcon.tsx"
+    },
+    "./common/UmaImage": {
+      "types": "./src/common/UmaImage.tsx",
+      "default": "./src/common/UmaImage.tsx"
+    },
+    "./draft/DraftScene": {
+      "types": "./src/draft/DraftScene.tsx",
+      "default": "./src/draft/DraftScene.tsx"
+    },
+    "./history/ExplorerViews": {
+      "types": "./src/history/ExplorerViews.tsx",
+      "default": "./src/history/ExplorerViews.tsx"
+    },
+    "./history/HistoricalScene": {
+      "types": "./src/history/HistoricalScene.tsx",
+      "default": "./src/history/HistoricalScene.tsx"
+    },
+    "./lobby/BadgeChip": {
+      "types": "./src/lobby/BadgeChip.tsx",
+      "default": "./src/lobby/BadgeChip.tsx"
+    },
+    "./lobby/TeamSection": {
+      "types": "./src/lobby/TeamSection.tsx",
+      "default": "./src/lobby/TeamSection.tsx"
+    },
+    "./player/BestUmaPortrait": {
+      "types": "./src/player/BestUmaPortrait.tsx",
+      "default": "./src/player/BestUmaPortrait.tsx"
+    },
+    "./player/PlayerDrawer": {
+      "types": "./src/player/PlayerDrawer.tsx",
+      "default": "./src/player/PlayerDrawer.tsx"
+    },
+    "./player/playerProfileDisplay": {
+      "types": "./src/player/playerProfileDisplay.tsx",
+      "default": "./src/player/playerProfileDisplay.tsx"
+    },
+    "./player/TopUmasList": {
+      "types": "./src/player/TopUmasList.tsx",
+      "default": "./src/player/TopUmasList.tsx"
+    },
+    "./players/PlayersView": {
+      "types": "./src/players/PlayersView.tsx",
+      "default": "./src/players/PlayersView.tsx"
+    },
+    "./services": {
+      "types": "./src/services.tsx",
+      "default": "./src/services.tsx"
+    },
+    "./umas/UmasScene": {
+      "types": "./src/umas/UmasScene.tsx",
+      "default": "./src/umas/UmasScene.tsx"
+    },
+    "./*": {
+      "types": "./src/*.ts",
+      "default": "./src/*.ts"
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc --project tsconfig.json"
+  },
+  "dependencies": {
+    "@fontsource/barlow-semi-condensed": "^5.3.0",
+    "@fontsource/ibm-plex-sans": "^5.3.0",
+    "@umalytics/core": "workspace:*",
+    "@umalytics/shared": "workspace:*"
+  },
+  "peerDependencies": {
+    "react": "^19.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^19.3.0",
+    "typescript": "^5.7.2"
+  }
+}

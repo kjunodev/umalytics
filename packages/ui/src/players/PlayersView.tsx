@@ -1,12 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import type { EsportsTeamIconMap, PlayerProfileSummary, PlayerStatsScope, PrematchPlayer, PrematchRoster } from '@umalytics/shared';
 import './players.css';
-import { loadExplorerProfiles, loadSeasonLeaderboard, searchPlayers } from '../../explorer/explorerClient';
+import { useUiServices, type RecentPlayerEntry } from '../services';
 import { lookupPlayer } from '@umalytics/core/explorer/explorerData';
 import type { PlayerSearchResult } from '@umalytics/core/explorer/explorerTypes';
 import type { SeasonLeaderboard, SeasonLeaderboardEntry } from '@umalytics/core/profiles/playerProfileApi';
 import { getErrorMessage } from '@umalytics/core/room/recordReaders';
-import { getRecentPlayers, setRecentPlayers, type RecentPlayerEntry } from '../../storage/playersRecentStorage';
 import { formatNumber } from '../common/format';
 import { TeamIcon } from '../common/TeamIcon';
 import { PlayerDrawer } from '../player/PlayerDrawer';
@@ -64,6 +63,7 @@ function getRetryAt(caught: unknown): number | undefined {
 // ever needs the currently opened player's stats. `active` keeps this from
 // starting a profile load while the Players view is hidden.
 function usePlayerProfile(player: PrematchPlayer | undefined, statsScope: PlayerStatsScope, active: boolean) {
+  const { loadExplorerProfiles } = useUiServices();
   const [profile, setProfile] = useState<PlayerProfileSummary | undefined>();
   const [loading, setLoading] = useState(false);
   const key = player === undefined ? '' : `${player.discordId}:${statsScope}`;
@@ -91,6 +91,7 @@ export function PlayersView({ roster, statsScope, active, teamIcons = {}, onOpen
   roster: PrematchRoster | undefined; statsScope: PlayerStatsScope; active: boolean; teamIcons?: EsportsTeamIconMap;
   onOpenMatch?: (matchCode: string) => void;
 }) {
+  const { loadSeasonLeaderboard, searchPlayers, getRecentPlayers, setRecentPlayers } = useUiServices();
   const [leaderboardState, setLeaderboardState] = useState<LeaderboardState>({ loading: false });
   const [attempt, setAttempt] = useState(0);
   const [query, setQuery] = useState('');

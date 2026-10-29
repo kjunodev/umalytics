@@ -1,3 +1,5 @@
+import { UiServicesProvider } from '@umalytics/ui';
+import { extensionUiServices } from '../../ui/services';
 import { initializeUiSize, applyUiSize, initialUiSize } from '../../ui/common/uiSize';
 import React from 'react';
 import { createRoot } from 'react-dom/client';
@@ -6,7 +8,9 @@ import PreviewApp from './PreviewApp';
 function mount() {
   createRoot(document.getElementById('root') as HTMLElement).render(
     <React.StrictMode>
-      <PreviewApp />
+      <UiServicesProvider services={extensionUiServices}>
+        <PreviewApp />
+      </UiServicesProvider>
     </React.StrictMode>
   );
 }

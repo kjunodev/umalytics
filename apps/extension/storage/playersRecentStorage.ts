@@ -1,11 +1,9 @@
 import { browser } from 'wxt/browser';
+import type { RecentPlayerEntry } from '@umalytics/ui';
 
 export const PLAYERS_RECENT_STORAGE_KEY = 'playersRecentViewed';
 
-export interface RecentPlayerEntry {
-  discordId: string;
-  displayName: string;
-}
+export type { RecentPlayerEntry } from '@umalytics/ui';
 
 function isRecentPlayerEntry(value: unknown): value is RecentPlayerEntry {
   const record = value as Partial<RecentPlayerEntry> | null;

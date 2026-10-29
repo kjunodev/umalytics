@@ -150,6 +150,7 @@ async function renderDrawer(onOpenMatch, onClose) {
   const drawer = parseTsxModule('uiPlayerDrawer');
   loadFunction(c, display, 'getDisplayedProfileStats');
   loadFunction(c, display, 'withDetailHistory');
+  c.useUiServices = () => c;
   for (const name of ['apiPageForPagerPage', 'apiPageRowOffset', 'PlayerDrawer']) loadFunction(c, drawer, name);
   const profile = drawerProfile();
   c.sendPlayerHistoryPageRequest = async (_, __, page) => ({ page, total: 1, matches: [MATCH] });
@@ -203,6 +204,7 @@ test('HistoryView loads a requested match code through the same path as typing i
     useProfiles: () => ({ profiles: {}, loading: false, error: '', retry() {} }),
     loadHistoricalMatch: async (value) => { loads.push(value); return { matchCode: String(value).toUpperCase(), roster: { players: [] }, draft: {}, warnings: [] }; } });
   const runtime = hookRuntime(c);
+  c.useUiServices = () => c;
   loadFunction(c, parseTsxModule('uiHistoryExplorerViews'), 'HistoryView');
   let requestedMatch;
   const render = () => { runtime.reset(); return c.HistoryView({ Scene: 'Scene', scene: 'lobby', scope: 'currentSeason', navigation: 0, onMatchCodeChange: code => codes.push(code), requestedMatch }); };
