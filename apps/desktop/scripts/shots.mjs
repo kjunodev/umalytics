@@ -149,6 +149,9 @@ try {
     check(await page.getByRole('group', { name: 'Field', exact: true }).getByRole('button', { name: 'Average lobby', exact: true }).getAttribute('aria-pressed') === 'true', 'Average lobby selectable');
     await page.getByRole('button', { name: 'Run check', exact: true }).click();
     await page.locator('.stamina-chart').waitFor();
+    check(await page.getByRole('group', { name: 'Assume heals activate', exact: true }).getByRole('button', { name: 'On', exact: true }).getAttribute('aria-pressed') === 'true', 'Heal lottery assumption defaults on');
+    check((await page.locator('.unconditional-rates').innerText()).includes('256 heal-lottery passes / 256 simulated'), 'Current rates use the full bank');
+
     check(await page.locator('tbody tr').count() === 6, 'Six nearby rows');
     await shot(page, `stamina-controls-${width}x${height}`);
     await page.locator('.content').evaluate(element => { element.scrollTop = 0; });
@@ -168,8 +171,22 @@ try {
     await page.getByRole('combobox', { name: 'Skill', exact: true }).selectOption('1');
     await page.getByRole('button', { name: 'Add selected skill' }).click();
     await shot(page, `stamina-edit-${width}x${height}`);
+    await page.getByRole('button', { name: 'Run check', exact: true }).click();
+    await page.waitForFunction(() => document.querySelector('.unconditional-rates')?.textContent.includes('512 heal-lottery passes / 554 simulated'));
+    check((await page.locator('.kpi').first().innerText()).includes('512'), 'Healed current rates use a full conditional bank');
+    await page.locator('.content').evaluate(element => { element.scrollTop = 0; });
+    await shot(page, `stamina-heal-${width}x${height}`);
+    await page.getByRole('group', { name: 'Assume heals activate', exact: true }).getByRole('button', { name: 'Off', exact: true }).click();
+    await page.getByRole('button', { name: 'Run check', exact: true }).click();
+    await page.waitForFunction(() => document.querySelector('.unconditional-rates')?.textContent.includes('474 heal-lottery passes / 512 simulated'));
+    check((await page.locator('.kpi').first().innerText()).includes('512'), 'Unconditional current rates still use the full bank');
+    await page.getByRole('group', { name: 'Assume heals activate', exact: true }).getByRole('button', { name: 'On', exact: true }).click();
     await page.getByRole('button', { name: 'Remove skill 1' }).click();
     check(await page.locator('.skill-chip').count() === 0, 'Skills removable');
+    await page.getByRole('group', { name: 'Assume heals activate', exact: true }).getByRole('button', { name: 'Off', exact: true }).click();
+    check(await page.getByRole('group', { name: 'Assume heals activate', exact: true }).getByRole('button', { name: 'Off', exact: true }).getAttribute('aria-pressed') === 'true', 'Unconditional mode selectable');
+    await page.getByRole('group', { name: 'Assume heals activate', exact: true }).getByRole('button', { name: 'On', exact: true }).click();
+
     await page.getByRole('spinbutton', { name: 'Stamina', exact: true }).fill('1200');
     await page.getByRole('button', { name: 'Run check', exact: true }).click();
     await page.locator('.kpi.sufficient').waitFor();

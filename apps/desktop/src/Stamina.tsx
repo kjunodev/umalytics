@@ -83,7 +83,7 @@ export function Stamina() {
     !input.build.skills.some(selected => selected.id === skill.id) &&
     `${skill.name} ${skill.id}`.toLowerCase().includes(skillSearch.toLowerCase())) ?? [];
 
-  const seedBudget = input.seeds ?? (input.build.skills.some(s => catalog?.skills.some(skill => skill.id === s.id && skill.hp_recovery)) ? 1000 : 256);
+  const seedBudget = input.seeds ?? (input.build.skills.some(s => catalog?.skills.some(skill => skill.id === s.id && skill.hp_recovery)) ? 512 : 256);
   const distanceIndex = !selectedCourse ? 2 : selectedCourse.distance <= 1400 ? 0 : selectedCourse.distance <= 1800 ? 1 : selectedCourse.distance <= 2400 ? 2 : 3;
   const surfaceIndex = selectedCourse?.surface === 2 ? 1 : 0;
   const aptitude = (group: 'distance' | 'style' | 'ground', index: number, label: string) => <Picker label={label} value={input.build[group][index]!} options={grades} onChange={value => {
@@ -124,8 +124,9 @@ export function Stamina() {
           <button type="button" disabled={!skillId || input.build.skills.length >= 100} onClick={() => { patchBuild({ skills: [...input.build.skills, { id: Number(skillId), level: 1 }] }); setSkillId(''); }}>Add selected skill</button>
           {!!input.build.skills.length && <details><summary>Skill levels and processing order</summary>{input.build.skills.map((skill, i) => <Picker key={skill.id} label={`${i + 1}. ${catalog?.skills.find(s => s.id === skill.id)?.name ?? skill.id}`} value={skill.level} options={['1', '2', '3', '4', '5', '6']} onChange={level => patchBuild({ skills: input.build.skills.map(s => s.id === skill.id ? { ...s, level } : s) })}/>)}</details>}
         </div>}
+        <div className="field"><span>Assume heals activate</span><div className="seg" role="group" aria-label="Assume heals activate">{[true, false].map(value => <button type="button" key={String(value)} aria-pressed={input.assume_heals_activate === value} onClick={() => patch({ assume_heals_activate: value })}>{value ? 'On' : 'Off'}</button>)}</div><small className="muted">Assumes heal Wit checks pass. Skill timing and position conditions still apply.</small></div>
         <button className="run" type="submit" disabled={!ready || !selectedCourse || !!selectedCourse.unavailable_reason}>Run check</button>
-        <small className="run-note">{Math.min(32, seedBudget)} seeds for curve · {seedBudget} near thresholds</small>
+        <small className="run-note">{Math.min(32, seedBudget)} curve samples · {seedBudget} at thresholds and current</small>
       </fieldset>
       {!ready && !error && <p role="status">Loading engine data…</p>}
       {running && <div className="simulation-progress" role="status" aria-live="polite"><progress max={progress?.total ?? 1} value={progress?.completed ?? 0}/><span>{progress ? `${progress.completed} / ${progress.total} races` : 'Preparing simulation…'}</span><button type="button" disabled={cancelling} onClick={() => { void cancel(); }}>{cancelling ? 'Cancelling…' : 'Cancel'}</button></div>}

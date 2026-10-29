@@ -208,11 +208,7 @@ fn load_engine() -> Result<Engine, String> {
         .keys()
         .map(|id| Skill {
             id: *id,
-            hp_recovery: data.skills[id]
-                .details
-                .iter()
-                .flat_map(|d| &d.abilities)
-                .any(|a| a.ability_type == 9 && a.float_ability_value > 0),
+            hp_recovery: hp_recovery(&data.skills[id]),
             name: names
                 .skill
                 .get(id)
@@ -275,18 +271,27 @@ fn default_seeds() -> usize {
 }
 fn seed_count(input: &Input, engine: &Engine) -> usize {
     input.seeds.unwrap_or_else(|| {
-        if input.build.skills.iter().any(|s| {
-            engine
-                .catalog
-                .skills
-                .iter()
-                .any(|skill| skill.id == s.id && skill.hp_recovery)
-        }) {
-            1000
+        if input
+            .build
+            .skills
+            .iter()
+            .any(|s| engine.data.skills.get(&s.id).is_some_and(hp_recovery))
+        {
+            512
         } else {
             default_seeds()
         }
     })
+}
+fn default_true() -> bool {
+    true
+}
+fn hp_recovery(skill: &uma_race_sim::data::SkillData) -> bool {
+    skill
+        .details
+        .iter()
+        .flat_map(|d| &d.abilities)
+        .any(|a| a.ability_type == 9 && a.float_ability_value > 0)
 }
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -299,6 +304,8 @@ pub struct Input {
     field: Field,
     #[serde(default)]
     seeds: Option<usize>,
+    #[serde(default = "default_true")]
+    assume_heals_activate: bool,
 }
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -311,6 +318,8 @@ pub struct MultiInput {
     field: Field,
     #[serde(default)]
     seeds: Option<usize>,
+    #[serde(default = "default_true")]
+    assume_heals_activate: bool,
 }
 fn validate(input: &Input, engine: &Engine) -> Result<Course, String> {
     let range = |name, value, low, high| {
@@ -414,19 +423,53 @@ fn cancelled(token: &AtomicBool) -> Result<(), String> {
         Ok(())
     }
 }
-#[derive(Clone, Debug, Serialize, PartialEq)]
-pub struct Point {
-    seeds: usize,
-    stamina: i32,
+#[derive(Clone, Debug, Default, Serialize, PartialEq)]
+pub struct Rates {
     survival_percent: f64,
     full_spurt_percent: f64,
     full_spurt_at_entry_percent: f64,
     avg_min_hp: f64,
 }
 #[derive(Clone, Debug, Serialize, PartialEq)]
+pub struct Point {
+    // All attempted seeds, including failed heal lotteries.
+    seeds: usize,
+    conditional_samples: usize,
+    stamina: i32,
+    survival_percent: f64,
+    full_spurt_percent: f64,
+    full_spurt_at_entry_percent: f64,
+    avg_min_hp: f64,
+    unconditional: Rates,
+    conditional: Option<Rates>,
+}
+#[derive(Clone, Debug, Serialize, PartialEq)]
 pub struct Thresholds {
     full_spurt: Option<i32>,
     survival: Option<i32>,
+}
+#[derive(Clone, Debug, Serialize, PartialEq)]
+pub struct EffectiveThresholds {
+    full_spurt: Option<f64>,
+    survival: Option<f64>,
+}
+#[derive(Clone, Debug, Serialize)]
+pub struct SampleCounts {
+    conditional: usize,
+    attempted: usize,
+}
+impl From<&Point> for SampleCounts {
+    fn from(point: &Point) -> Self {
+        Self {
+            conditional: point.conditional_samples,
+            attempted: point.seeds,
+        }
+    }
+}
+#[derive(Clone, Debug, Serialize)]
+pub struct ThresholdSamples {
+    full_spurt: Option<SampleCounts>,
+    survival: Option<SampleCounts>,
 }
 #[derive(Clone, Debug, Serialize)]
 pub struct HealEquivalent {
@@ -442,7 +485,8 @@ pub struct CheckResult {
     curve: Vec<Point>,
     current: Point,
     thresholds: Thresholds,
-    needed_effective_stamina: Thresholds,
+    threshold_samples: ThresholdSamples,
+    needed_effective_stamina: EffectiveThresholds,
     effective_stamina: f64,
     heal_equivalents: Vec<HealEquivalent>,
     seeds: usize,
@@ -531,6 +575,7 @@ fn race_input(input: &Input, course: &Course) -> RaceInput {
 }
 #[derive(Clone, Debug)]
 struct Sample {
+    heals_passed: bool,
     survival: bool,
     full_spurt: bool,
     entry_full: bool,
@@ -543,6 +588,14 @@ fn one_race(input: &RaceInput, data: &GameData, token: &AtomicBool) -> Result<Sa
     cancelled(token)?;
     let mut race = race::init(input, data);
     tick::start(&mut race);
+    // Only the pre-race lot writes this enable flag. Do not inspect whether a
+    // skill actually triggers: position/condition failures remain real outcomes.
+    let heals_passed = race.horses[0]
+        .skill_manager
+        .skills
+        .iter()
+        .filter(|skill| hp_recovery(&skill.skill_master))
+        .all(|skill| skill.is_activate_enable);
     // Frames are output-only. Keep all AI, events, spans and RNG behavior.
     race.record_timer = f32::INFINITY;
     let mut min_hp = race.horses[0].hp;
@@ -563,6 +616,7 @@ fn one_race(input: &RaceInput, data: &GameData, token: &AtomicBool) -> Result<Sa
         }
         if horse.is_finished {
             return Ok(Sample {
+                heals_passed,
                 survival: !horse.is_hp_empty_on_race && min_hp > 0.0,
                 full_spurt: full_spurt(horse.ai.last_spurt_calc_result),
                 entry_full: entry_full.unwrap_or(false),
@@ -643,18 +697,58 @@ impl Solver<'_> {
     fn evaluate(
         &mut self,
         values: impl IntoIterator<Item = i32>,
+        target: usize,
+    ) -> Result<(), String> {
+        let values: Vec<_> = values
+            .into_iter()
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect();
+        loop {
+            cancelled(self.token)?;
+            let mut groups: BTreeMap<usize, Vec<i32>> = BTreeMap::new();
+            for stamina in &values {
+                let samples = self.samples.get(stamina).map_or(&[][..], Vec::as_slice);
+                let eligible = if self.input.assume_heals_activate {
+                    samples.iter().filter(|s| s.heals_passed).count()
+                } else {
+                    samples.len()
+                };
+                if eligible >= target {
+                    continue;
+                }
+                if samples.len() >= MAX_POINT_SEEDS {
+                    return Err(format!("Could not collect {target} qualifying samples at {stamina} stamina after {MAX_POINT_SEEDS} seeds ({eligible} qualified)."));
+                }
+                // Missing eligible samples are an upper bound on new successes:
+                // no overshoot, no worker-dependent stopping or dropped outcomes.
+                groups.entry(target - eligible).or_default().push(*stamina);
+            }
+            if groups.is_empty() {
+                return Ok(());
+            }
+            for (missing, points) in groups {
+                self.evaluate_batch(points, missing)?;
+            }
+        }
+    }
+    fn evaluate_batch(
+        &mut self,
+        values: impl IntoIterator<Item = i32>,
         seeds: usize,
     ) -> Result<(), String> {
         let values: Vec<_> = values
             .into_iter()
             .collect::<BTreeSet<_>>()
             .into_iter()
-            .filter(|v| self.samples.get(v).map_or(0, Vec::len) < seeds)
+            .filter(|_| seeds > 0)
             .collect();
         let jobs: Vec<_> = values
             .iter()
             .flat_map(|s| {
-                (self.samples.get(s).map_or(0, Vec::len)..seeds).map(move |seed| (*s, seed))
+                (self.samples.get(s).map_or(0, Vec::len)
+                    ..(self.samples.get(s).map_or(0, Vec::len) + seeds).min(MAX_POINT_SEEDS))
+                    .map(move |seed| (*s, seed))
             })
             .collect();
         if jobs.is_empty() {
@@ -737,21 +831,13 @@ impl Solver<'_> {
             self.samples.entry(jobs[index].0).or_default().push(sample);
         }
         for stamina in values {
-            let samples = &self.samples[&stamina];
-            let percent = |test: fn(&Sample) -> bool| {
-                100.0 * samples.iter().filter(|s| test(s)).count() as f64 / samples.len() as f64
-            };
             self.cache.insert(
                 stamina,
-                Point {
+                point(
                     stamina,
-                    seeds: samples.len(),
-                    survival_percent: percent(|s| s.survival),
-                    full_spurt_percent: percent(|s| s.full_spurt),
-                    full_spurt_at_entry_percent: percent(|s| s.entry_full),
-                    avg_min_hp: samples.iter().map(|s| s.min_hp).sum::<f64>()
-                        / samples.len() as f64,
-                },
+                    &self.samples[&stamina],
+                    self.input.assume_heals_activate,
+                ),
             );
         }
         self.races += total;
@@ -798,7 +884,7 @@ impl Solver<'_> {
         }
         Ok(stable_crossing(&self.cache, metric))
     }
-    fn solve(&mut self, current: bool) -> Result<Thresholds, String> {
+    fn solve(&mut self) -> Result<Thresholds, String> {
         let curve_seeds = self.seeds.min(32);
         self.evaluate((600..=1400).step_by(50), curve_seeds)?;
         let thresholds = loop {
@@ -812,10 +898,60 @@ impl Solver<'_> {
                 };
             }
         };
-        if current {
-            self.evaluate([self.input.build.stats.stamina], curve_seeds)?;
-        }
         Ok(thresholds)
+    }
+}
+
+const MAX_POINT_SEEDS: usize = 10_000;
+
+fn rates(samples: &[&Sample]) -> Option<Rates> {
+    if samples.is_empty() {
+        return None;
+    }
+    let percent = |test: fn(&Sample) -> bool| {
+        100.0 * samples.iter().filter(|s| test(s)).count() as f64 / samples.len() as f64
+    };
+    Some(Rates {
+        survival_percent: percent(|s| s.survival),
+        full_spurt_percent: percent(|s| s.full_spurt),
+        full_spurt_at_entry_percent: percent(|s| s.entry_full),
+        avg_min_hp: samples.iter().map(|s| s.min_hp).sum::<f64>() / samples.len() as f64,
+    })
+}
+fn point(stamina: i32, samples: &[Sample], assume_heals_activate: bool) -> Point {
+    let all: Vec<_> = samples.iter().collect();
+    let passing: Vec<_> = samples.iter().filter(|s| s.heals_passed).collect();
+    let unconditional = rates(&all).unwrap_or_default();
+    let conditional = rates(&passing);
+    let headline = if assume_heals_activate {
+        conditional.clone().unwrap_or_default()
+    } else {
+        unconditional.clone()
+    };
+    Point {
+        stamina,
+        seeds: samples.len(),
+        conditional_samples: passing.len(),
+        survival_percent: headline.survival_percent,
+        full_spurt_percent: headline.full_spurt_percent,
+        full_spurt_at_entry_percent: headline.full_spurt_at_entry_percent,
+        avg_min_hp: headline.avg_min_hp,
+        unconditional,
+        conditional,
+    }
+}
+fn effective_thresholds(
+    thresholds: &Thresholds,
+    equivalents: &[HealEquivalent],
+    distance: i32,
+    style: i32,
+) -> EffectiveThresholds {
+    let fraction = equivalents.iter().map(|h| h.fraction).sum::<f64>();
+    let effective =
+        |stamina| f64::from(stamina) + heal_equivalent(stamina, distance, style, fraction);
+    EffectiveThresholds {
+        full_spurt: thresholds.full_spurt.map(effective),
+        survival: thresholds.survival.map(effective),
     }
 }
 
@@ -849,19 +985,6 @@ fn run_bank(
     let course = validate(&input, engine)?;
     let seeds = seed_count(&input, engine);
     let equivalents = heals(&input, engine, course.distance);
-    let heal_ids: HashSet<_> = input
-        .build
-        .skills
-        .iter()
-        .filter(|s| {
-            engine.data.skills[&s.id]
-                .details
-                .iter()
-                .flat_map(|d| &d.abilities)
-                .any(|a| a.ability_type == 9 && a.float_ability_value > 0)
-        })
-        .map(|s| s.id)
-        .collect();
     let mut solver = Solver {
         input: &input,
         engine,
@@ -874,35 +997,30 @@ fn run_bank(
         bank,
         seeds,
     };
-    let thresholds = solver.solve(true)?;
-    let current = solver.cache[&input.build.stats.stamina].clone();
+    let thresholds = solver.solve()?;
+    let threshold_samples = ThresholdSamples {
+        full_spurt: thresholds
+            .full_spurt
+            .map(|s| SampleCounts::from(&solver.cache[&s])),
+        survival: thresholds
+            .survival
+            .map(|s| SampleCounts::from(&solver.cache[&s])),
+    };
     let curve = (600..=1400)
         .step_by(50)
         .map(|s| solver.cache[&s].clone())
         .collect();
-    let mut races = solver.races;
-    // Remove whole heal skills (including hybrid effects), retain other skills.
-    let needed_effective_stamina = if heal_ids.is_empty() {
-        thresholds.clone()
-    } else {
-        let mut bare = input.clone();
-        bare.build.skills.retain(|s| !heal_ids.contains(&s.id));
-        let mut baseline = Solver {
-            input: &bare,
-            engine,
-            token,
-            progress,
-            base: race_input(&bare, &course),
-            cache: BTreeMap::new(),
-            samples: BTreeMap::new(),
-            races,
-            bank,
-            seeds,
-        };
-        let needed = baseline.solve(false)?;
-        races = baseline.races;
-        needed
-    };
+    // Snapshot the curve before promoting current stamina, so changing only the
+    // displayed current value cannot change the curve or threshold search.
+    solver.evaluate([input.build.stats.stamina], seeds)?;
+    let current = solver.cache[&input.build.stats.stamina].clone();
+    let races = solver.races;
+    let needed_effective_stamina = effective_thresholds(
+        &thresholds,
+        &equivalents,
+        course.distance,
+        input.build.running_style,
+    );
     cancelled(token)?;
     let elapsed_ms = start.elapsed().as_secs_f64() * 1000.0;
     Ok(CheckResult {
@@ -910,6 +1028,7 @@ fn run_bank(
         curve,
         current,
         thresholds,
+        threshold_samples,
         needed_effective_stamina,
         effective_stamina: f64::from(input.build.stats.stamina)
             + equivalents.iter().map(|h| h.stamina).sum::<f64>(),
@@ -935,6 +1054,7 @@ fn batch_inputs(input: MultiInput, engine: &Engine) -> Result<Vec<Input>, String
             race,
             field: input.field,
             seeds: input.seeds,
+            assume_heals_activate: input.assume_heals_activate,
         })
         .collect();
     // Validate everything before emitting any per-race result.

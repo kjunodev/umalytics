@@ -234,3 +234,5 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; }
 .survival-curve { stroke: var(--accent-orange); stroke-dasharray: 6 3; }
 .chart-legend span:first-child i { background: var(--accent-blue); }
 .chart-legend span + span i { background: var(--accent-orange); }
+
+.result-table td small { display: block; font-size: 10px; color: var(--text-muted); }

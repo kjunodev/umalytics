@@ -16,19 +16,22 @@ export interface StaminaBuild {
 export interface RaceSelection { map_id: string; ground_condition: number; weather: number; season: number }
 export type StaminaField = 'pacemaker' | 'average_lobby';
 export interface StaminaInput {
-  request_id: string; build: StaminaBuild; race: RaceSelection; field: StaminaField; seeds: number | null;
+  request_id: string; build: StaminaBuild; race: RaceSelection; field: StaminaField; seeds: number | null; assume_heals_activate: boolean;
 }
 export interface StaminaRacesInput {
-  request_id: string; build: StaminaBuild; races: RaceSelection[]; field: StaminaField; seeds: number | null;
+  request_id: string; build: StaminaBuild; races: RaceSelection[]; field: StaminaField; seeds: number | null; assume_heals_activate: boolean;
 }
-export interface StaminaPoint {
-  stamina: number; seeds: number; survival_percent: number; full_spurt_percent: number;
-  full_spurt_at_entry_percent: number; avg_min_hp: number;
+export interface StaminaRates {
+  survival_percent: number; full_spurt_percent: number; full_spurt_at_entry_percent: number; avg_min_hp: number;
+}
+export interface StaminaPoint extends StaminaRates {
+  stamina: number; seeds: number; conditional_samples: number;
+  unconditional: StaminaRates; conditional: StaminaRates | null;
 }
 export interface Thresholds { full_spurt: number | null; survival: number | null }
 export interface StaminaResult {
   input: StaminaInput; request_id: string; curve: StaminaPoint[]; current: StaminaPoint;
-  thresholds: Thresholds; needed_effective_stamina: Thresholds; effective_stamina: number;
+  thresholds: Thresholds; threshold_samples: { full_spurt: { conditional: number; attempted: number } | null; survival: { conditional: number; attempted: number } | null }; needed_effective_stamina: Thresholds; effective_stamina: number;
   heal_equivalents: { skill_id: number; fraction: number; stamina: number; variable: boolean }[];
   seeds: number; races: number; elapsed_ms: number; ms_per_race: number; course: Course;
 }
@@ -41,7 +44,7 @@ export const defaultStaminaInput: StaminaInput = {
   request_id: '', race: { map_id: 'nakayama-2500-turf-inner', ground_condition: 1, weather: 1, season: 4 },
   build: { running_style: 2, stats: { speed: 1200, stamina: 800, pow: 1000, guts: 600, wiz: 1000 },
     motivation: 5, distance: [7, 7, 7, 7], style: [7, 7, 7, 7], ground: [7, 7], skills: [] },
-  field: 'pacemaker', seeds: null,
+  field: 'pacemaker', seeds: null, assume_heals_activate: true,
 };
 export function courseLabel(course: Course): string {
   return `${course.track_name} · ${course.distance} m · ${course.surface === 1 ? 'Turf' : 'Dirt'}${course.variant ? ` · ${course.variant}` : ''} · ${['Unknown', 'Right', 'Left', 'Straight (right)', 'Straight (left)'][course.direction] ?? 'Unknown'}`;
