@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+import { StaminaResults } from './StaminaResults';
 import { courseLabel, defaultStaminaInput, type Catalog, type StaminaInput, type StaminaProgress, type StaminaResult } from './staminaTypes';
 
 const styles = ['Front Runner', 'Pace Chaser', 'Late Surger', 'End Closer'];
@@ -20,6 +21,7 @@ export function Stamina() {
   const [selection, setSelection] = useState('cm:20');
   const [skillSearch, setSkillSearch] = useState('');
   const [skillId, setSkillId] = useState('');
+  const [addingSkill, setAddingSkill] = useState(false);
   const [error, setError] = useState('');
   const [ready, setReady] = useState(false);
   const [running, setRunning] = useState(false);
@@ -83,96 +85,55 @@ export function Stamina() {
     !input.skills.some(selected => selected.id === skill.id) &&
     `${skill.name} ${skill.id}`.toLowerCase().includes(skillSearch.toLowerCase())) ?? [];
 
-  return <section aria-label="Stamina check" className="stamina">
-    <h2>Stamina check</h2>
-    <p>Estimate the chance of finishing without an HP-out against eight copies of your current build.
-      The threshold is the smallest tested stamina reaching 95%, in steps of 50 from 300 to 2000.</p>
-    <p>Simulated with uma-race-simulator (MIT)</p>
-    {!ready && !error && <p role="status">Loading engine data…</p>}
-    <form onSubmit={event => { void run(event); }}>
+  const distanceIndex = !selectedCourse ? 2 : selectedCourse.distance <= 1400 ? 0 : selectedCourse.distance <= 1800 ? 1 : selectedCourse.distance <= 2400 ? 2 : 3;
+  const surfaceIndex = selectedCourse?.surface === 2 ? 1 : 0;
+  const aptitude = (group: 'distance' | 'style' | 'ground', index: number, label: string) => <Picker label={label} value={input[group][index]!} options={grades} onChange={value => {
+    const values = [...input[group]]; values[index] = value; patch({ [group]: values });
+  }}/>;
+  return <section aria-label="Stamina check" className="stamina-layout">
+    <form className="panel stamina-form" aria-label="Build and race" onSubmit={event => { void run(event); }}>
       <fieldset disabled={!ready || running}>
-        <legend>Course and conditions</legend>
-        <label>Course / Champions Meeting preset<select aria-label="Course / Champions Meeting preset" value={selection} onChange={event => chooseCourse(event.target.value)}>
+        <label>Race<select aria-label="Course / Champions Meeting preset" value={selection} onChange={event => chooseCourse(event.target.value)}>
           <optgroup label="Champions Meeting presets">{catalog?.presets.map(preset => {
             const course = catalog.courses.find(course => course.id === preset.course_set_id);
-            return <option key={preset.id} value={`cm:${preset.id}`}>{preset.name} #{preset.id}{preset.date ? ` · ${preset.date}` : ''} · {course ? courseLabel(course) : preset.course_set_id}</option>;
+            return <option key={preset.id} value={`cm:${preset.id}`}>{preset.name} · {course ? `${course.track_name} ${course.distance} · ${course.surface === 1 ? 'Turf' : 'Dirt'}` : preset.course_set_id}</option>;
           })}</optgroup>
-          <optgroup label="All courses">{catalog?.courses.map(course => <option key={course.id} value={`course:${course.id}`}
-            disabled={course.race_instance_id === null}>{courseLabel(course)}{course.race_instance_id === null ? ' · No G1 instance' : ''}</option>)}</optgroup>
+          <optgroup label="All courses">{catalog?.courses.map(course => <option key={course.id} value={`course:${course.id}`} disabled={course.race_instance_id === null}>{courseLabel(course)}{course.race_instance_id === null ? ' · No G1 instance' : ''}</option>)}</optgroup>
         </select></label>
-        <div className="stamina-grid">
-          <Picker label="Ground condition" value={input.ground_condition} options={['Good', 'Soft', 'Hard', 'Bad']} onChange={ground_condition => patch({ ground_condition })} />
-          <Picker label="Weather" value={input.weather} options={['Sunny', 'Cloudy', 'Rainy', 'Snow']} onChange={weather => patch({ weather })} />
-          <Picker label="Season" value={input.season} options={['Spring', 'Summer', 'Fall', 'Winter', 'Cherry Blossom']} onChange={season => patch({ season })} />
-          <Picker label="Strategy" value={input.running_style} options={styles} onChange={running_style => patch({ running_style })} />
-          <Picker label="Mood" value={input.motivation} options={['Awful', 'Bad', 'Normal', 'Good', 'Great']} onChange={motivation => patch({ motivation })} />
-        </div>
-        <p>Champions rules · Daytime · Race instance {selectedCourse?.race_instance_id ?? '—'}</p>
+        <small className="muted">{['Good', 'Soft', 'Hard', 'Bad'][input.ground_condition - 1]} · {['Sunny', 'Cloudy', 'Rainy', 'Snow'][input.weather - 1]} · {['Spring', 'Summer', 'Fall', 'Winter', 'Cherry Blossom'][input.season - 1]}</small>
+        <div className="field"><span>Strategy</span><div className="seg" role="group" aria-label="Strategy">{['Front', 'Pace', 'Late', 'End'].map((style, i) => <button type="button" key={style} aria-pressed={input.running_style === i + 1} onClick={() => patch({ running_style: i + 1 })}>{style}</button>)}</div></div>
+        <div className="raw-stats">{(Object.keys(input.stats) as (keyof StaminaInput['stats'])[]).map(stat => <label key={stat}>{({ speed: 'Spd', stamina: 'Sta', pow: 'Pow', guts: 'Guts', wiz: 'Wit' })[stat]}
+          <input className={`num ${stat === 'stamina' ? 'stamina-input' : ''}`} aria-label={stat === 'pow' ? 'Power' : stat === 'wiz' ? 'Wit' : stat[0]!.toUpperCase() + stat.slice(1)} type="number" required min={stat === 'stamina' ? 300 : 1} max={2000} value={input.stats[stat]} onChange={event => patch({ stats: { ...input.stats, [stat]: Number(event.target.value) } })}/></label>)}</div>
+        <div className="field"><span>Aptitudes · distance / strategy / surface</span><div className="aptitude-summary">
+          {aptitude('distance', distanceIndex, ['Sprint', 'Mile', 'Medium', 'Long'][distanceIndex]!)}
+          {aptitude('style', input.running_style - 1, ['Front', 'Pace', 'Late', 'End'][input.running_style - 1]!)}
+          {aptitude('ground', surfaceIndex, surfaceIndex ? 'Dirt' : 'Turf')}
+          <Picker label="Mood" value={input.motivation} options={['Awful', 'Bad', 'Normal', 'Good', 'Great']} onChange={motivation => patch({ motivation })}/>
+        </div></div>
+        <details className="edit-all"><summary>Edit all aptitudes and conditions</summary>
+          {(['distance', 'style', 'ground'] as const).map(group => <div className="aptitude-grid" key={group}>{({ distance: ['Sprint', 'Mile', 'Medium', 'Long'], style: styles, ground: ['Turf', 'Dirt'] })[group].map((name, i) => <div key={name}>{aptitude(group, i, `${name} aptitude`)}</div>)}</div>)}
+          <div className="aptitude-grid"><Picker label="Ground condition" value={input.ground_condition} options={['Good', 'Soft', 'Hard', 'Bad']} onChange={ground_condition => patch({ ground_condition })}/><Picker label="Weather" value={input.weather} options={['Sunny', 'Cloudy', 'Rainy', 'Snow']} onChange={weather => patch({ weather })}/><Picker label="Season" value={input.season} options={['Spring', 'Summer', 'Fall', 'Winter', 'Cherry Blossom']} onChange={season => patch({ season })}/></div>
+        </details>
+        <div className="field"><span>Recovery skills (your uma only)</span><div className="skill-chips">{input.skills.map(skill => <span className="skill-chip" key={skill.id}><span>{catalog?.skills.find(s => s.id === skill.id)?.name ?? skill.id}</span><button type="button" aria-label={`Remove skill ${skill.id}`} onClick={() => patch({ skills: input.skills.filter(s => s.id !== skill.id) })}>×</button></span>)}
+          <button type="button" className="add-skill" aria-expanded={addingSkill} onClick={() => setAddingSkill(!addingSkill)}>+ Add skill</button></div></div>
+        {addingSkill && <div className="skill-search"><label>Search skills<input type="search" value={skillSearch} onChange={event => { setSkillSearch(event.target.value); setSkillId(''); }}/></label>
+          <label>Skill<select value={skillId} onChange={event => setSkillId(event.target.value)}><option value="">Choose a skill</option>{availableSkills.map(skill => <option key={skill.id} value={skill.id}>{skill.name} ({skill.id})</option>)}</select></label>
+          <button type="button" disabled={!skillId || input.skills.length >= 100} onClick={() => { patch({ skills: [...input.skills, { id: Number(skillId), level: 1 }] }); setSkillId(''); }}>Add selected skill</button>
+          {!!input.skills.length && <details><summary>Skill levels and processing order</summary>{input.skills.map((skill, i) => <Picker key={skill.id} label={`${i + 1}. ${catalog?.skills.find(s => s.id === skill.id)?.name ?? skill.id}`} value={skill.level} options={['1', '2', '3', '4', '5', '6']} onChange={level => patch({ skills: input.skills.map(s => s.id === skill.id ? { ...s, level } : s) })}/>)}</details>}
+        </div>}
+        <button className="run" type="submit" disabled={!ready || !selectedCourse?.race_instance_id}>Run check</button>
+        <small className="run-note">200 races per stamina value</small>
       </fieldset>
-      <fieldset disabled={!ready || running}>
-        <legend>Raw stats and aptitudes</legend>
-        <div className="stamina-grid">{(Object.keys(input.stats) as (keyof StaminaInput['stats'])[]).map(stat =>
-          <label key={stat}>{({ speed: 'Speed', stamina: 'Stamina', pow: 'Power', guts: 'Guts', wiz: 'Wit' })[stat]}
-            <input type="number" required min={stat === 'stamina' ? 300 : 1} max={2000}
-              value={input.stats[stat]} onChange={event => patch({ stats: { ...input.stats, [stat]: Number(event.target.value) } })} />
-          </label>)}</div>
-        {(['distance', 'style', 'ground'] as const).map(group => <div className="aptitudes" key={group}>
-          <h3>{({ distance: 'Distance aptitude', style: 'Strategy aptitude', ground: 'Surface aptitude' })[group]}</h3>
-          <div className="stamina-grid">{({ distance: ['Sprint', 'Mile', 'Medium', 'Long'], style: styles, ground: ['Turf', 'Dirt'] })[group].map((label, index) =>
-            <Picker key={label} label={`${label} aptitude`} options={grades} value={input[group][index]!} onChange={value => {
-              const values = [...input[group]]; values[index] = value;
-              patch({ [group]: values });
-            }} />)}</div>
-        </div>)}
-      </fieldset>
-      <fieldset disabled={!ready || running}>
-        <legend>Optional skills (processing order)</legend>
-        <label>Search skills<input type="search" value={skillSearch} onChange={event => { setSkillSearch(event.target.value); setSkillId(''); }} /></label>
-        <div className="skill-add"><label>Skill<select aria-label="Skill" value={skillId} onChange={event => setSkillId(event.target.value)}>
-          <option value="">Choose a skill</option>
-          {availableSkills.map(skill => <option key={skill.id} value={skill.id}>{skill.name} ({skill.id})</option>)}
-        </select></label>
-        <button type="button" disabled={!skillId || input.skills.length >= 100} onClick={() => {
-          patch({ skills: [...input.skills, { id: Number(skillId), level: 1 }] }); setSkillId('');
-        }}>Add skill</button></div>
-        {input.skills.map((skill, index) => <div className="selected-skill" key={skill.id}>
-          <span>{index + 1}. {catalog?.skills.find(s => s.id === skill.id)?.name} ({skill.id})</span>
-          <Picker label={`Level for skill ${skill.id}`} value={skill.level} options={['1', '2', '3', '4', '5', '6']}
-            onChange={level => patch({ skills: input.skills.map(s => s.id === skill.id ? { ...s, level } : s) })} />
-          <button type="button" onClick={() => patch({ skills: input.skills.filter(s => s.id !== skill.id) })}>Remove skill {skill.id}</button>
-        </div>)}
-        <p>Skills apply to your uma only; the field has none. Add them in the intended processing order; levels range from 1 to 6.</p>
-      </fieldset>
-      <div className="stamina-actions">
-        <label>Seeds per stamina<input type="number" min="1" max="1000" required value={input.seeds} disabled={running}
-          onChange={event => patch({ seeds: Number(event.target.value) })} /></label>
-        <button type="submit" disabled={!ready || running || !selectedCourse?.race_instance_id}>Run</button>
-        {running && <button type="button" disabled={cancelling} onClick={() => { void cancel(); }}>{cancelling ? 'Cancelling…' : 'Cancel'}</button>}
-      </div>
+      {!ready && !error && <p role="status">Loading engine data…</p>}
+      {running && <div className="simulation-progress" role="status" aria-live="polite"><progress max={progress?.total ?? 1} value={progress?.completed ?? 0}/><span>{progress ? `${progress.completed} / ${progress.total} races` : 'Preparing simulation…'}</span><button type="button" disabled={cancelling} onClick={() => { void cancel(); }}>{cancelling ? 'Cancelling…' : 'Cancel'}</button></div>}
+      {error && <p role="alert">{error}</p>}
     </form>
-    {running && <div role="status" aria-live="polite">
-      <progress max={progress?.total ?? 1} value={progress?.completed ?? 0} />
-      <span> {progress ? `${progress.completed} / ${progress.total} races` : 'Preparing simulation…'}</span>
-    </div>}
-    {error && <p role="alert">{error}</p>}
-    {result && <div aria-live="polite">
-      {JSON.stringify({ ...input, request_id: '' }) !== JSON.stringify({ ...result.data.input, request_id: '' }) &&
-        <p role="status">Inputs changed since this run; press Run to update</p>}
-      <h3>Results · {result.course}</h3>
-      <p>{['Good', 'Soft', 'Hard', 'Bad'][result.data.input.ground_condition - 1]} ground · {['Sunny', 'Cloudy', 'Rainy', 'Snow'][result.data.input.weather - 1]} · {['Spring', 'Summer', 'Fall', 'Winter', 'Cherry Blossom'][result.data.input.season - 1]} · Race instance {result.data.race_instance_id}</p>
-      <p>Build: Speed {result.data.input.stats.speed}, Stamina {result.data.input.stats.stamina}, Power {result.data.input.stats.pow},
-        Guts {result.data.input.stats.guts}, Wit {result.data.input.stats.wiz} · {styles[result.data.input.running_style - 1]}</p>
-      <p>Current stamina {result.data.current.stamina}: <strong>{result.data.current.no_hp_out_percent.toFixed(1)}% no HP-out</strong></p>
-      <p>95% threshold: <strong>{result.data.threshold ?? 'Not reached (300–2000)'}</strong> · smallest tested value; finite-seed estimate.</p>
-      <p>{result.data.races.toLocaleString()} races · {result.data.seeds} seeds per stamina · {(result.data.elapsed_ms / 1000).toFixed(2)} s total · {result.data.ms_per_race.toFixed(2)} ms/race (wall time across cores)</p>
-      <div className="stamina-table"><table>
-        <caption>No HP-out through the goal-crossing engine tick</caption>
-        <thead><tr><th>Stamina</th><th>% no HP-out</th><th>Avg minimum HP</th></tr></thead>
-        <tbody>{result.data.curve.map(point => <tr key={point.stamina} className={point.stamina === result.data.threshold ? 'threshold' : ''}>
-          <th scope="row">{point.stamina}{point.stamina === result.data.input.stats.stamina ? ' (current)' : ''}{point.stamina === result.data.threshold ? ' (95% threshold)' : ''}</th>
-          <td>{point.no_hp_out_percent.toFixed(1)}%</td><td>{point.avg_min_hp.toFixed(2)}</td>
-        </tr>)}</tbody>
-      </table></div>
-    </div>}
+    <section className="stamina-results" aria-label="Result">
+      {result ? <>
+        {JSON.stringify({ ...input, request_id: '' }) !== JSON.stringify({ ...result.data.input, request_id: '' }) && <p className="stale-notice" role="status">Inputs changed since this run; press Run check to update</p>}
+        <StaminaResults result={result.data} course={result.course}/>
+      </> : <div className="panel result-empty"><h2>Check your stamina</h2><p>Choose a race and build, then run a check to see your chance of finishing without running out of HP.</p><p className="muted">The 95% threshold is the smallest tested value, in steps of 50 from 300 to 2000. Results are finite-sample estimates.</p></div>}
+      <footer>Field: 8 copies of your build without skills. Simulated with uma-race-simulator (MIT). Game data © Cygames.</footer>
+    </section>
   </section>;
 }

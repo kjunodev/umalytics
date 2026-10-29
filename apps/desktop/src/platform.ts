@@ -2,8 +2,10 @@ import { getVersion } from '@tauri-apps/api/app';
 import { fetch as tauriFetch } from '@tauri-apps/plugin-http';
 import { load } from '@tauri-apps/plugin-store';
 import { configureCorePlatform, type KeyValueStorage } from '@umalytics/core';
+import { loadPreferences } from './preferences';
 
 export async function initializePlatform(): Promise<void> {
+  await loadPreferences();
   const [store, version] = await Promise.all([
     load('profiles.json', { autoSave: false, defaults: {} }), getVersion()
   ]);
