@@ -24,6 +24,7 @@ fn main() {
             start_feed,
             stamina::engine_catalog,
             stamina::stamina_check,
+            stamina::stamina_check_races,
             stamina::cancel_stamina_check
         ])
         .run(tauri::generate_context!())

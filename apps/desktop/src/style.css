@@ -225,3 +225,12 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; }
   .desktop-shell .umas-scene { overflow: visible; }
   .desktop-shell .uma-detail-team-grid { overflow-y: visible; }
 }
+.course-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+.course-chips button { padding: 5px 8px; min-height: 30px; font-size: 11px; }
+.course-chips button[aria-pressed="true"] { background: var(--tone-skill-bg); color: var(--text-link-hover); border-color: var(--accent-blue); }
+.effective-stamina { gap: 6px; }
+.effective-stamina p { margin: 0; font-size: 13px; line-height: 1.5; }
+.effective-stamina small { font-size: 11px; line-height: 1.5; }
+.survival-curve { stroke: var(--accent-orange); stroke-dasharray: 6 3; }
+.chart-legend span:first-child i { background: var(--accent-blue); }
+.chart-legend span + span i { background: var(--accent-orange); }

@@ -1,3 +1,4 @@
+import pool from '../src-tauri/data/drafter-map-pool-global.json' with { type: 'json' };
 import { replayEnvelopes } from './replay-fixture.mjs';
 import fixture from '../../../tests/fixtures/casual-room-replay.json' with { type: 'json' };
 
@@ -17,10 +18,11 @@ export const messages = [
       team1: side(0, 4), team2: side(1, 3), multiplayer: { team1Name: 'Replay Blue', team2Name: 'Replay Orange', rankedQueueRoster: players } } } }
 ];
 export const catalog = {
-  courses: [{ id: 10506, track_name: 'Replay course', distance: 2500, surface: 1, direction: 1, race_instance_id: 9001 },
-    { id: 10001, track_name: 'Replay mile', distance: 1600, surface: 2, direction: 2, race_instance_id: 9002 }],
-  presets: [{ id: 20, name: 'Replay Cup', date: null, course_set_id: 10506, ground_condition: 2, weather: 2, season: 4 }],
-  skills: [{ id: 1, name: 'Replay Recovery' }, { id: 2, name: 'Replay Recovery II' }]
+  courses: pool.maps.map((map, i) => ({ id: map.id, track_name: map.track, distance: map.distance,
+    surface: map.surface === 'Turf' ? 1 : 2, direction: map.direction === 'right' ? 1 : map.direction === 'left' ? 2 : 3,
+    variant: map.variant, course_set_id: 10000 + i, race_instance_id: 9001 + i, race_id: 1000 + i,
+    grade: 100, time: 2, month: 4, instance_reason: 'Screenshot fixture on exact course', unavailable_reason: map.id === 'morioka-2000-dirt' ? 'Engine course geometry missing: courseeventparam 11504.' : null })),
+  skills: [{ id: 1, name: 'Replay Recovery', hp_recovery: true }, { id: 2, name: 'Replay Recovery II', hp_recovery: true }]
 };
 export function apiResponse(url) {
   const parsed = new URL(url);
@@ -52,8 +54,14 @@ export function apiResponse(url) {
   throw new Error(`Unexpected API path: ${parsed.pathname}`);
 }
 export function staminaResult(input) {
-  const point = stamina => ({ stamina, no_hp_out_percent: Math.min(100, Math.max(0, 100 / (1 + Math.exp(-(stamina - 920) / 57)))), avg_min_hp: Math.max(0, (stamina - 790) * .42) });
-  const curve = Array.from({ length: 35 }, (_, i) => point(300 + i * 50));
-  return { input: structuredClone(input), request_id: input.request_id, curve, current: point(input.stats.stamina), threshold: curve.find(p => p.no_hp_out_percent >= 95)?.stamina ?? null,
-    seeds: input.seeds, races: 7200, elapsed_ms: 4000, ms_per_race: .55, race_instance_id: 9001 };
+  const rate = (stamina, center) => Math.min(100, Math.max(0, 100 / (1 + Math.exp(-(stamina - center) / 57))));
+  const point = stamina => ({ stamina, seeds: 32, survival_percent: rate(stamina, 820), full_spurt_percent: rate(stamina, 920),
+    full_spurt_at_entry_percent: rate(stamina, 950), avg_min_hp: Math.max(0, (stamina - 790) * .42) });
+  const curve = Array.from({ length: 17 }, (_, i) => point(600 + i * 50));
+  const course = catalog.courses.find(c => c.id === input.race.map_id);
+  const thresholds = { full_spurt: 1050, survival: 950 };
+  return { input: structuredClone(input), request_id: input.request_id, curve, current: point(input.build.stats.stamina),
+    thresholds, needed_effective_stamina: input.build.skills.length ? { full_spurt: 1100, survival: 1000 } : thresholds, effective_stamina: input.build.stats.stamina + input.build.skills.length * 200,
+    heal_equivalents: input.build.skills.map(s => ({ skill_id: s.id, fraction: .055, stamina: 200, variable: false })),
+    seeds: input.seeds ?? (input.build.skills.length ? 1000 : 256), races: 3456, elapsed_ms: 1250, ms_per_race: .36, course };
 }

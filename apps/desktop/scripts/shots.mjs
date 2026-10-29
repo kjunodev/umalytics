@@ -131,19 +131,37 @@ try {
     await page.locator('.uma-catalog-button').first().waitFor();
     await shot(page, `umas-${width}x${height}`);
     await page.getByRole('button', { name: 'Stamina', exact: true }).click();
+    check(await page.getByRole('group', { name: 'Track', exact: true }).getByRole('button').count() === new Set((await import('./shots-fixture.mjs')).catalog.courses.map(c => c.track_name)).size, 'All pool tracks available');
+    for (const [label, names] of [['Ground', ['Firm', 'Good', 'Soft', 'Heavy']], ['Weather', ['Sunny', 'Cloudy', 'Rainy', 'Snowy']], ['Season', ['Spring', 'Summer', 'Fall', 'Winter']]]) {
+      for (const name of names) {
+        const button = page.getByRole('group', { name: label, exact: true }).getByRole('button', { name, exact: true });
+        await button.click();
+        check(await button.getAttribute('aria-pressed') === 'true', label + ' exact choice ' + name);
+      }
+    }
+    await page.getByRole('group', { name: 'Track', exact: true }).getByRole('button', { name: 'Morioka', exact: true }).click();
+    await page.getByRole('group', { name: 'Race', exact: true }).getByRole('button', { name: '2000 · Dirt · Unavailable', exact: true }).click();
+    check(await page.getByRole('button', { name: 'Run check', exact: true }).isDisabled(), 'Missing geometry disables simulation');
+    check(await page.getByText('Engine course geometry missing: courseeventparam 11504.', { exact: true }).isVisible(), 'Unavailability has an explicit reason');
+    await page.getByRole('group', { name: 'Track', exact: true }).getByRole('button', { name: 'Hanshin', exact: true }).click();
+    await page.getByRole('group', { name: 'Race', exact: true }).getByRole('button', { name: '3200 · Turf · Outer to Inner', exact: true }).click();
+    await page.getByRole('group', { name: 'Field', exact: true }).getByRole('button', { name: 'Average lobby', exact: true }).click();
+    check(await page.getByRole('group', { name: 'Field', exact: true }).getByRole('button', { name: 'Average lobby', exact: true }).getAttribute('aria-pressed') === 'true', 'Average lobby selectable');
     await page.getByRole('button', { name: 'Run check', exact: true }).click();
     await page.locator('.stamina-chart').waitFor();
     check(await page.locator('tbody tr').count() === 6, 'Six nearby rows');
+    await shot(page, `stamina-controls-${width}x${height}`);
+    await page.locator('.content').evaluate(element => { element.scrollTop = 0; });
     await shot(page, `stamina-${width}x${height}`);
     await page.getByRole('button', { name: 'All values', exact: true }).click();
-    check(await page.locator('tbody tr').count() === 35, 'All 35 sampled values');
+    check(await page.locator('tbody tr').count() === 17, 'All 17 sampled values');
     await page.getByRole('spinbutton', { name: 'Stamina', exact: true }).fill('825');
     check(await page.getByText('Inputs changed since this run', { exact: false }).isVisible(), 'Stale result notice');
     check((await page.locator('.kpi').first().innerText()).includes('800'), 'Result remains tied to submitted build');
     await page.getByRole('button', { name: 'Run check', exact: true }).click();
     await page.waitForFunction(() => document.querySelector('.kpi')?.textContent.includes('825'));
     await page.getByRole('button', { name: 'All values', exact: true }).click();
-    check(await page.locator('tbody tr').count() === 36, 'Off-grid current stamina included');
+    check(await page.locator('tbody tr').count() === 18, 'Off-grid current stamina included');
     await page.locator('.edit-all summary').click();
     await page.getByRole('button', { name: '+ Add skill', exact: true }).click();
     await page.getByRole('searchbox', { name: 'Search skills' }).fill('Recovery');
@@ -155,7 +173,7 @@ try {
     await page.getByRole('spinbutton', { name: 'Stamina', exact: true }).fill('1200');
     await page.getByRole('button', { name: 'Run check', exact: true }).click();
     await page.locator('.kpi.sufficient').waitFor();
-    check((await page.locator('.kpi').nth(2).innerText()).includes('—'), 'Sufficient stamina has a blue tile and no positive gap');
+    check((await page.locator('.kpi').nth(2).innerText()).toLowerCase().includes('90% survival'), 'Both 90% thresholds displayed');
     await page.evaluate(() => { window.__SHOT_CONTROL__.slow = true; });
     await page.getByRole('button', { name: 'Run check', exact: true }).click();
     await page.getByRole('button', { name: 'Cancel', exact: true }).click();
