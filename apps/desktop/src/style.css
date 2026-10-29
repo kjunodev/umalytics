@@ -6,3 +6,24 @@ section { flex: 1 1 280px; }
 li { margin: 16px 0; line-height: 1.6; }
 select, button { font: inherit; padding: 5px; }
 [role=alert] { color: #ffbd8a; }
+nav { display: flex; gap: 8px; margin-bottom: 20px; }
+button { cursor: pointer; }
+button:disabled { cursor: default; }
+button[aria-pressed=true] { background: #b7e4ff; }
+.stamina { container-type: inline-size; }
+.stamina fieldset { border: 1px solid #617086; border-radius: 6px; margin: 16px 0; min-width: 0; }
+.stamina label { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.stamina input, .stamina select { font: inherit; padding: 6px; min-width: 0; max-width: 100%; box-sizing: border-box; }
+.stamina input[type=number] { width: 100%; }
+.stamina-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(145px, 1fr)); gap: 12px; margin: 12px 0; }
+.stamina h3 { font-size: 1rem; }
+.skill-add, .selected-skill, .stamina-actions { display: flex; align-items: end; flex-wrap: wrap; gap: 12px; margin: 12px 0; }
+.skill-add label { flex: 1 1 250px; }
+.selected-skill span { flex: 1 1 200px; overflow-wrap: anywhere; }
+.stamina-actions label { width: 180px; }
+.stamina progress { width: min(100%, 350px); }
+.stamina-table { overflow-x: auto; }
+.stamina table { border-collapse: collapse; width: 100%; }
+.stamina th, .stamina td { padding: 8px 12px; text-align: left; border-bottom: 1px solid #617086; }
+.stamina caption { text-align: left; margin: 12px 0; }
+.threshold { background: #254d40; }

@@ -1,6 +1,7 @@
 #![cfg_attr(all(not(debug_assertions), not(test)), windows_subsystem = "windows")]
 
 mod feed;
+mod stamina;
 mod wire;
 
 use feed::{Feed, FeedStatus};
@@ -18,7 +19,13 @@ fn main() {
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_store::Builder::default().build())
         .manage(Feed::default())
-        .invoke_handler(tauri::generate_handler![start_feed])
+        .manage(stamina::Checks::default())
+        .invoke_handler(tauri::generate_handler![
+            start_feed,
+            stamina::engine_catalog,
+            stamina::stamina_check,
+            stamina::cancel_stamina_check
+        ])
         .run(tauri::generate_context!())
         .expect("Unable to run UmaLytics desktop");
 }

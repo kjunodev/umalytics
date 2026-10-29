@@ -233,8 +233,8 @@ where
                         }
                         disconnect(&mut active, &mut emit).await;
                     }
+                    Some(Ok(Message::Binary(_))) => emit(FeedEvent::Rejected).await,
                     Some(Ok(_)) => {
-                        emit(FeedEvent::Rejected).await;
                         // Tungstenite queues automatic pong responses while reading.
                         if let Some(socket) = active.as_mut() {
                             if !matches!(timeout(Duration::from_millis(250), socket.flush()).await, Ok(Ok(()))) {
@@ -345,6 +345,23 @@ mod tests {
             server.event().await,
             FeedEvent::Message(Envelope::Event(_))
         ));
+    }
+
+    #[tokio::test]
+    async fn ping_and_pong_do_not_increment_rejections() {
+        let mut server = Server::new().await;
+        let mut client = server.connect(wire::SITE_ORIGIN).await.unwrap();
+        assert!(matches!(server.event().await, FeedEvent::Connected));
+        client.send(Message::Ping(vec![7].into())).await.unwrap();
+        assert!(matches!(
+            timeout(Duration::from_secs(3), client.next())
+                .await
+                .unwrap(),
+            Some(Ok(Message::Pong(_)))
+        ));
+        client.send(Message::Pong(vec![7].into())).await.unwrap();
+        client.send(Message::text(VALID)).await.unwrap();
+        assert!(matches!(server.event().await, FeedEvent::Message(_)));
     }
 
     #[tokio::test]
