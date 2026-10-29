@@ -3,7 +3,7 @@ import { lookupPlayer, parsePlayerInput } from '@umalytics/core/explorer/explore
 import type { SeasonLeaderboardEntry } from '@umalytics/core/profiles/playerProfileApi';
 import { getTeamGroups } from '@umalytics/core/room/rosterDisplay';
 import { formatNumber, formatPercent } from '../common/format';
-import type { RecentPlayerEntry } from '../../storage/playersRecentStorage';
+import type { RecentPlayerEntry } from '../services';
 
 export type LeaderboardSortKey = 'rank' | 'rating' | 'win' | 'games';
 

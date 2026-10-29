@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { PlayerStatsScope } from '@umalytics/shared';
-import type { AppScene } from '../history/HistoricalScene';
+import type { AppScene } from '@umalytics/ui/history/HistoricalScene';
 import { APP_VERSION_LABEL } from '../scoutData';
 import './shell.css';
 import { isUiSize, saveUiSize, type UiSize } from '../common/uiSize';

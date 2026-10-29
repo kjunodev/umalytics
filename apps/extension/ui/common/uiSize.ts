@@ -1,5 +1,5 @@
 import { browser } from 'wxt/browser';
-import { headerStateForWidth, headerContentWidth } from './headerLayout';
+import { headerStateForWidth, headerContentWidth } from '@umalytics/ui/common/headerLayout';
 
 export type UiSize = 'small' | 'default' | 'large';
 export const UI_SIZE_KEY = 'scoutUiSize';

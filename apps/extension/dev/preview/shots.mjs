@@ -15,7 +15,7 @@ import assert from 'node:assert/strict';
 import { createServer } from 'vite';
 import { chromium } from 'playwright';
 import { checkGeometry, checkHeader, checkUmasScene, checkOpenMenu, checkTeamIconTooltip } from './geometry.mjs';
-import { HEADER_COMPACT_MIN_WIDTH, HEADER_FULL_MIN_WIDTH, HEADER_ROW_HEIGHT, HEADER_MIN_SLACK, UI_SCALES } from '../../ui/common/headerLayout.ts';
+import { HEADER_COMPACT_MIN_WIDTH, HEADER_FULL_MIN_WIDTH, HEADER_ROW_HEIGHT, HEADER_MIN_SLACK, UI_SCALES } from '@umalytics/ui/common/headerLayout';
 
 const dirname = path.dirname(fileURLToPath(import.meta.url));
 const outDir = path.join(dirname, '.shots');

@@ -270,6 +270,7 @@ function drawerHarness() {
   loadFunction(c, playerDrawerSyntax, 'getPagerSlots');
   loadFunction(c, playerDrawerSyntax, 'apiPageForPagerPage');
   loadFunction(c, playerDrawerSyntax, 'apiPageRowOffset');
+  c.useUiServices = () => c;
   loadFunction(c, playerDrawerSyntax, 'PlayerDrawer');
   return c;
 }

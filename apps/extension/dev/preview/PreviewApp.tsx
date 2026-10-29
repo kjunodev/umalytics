@@ -1,13 +1,13 @@
 import { useState } from 'react';
 import type { PlayerStatsScope } from '@umalytics/shared';
-import '../../ui/common/base.css';
-import { DraftScene } from '../../ui/draft/DraftScene';
-import { HistoricalScene, getSelectedPlayerContext, type AppScene } from '../../ui/history/HistoricalScene';
-import { TeamSection } from '../../ui/lobby/TeamSection';
-import { PlayerDrawer } from '../../ui/player/PlayerDrawer';
-import { PlayersView } from '../../ui/players/PlayersView';
+import '@umalytics/ui/common/base.css';
+import { DraftScene } from '@umalytics/ui/draft/DraftScene';
+import { HistoricalScene, getSelectedPlayerContext, type AppScene } from '@umalytics/ui/history/HistoricalScene';
+import { TeamSection } from '@umalytics/ui/lobby/TeamSection';
+import { PlayerDrawer } from '@umalytics/ui/player/PlayerDrawer';
+import { PlayersView } from '@umalytics/ui/players/PlayersView';
 import { AppHeader, type AppMode } from '../../ui/shell/AppHeader';
-import { UmasScene } from '../../ui/umas/UmasScene';
+import { UmasScene } from '@umalytics/ui/umas/UmasScene';
 import {
   PREVIEW_DRAFT_COMPLETE,
   PREVIEW_DRAFT_MID,
