@@ -7,14 +7,14 @@ export const deferred = () => { let resolve; const promise = new Promise(r => { 
 export const tick = () => new Promise(r => setImmediate(r));
 export const sleep = ms => new Promise(r => setTimeout(r,ms));
 export async function waitUntil(predicate,timeoutMs=1000) {
-  const deadline=performance.now()+timeoutMs;
+  let polls=Math.ceil(timeoutMs/5);
   while(!predicate()) {
-    if(performance.now()>deadline) throw new Error('Timed out waiting for fixture condition');
+    if(polls--<=0) throw new Error('Timed out waiting for fixture condition');
     await sleep(5);
   }
 }
 export function context(globals = {}) {
-  return vm.createContext({window:{location:{origin:'https://drafter.uma.guide'},postMessage(){}},console, URL, URLSearchParams, AbortController, DOMException, setTimeout, clearTimeout,
+  return vm.createContext({window:{location:{origin:'https://drafter.uma.guide'},postMessage(){}},console, URL, URLSearchParams, AbortController, DOMException, Date, setTimeout, clearTimeout,
     defineBackground: () => {}, defineContentScript: () => {}, recordDiagnostic: () => {}, sendDiagnosticEvent: async () => {}, getLatestDraftSnapshot: async () => undefined, clearLatestDraftSnapshot: async () => {}, ...globals});
 }
 export function players(count=5) {
@@ -28,7 +28,7 @@ export function apiHarness({responder, latency=2, fast=true, sessionStorage}={})
     ...(sessionStorage ? {browser:{storage:{session:sessionStorage}}} : {}),
     recordDiagnostic:value=>diagnostics.push(value),
     fetch:async (url,init)=>{
-      calls.push(url.pathname+url.search); callTimes.push(performance.now()); active++; peak=Math.max(peak,active);
+      calls.push(url.pathname+url.search); callTimes.push(Date.now()); active++; peak=Math.max(peak,active);
       const response=responder?.(url,init) ?? {};
       let finished=false;
       const finish=()=>{if(!finished){finished=true;active--;init.signal.removeEventListener('abort',abort);}};

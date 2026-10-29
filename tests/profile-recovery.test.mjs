@@ -1,4 +1,4 @@
-import test from 'node:test';
+import test from './support/clock-test.mjs';
 import assert from 'node:assert/strict';
 import { tick, players, roster, apiHarness, backgroundHarness as realTimerHarness, waitUntil } from './support/helpers.mjs';
 
