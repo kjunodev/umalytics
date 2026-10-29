@@ -1,0 +1,8 @@
+:root { font-family: system-ui, sans-serif; color: #e7edf6; background: #142030; }
+body { margin: 0; }
+main { padding: 24px; max-width: 1000px; margin: auto; }
+.teams { display: flex; flex-wrap: wrap; gap: 32px; }
+section { flex: 1 1 280px; }
+li { margin: 16px 0; line-height: 1.6; }
+select, button { font: inherit; padding: 5px; }
+[role=alert] { color: #ffbd8a; }

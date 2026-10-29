@@ -1,0 +1,29 @@
+{
+  "name": "@umalytics/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "tsc --project tsconfig.json && vite build",
+    "typecheck": "tsc --project tsconfig.json",
+    "tauri": "tauri",
+    "replay": "node scripts/replay.mjs"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2",
+    "@tauri-apps/plugin-http": "^2",
+    "@tauri-apps/plugin-store": "^2",
+    "@umalytics/core": "workspace:*",
+    "@umalytics/shared": "workspace:*",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "typescript": "^5.7.2",
+    "vite": "^6"
+  }
+}

@@ -12,6 +12,7 @@ export interface CoreStorage {
 
 export interface CorePlatform {
   storage?: CoreStorage;
+  fetch?: typeof globalThis.fetch;
   recordDiagnostic?: (value: unknown) => void;
 }
 
@@ -24,6 +25,10 @@ export function configureCorePlatform(platform: CorePlatform): void {
 
 export function getCoreStorage(): CoreStorage | undefined {
   return corePlatform.storage;
+}
+
+export function fetchCore(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  return (corePlatform.fetch ?? globalThis.fetch)(input, init);
 }
 
 export function recordCoreDiagnostic(value: unknown): void {
