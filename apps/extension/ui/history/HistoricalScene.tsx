@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { DraftSnapshot, EsportsTeamIconMap, PlayerProfileSummary, PlayerStatsScope, PrematchPlayer, PrematchRoster, PrematchTeam } from '@umalytics/shared';
-import { getTeamGroups } from '../../room/rosterDisplay';
+import { getTeamGroups } from '@umalytics/core/room/rosterDisplay';
 import { getPlayerKey } from '../common/roster';
 import { DraftScene } from '../draft/DraftScene';
 import { TeamSection } from '../lobby/TeamSection';

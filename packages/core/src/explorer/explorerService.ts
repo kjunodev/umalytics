@@ -1,0 +1,83 @@
+import type { PlayerProfileSummary, PrematchPlayer } from '@umalytics/shared';
+import { fetchJson, getApiCooldown } from '../profiles/apiClient';
+import { fetchPlayerProfileSummaries, getSeasonLeaderboard } from '../profiles/playerProfileApi';
+import { getCachedPlayerProfiles, rememberCachedPlayerProfiles } from '../storage/profileStorage';
+import { isFreshProfile } from '../profiles/profileCache';
+import { mergeProfileScopes } from '../profiles/profileMerge';
+import { lookupPlayer, parseHistoricalMatch, parseHistoryInput, parsePlayerInput, parsePlayerSearch } from './explorerData';
+import type { ExplorerRequest, ExplorerResult } from './explorerTypes';
+
+export function validateExplorerRequest(value: unknown): ExplorerRequest {
+  if (!value || typeof value !== 'object') throw new Error('Invalid lookup request.');
+  const input = value as Record<string, unknown>;
+  if (input.kind === 'leaderboard') return { kind: 'leaderboard' };
+  if ((input.kind === 'match' || input.kind === 'search') && typeof input.input === 'string' && input.input.length <= 300) {
+    if (input.kind === 'match') return { kind: 'match', input: input.input };
+    if (Number.isInteger(input.page) && Number(input.page) >= 1 && Number(input.page) <= 5) return { kind: 'search', input: input.input, page: Number(input.page) };
+  }
+  if (input.kind === 'profiles' && (input.scope === 'currentSeason' || input.scope === 'allTime') && Array.isArray(input.players) && input.players.length <= 10) {
+    const players = input.players.map((value: unknown): PrematchPlayer => {
+      const player = value as Record<string, unknown> | null;
+      if (!player || typeof player.discordId !== 'string' || !/^\d{16,20}$/.test(player.discordId)) throw new Error('Invalid player ID.');
+      return lookupPlayer(player.discordId, typeof player.displayName === 'string' ? player.displayName.slice(0,100) : player.discordId);
+    });
+    return { kind: 'profiles', scope: input.scope, players };
+  }
+  throw new Error('Invalid lookup request.');
+}
+
+export async function executeExplorerRequest(request: ExplorerRequest, signal: AbortSignal,
+  progress: (profiles: Record<string, PlayerProfileSummary>) => void): Promise<ExplorerResult> {
+  signal.throwIfAborted();
+  if (request.kind === 'leaderboard') return getSeasonLeaderboard(signal);
+  if (request.kind === 'match') {
+    const code = parseHistoryInput(request.input);
+    return parseHistoricalMatch(await fetchJson<unknown>(`/api/matches/${code}`, signal, 'background', 'match'), code);
+  }
+  if (request.kind === 'search') {
+    const { id, query } = parsePlayerInput(request.input);
+    if (id) return { players: [lookupPlayer(id)], total: 1, page: 1, pageSize: 10 };
+    // The directory exposes a capped result set, not a paged global leaderboard.
+    const params = new URLSearchParams({ query: query!, limit: '50' });
+    return parsePlayerSearch(
+      await fetchJson<unknown>(`/api/players/directory-search?${params}`, signal, 'background', 'directory-search'), request.page
+    );
+  }
+  const profiles: Record<string, PlayerProfileSummary> = {};
+  const archive = await getCachedPlayerProfiles();
+  signal.throwIfAborted();
+  const now = Date.now();
+  const pending = request.players.filter(player => {
+    const cached = archive[player.discordId];
+    if (cached !== undefined && isFreshProfile(cached, request.scope, now)) {
+      profiles[player.discordId] = cached;
+      return false;
+    }
+    return true;
+  });
+  if (Object.keys(profiles).length) progress({ ...profiles });
+  const update = (profile: PlayerProfileSummary) => {
+    if (signal.aborted) return;
+    profiles[profile.discordId] = profile;
+    progress({ ...profiles });
+  };
+  if (pending.length) {
+    const loaded = await fetchPlayerProfileSummaries(pending, { scope: request.scope, signal, onProgress: update, onSummary: update });
+    signal.throwIfAborted();
+    for (const [id, profile] of Object.entries(loaded)) profiles[id] = mergeProfileScopes(archive[id] ?? profiles[id], profile);
+    await rememberCachedPlayerProfiles(Object.fromEntries(Object.entries(profiles).filter(([, profile]) => !profile.error && !profile.isPartial)));
+  }
+  return profiles;
+}
+
+export function explorerError(error: unknown): { message: string; retryAt?: number } {
+  const cooldown = getApiCooldown();
+  if (cooldown && cooldown.until > Date.now()) return {
+    message: `The drafter API is temporarily paused. Try again after ${new Date(cooldown.until).toLocaleTimeString()}.`, retryAt: cooldown.until
+  };
+  const message = error instanceof Error ? error.message : 'Unable to load data.';
+  if (/HTTP 404/.test(message)) return { message: 'No matching record was found on the drafter site.' };
+  if (/HTTP 40[13]/.test(message)) return { message: 'This information is not publicly available from the drafter site.' };
+  if (/fetch|network|HTTP 5/i.test(message)) return { message: 'Could not reach the drafter API. Please try again.' };
+  return { message };
+}

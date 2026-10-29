@@ -1,5 +1,5 @@
 import type { PrematchPlayer, PrematchRoster, TeamId } from '@umalytics/shared';
-import { TEAM_IDS } from '../../room/teams';
+import { TEAM_IDS } from '@umalytics/core/room/teams';
 
 export { TEAM_IDS };
 

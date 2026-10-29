@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ComponentType } from 'react';
 import './history.css';
 import type { DraftSnapshot, EsportsTeamIconMap, PlayerProfileSummary, PlayerStatsScope, PrematchPlayer, PrematchRoster } from '@umalytics/shared';
 import { loadHistoricalMatch, loadExplorerProfiles } from '../../explorer/explorerClient';
-import type { HistoricalMatch } from '../../explorer/explorerTypes';
+import type { HistoricalMatch } from '@umalytics/core/explorer/explorerTypes';
 import { mergeExplorerProfiles } from '../../explorer/explorerState';
 
 type Profiles = Record<string, PlayerProfileSummary>;

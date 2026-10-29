@@ -5,92 +5,91 @@ import { fileURLToPath } from 'node:url';
 import { stripTypeScriptTypes } from 'node:module';
 import ts from 'typescript';
 
-const root = fileURLToPath(new URL('../../apps/extension/', import.meta.url));
+const root = fileURLToPath(new URL('../../', import.meta.url));
 
-// Every extension source file exercised by the test suite, keyed by a stable
-// logical name. Centralizing this list means a future move of these files
-// (e.g. utils/ into room/ storage/ profiles/ explorer/ umas/ runtime/) only
-// requires updating the paths below, not every test file that loads them.
+// Source files exercised by the test suite, keyed by stable logical names.
+// Paths are relative to the workspace root, including the portable core.
 export const MODULES = {
-  background: 'entrypoints/background.ts',
-  content: 'entrypoints/content.ts',
-  scoutApp: 'entrypoints/scout/App.tsx',
-  uiCommonTokensCss: 'ui/common/tokens.css',
-  uiCommonBaseCss: 'ui/common/base.css',
-  uiCommonHeaderLayout: 'ui/common/headerLayout.ts',
-  uiCommonUiSize: 'ui/common/uiSize.ts',
-  uiShellCss: 'ui/shell/shell.css',
-  uiLobbyCss: 'ui/lobby/lobby.css',
-  uiDraftCss: 'ui/draft/draft.css',
-  uiUmasCss: 'ui/umas/umas.css',
-  uiHistoryCss: 'ui/history/history.css',
-  diagnosticRecorder: 'runtime/diagnosticRecorder.ts',
-  domLobbyExtraction: 'room/domLobbyExtraction.ts',
-  draftExtraction: 'room/draftExtraction.ts',
-  explorerClient: 'explorer/explorerClient.ts',
-  explorerData: 'explorer/explorerData.ts',
-  explorerService: 'explorer/explorerService.ts',
-  explorerState: 'explorer/explorerState.ts',
-  explorerTypes: 'explorer/explorerTypes.ts',
-  matchDetection: 'room/matchDetection.ts',
-  pageHookRuntime: 'room/pageHookRuntime.ts',
-  playerExtraction: 'room/playerExtraction.ts',
-  recordReaders: 'room/recordReaders.ts',
+  corePlatform: 'packages/core/src/platform.ts',
+  background: 'apps/extension/entrypoints/background.ts',
+  content: 'apps/extension/entrypoints/content.ts',
+  scoutApp: 'apps/extension/entrypoints/scout/App.tsx',
+  uiCommonTokensCss: 'apps/extension/ui/common/tokens.css',
+  uiCommonBaseCss: 'apps/extension/ui/common/base.css',
+  uiCommonHeaderLayout: 'apps/extension/ui/common/headerLayout.ts',
+  uiCommonUiSize: 'apps/extension/ui/common/uiSize.ts',
+  uiShellCss: 'apps/extension/ui/shell/shell.css',
+  uiLobbyCss: 'apps/extension/ui/lobby/lobby.css',
+  uiDraftCss: 'apps/extension/ui/draft/draft.css',
+  uiUmasCss: 'apps/extension/ui/umas/umas.css',
+  uiHistoryCss: 'apps/extension/ui/history/history.css',
+  diagnosticRecorder: 'apps/extension/runtime/diagnosticRecorder.ts',
+  domLobbyExtraction: 'apps/extension/room/domLobbyExtraction.ts',
+  draftExtraction: 'apps/extension/room/draftExtraction.ts',
+  explorerClient: 'apps/extension/explorer/explorerClient.ts',
+  explorerData: 'packages/core/src/explorer/explorerData.ts',
+  explorerService: ['packages/core/src/explorer/explorerService.ts', 'apps/extension/explorer/explorerService.ts'],
+  explorerState: 'apps/extension/explorer/explorerState.ts',
+  explorerTypes: 'packages/core/src/explorer/explorerTypes.ts',
+  matchDetection: 'packages/core/src/room/matchDetection.ts',
+  pageHookRuntime: 'apps/extension/room/pageHookRuntime.ts',
+  playerExtraction: 'packages/core/src/room/playerExtraction.ts',
+  recordReaders: 'packages/core/src/room/recordReaders.ts',
   // A list is evaluated as one module, so playerProfileApi keeps exposing every
   // function and the request/pacing state the tests read, whichever file defines it.
-  playerProfileApi: ['profiles/apiClient.ts', 'profiles/profileApiMapping.ts', 'profiles/playerProfileApi.ts'],
-  esportsTeamApi: 'profiles/esportsTeamApi.ts',
-  teamIconStorage: 'storage/teamIconStorage.ts',
-  profileAvailability: 'profiles/profileAvailability.ts',
-  profileCache: 'profiles/profileCache.ts',
-  profileConstants: 'profiles/profileConstants.ts',
-  profileMerge: 'profiles/profileMerge.ts',
-  profileStorage: 'storage/profileStorage.ts',
-  profileTiming: 'profiles/profileTiming.ts',
-  requestQueue: 'profiles/requestQueue.ts',
-  roomEvents: 'room/roomEvents.ts',
-  rosterDisplay: 'room/rosterDisplay.ts',
-  rosterIdentity: 'room/rosterIdentity.ts',
-  syncPayload: 'room/syncPayload.ts',
-  teams: 'room/teams.ts',
-  textCleanup: 'room/textCleanup.ts',
-  umaPortraitMap: 'umas/umaPortraitMap.ts',
-  umaPortraits: 'umas/umaPortraits.ts',
-  umaReleaseOrder: 'umas/umaReleaseOrder.ts',
+  playerProfileApi: ['packages/core/src/profiles/apiClient.ts', 'packages/core/src/profiles/profileApiMapping.ts', 'packages/core/src/profiles/playerProfileApi.ts'],
+  esportsTeamApi: 'packages/core/src/profiles/esportsTeamApi.ts',
+  teamIconStorage: 'apps/extension/storage/teamIconStorage.ts',
+  profileAvailability: 'packages/core/src/profiles/profileAvailability.ts',
+  profileCache: 'packages/core/src/profiles/profileCache.ts',
+  profileConstants: 'packages/core/src/profiles/profileConstants.ts',
+  profileMerge: 'packages/core/src/profiles/profileMerge.ts',
+  profileStorage: 'packages/core/src/storage/profileStorage.ts',
+  profileTiming: 'packages/core/src/profiles/profileTiming.ts',
+  requestQueue: 'packages/core/src/profiles/requestQueue.ts',
+  roomEvents: 'packages/core/src/room/roomEvents.ts',
+  rosterDisplay: 'packages/core/src/room/rosterDisplay.ts',
+  rosterIdentity: 'packages/core/src/room/rosterIdentity.ts',
+  syncPayload: 'packages/core/src/room/syncPayload.ts',
+  teams: 'packages/core/src/room/teams.ts',
+  textCleanup: 'packages/core/src/room/textCleanup.ts',
+  umaPortraitMap: 'packages/core/src/umas/umaPortraitMap.ts',
+  umaPortraits: 'packages/core/src/umas/umaPortraits.ts',
+  umaReleaseOrder: 'packages/core/src/umas/umaReleaseOrder.ts',
 
   // ui
-  uiScoutData: 'ui/scoutData.ts',
-  uiCommonFormat: 'ui/common/format.ts',
-  uiCommonUmaImage: 'ui/common/UmaImage.tsx',
-  uiCommonBadges: 'ui/common/badges.ts',
-  uiCommonPartyVisuals: 'ui/common/partyVisuals.ts',
-  uiCommonRoster: 'ui/common/roster.ts',
-  uiPlayerProfileDisplay: 'ui/player/playerProfileDisplay.tsx',
-  uiPlayerTopUmasList: 'ui/player/TopUmasList.tsx',
-  uiPlayerBestUmaPortrait: 'ui/player/BestUmaPortrait.tsx',
-  uiPlayerRecentMatchFormat: 'ui/player/recentMatchFormat.ts',
-  uiLobbyTeamSection: 'ui/lobby/TeamSection.tsx',
-  uiLobbyBadgeChip: 'ui/lobby/BadgeChip.tsx',
-  uiCommonTeamIcon: 'ui/common/TeamIcon.tsx',
-  uiCommonTooltipPlacement: 'ui/common/tooltipPlacement.ts',
-  uiPlayerDrawer: 'ui/player/PlayerDrawer.tsx',
-  uiPlayerDrawerCss: 'ui/player/playerDrawer.css',
-  uiDraftScene: 'ui/draft/DraftScene.tsx',
-  uiDraftFormat: 'ui/draft/draftFormat.ts',
-  uiUmasCatalog: 'ui/umas/umaCatalog.ts',
-  uiUmasScene: 'ui/umas/UmasScene.tsx',
-  uiHistoryScene: 'ui/history/HistoricalScene.tsx',
-  uiHistoryExplorerViews: 'ui/history/ExplorerViews.tsx',
-  uiPlayersData: 'ui/players/playersData.ts',
-  uiPlayersView: 'ui/players/PlayersView.tsx',
-  uiPlayersCss: 'ui/players/players.css',
-  storagePlayersRecent: 'storage/playersRecentStorage.ts',
+  uiScoutData: 'apps/extension/ui/scoutData.ts',
+  uiCommonFormat: 'apps/extension/ui/common/format.ts',
+  uiCommonUmaImage: 'apps/extension/ui/common/UmaImage.tsx',
+  uiCommonBadges: 'apps/extension/ui/common/badges.ts',
+  uiCommonPartyVisuals: 'apps/extension/ui/common/partyVisuals.ts',
+  uiCommonRoster: 'apps/extension/ui/common/roster.ts',
+  uiPlayerProfileDisplay: 'apps/extension/ui/player/playerProfileDisplay.tsx',
+  uiPlayerTopUmasList: 'apps/extension/ui/player/TopUmasList.tsx',
+  uiPlayerBestUmaPortrait: 'apps/extension/ui/player/BestUmaPortrait.tsx',
+  uiPlayerRecentMatchFormat: 'apps/extension/ui/player/recentMatchFormat.ts',
+  uiLobbyTeamSection: 'apps/extension/ui/lobby/TeamSection.tsx',
+  uiLobbyBadgeChip: 'apps/extension/ui/lobby/BadgeChip.tsx',
+  uiCommonTeamIcon: 'apps/extension/ui/common/TeamIcon.tsx',
+  uiCommonTooltipPlacement: 'apps/extension/ui/common/tooltipPlacement.ts',
+  uiPlayerDrawer: 'apps/extension/ui/player/PlayerDrawer.tsx',
+  uiPlayerDrawerCss: 'apps/extension/ui/player/playerDrawer.css',
+  uiDraftScene: 'apps/extension/ui/draft/DraftScene.tsx',
+  uiDraftFormat: 'apps/extension/ui/draft/draftFormat.ts',
+  uiUmasCatalog: 'apps/extension/ui/umas/umaCatalog.ts',
+  uiUmasScene: 'apps/extension/ui/umas/UmasScene.tsx',
+  uiHistoryScene: 'apps/extension/ui/history/HistoricalScene.tsx',
+  uiHistoryExplorerViews: 'apps/extension/ui/history/ExplorerViews.tsx',
+  uiPlayersData: 'apps/extension/ui/players/playersData.ts',
+  uiPlayersView: 'apps/extension/ui/players/PlayersView.tsx',
+  uiPlayersCss: 'apps/extension/ui/players/players.css',
+  storagePlayersRecent: 'apps/extension/storage/playersRecentStorage.ts',
 
   // background
-  profileStates: 'background/profileStates.ts',
-  scoutWindow: 'background/scoutWindow.ts',
-  drafterTabs: 'background/drafterTabs.ts',
-  teamIcons: 'background/teamIcons.ts',
+  profileStates: 'apps/extension/background/profileStates.ts',
+  scoutWindow: 'apps/extension/background/scoutWindow.ts',
+  drafterTabs: 'apps/extension/background/drafterTabs.ts',
+  teamIcons: 'apps/extension/background/teamIcons.ts',
 };
 
 const pathByName = new Map(Object.entries(MODULES));
@@ -98,8 +97,9 @@ const pathByName = new Map(Object.entries(MODULES));
 // Dependencies each module needs evaluated into the same vm context first,
 // matching the preload order the original per-test-file loaders hard coded.
 const PRELOADS = {
+  profileStorage: ['corePlatform'],
   background: ['profileStates', 'scoutWindow', 'drafterTabs', 'profileConstants', 'recordReaders', 'rosterIdentity'],
-  playerProfileApi: ['recordReaders', 'rosterIdentity'],
+  playerProfileApi: ['corePlatform', 'recordReaders', 'rosterIdentity'],
   profileStates: ['recordReaders', 'rosterIdentity'],
   roomEvents: ['rosterIdentity'],
   uiScoutData: ['recordReaders'],
@@ -168,6 +168,7 @@ export function loadModule(context, name, options = {}) {
   let source = stripImportsAndExports(readModule(name));
   if (fast) source = applyFastPatches(source);
   vm.runInContext(stripTypeScriptTypes(source, { mode: 'transform' }), context);
+  if (name === 'corePlatform') context.configureCorePlatform({ storage: context.browser?.storage, recordDiagnostic: context.recordDiagnostic });
 }
 
 // Strips imports/exports and evaluates the source through the TypeScript
@@ -178,6 +179,7 @@ export function loadModuleTS(context, name) {
   const source = stripImportsAndExports(readModule(name));
   const output = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
   vm.runInContext(output, context);
+  if (name === 'corePlatform') context.configureCorePlatform({ storage: context.browser?.storage, recordDiagnostic: context.recordDiagnostic });
 }
 
 // Parses a .tsx module once so individual function declarations can be

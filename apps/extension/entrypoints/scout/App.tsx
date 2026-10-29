@@ -6,13 +6,13 @@ import type {
   PlayerStatsScope,
   PrematchRoster
 } from '@umalytics/shared';
-import { getRefreshCooldownMs, latestStatsCheckAt } from '../../profiles/profileTiming';
-import { getTeamGroups, normalizeRosterForDisplay } from '../../room/rosterDisplay';
+import { getRefreshCooldownMs, latestStatsCheckAt } from '@umalytics/core/profiles/profileTiming';
+import { getTeamGroups, normalizeRosterForDisplay } from '@umalytics/core/room/rosterDisplay';
 import {
   getPlayerProfileSummaries,
   PLAYER_PROFILE_SUMMARIES_STORAGE_KEY
 } from '../../storage/profileStorage';
-import type { PlayerProfileSummariesSnapshot } from '../../profiles/profileTypes';
+import type { PlayerProfileSummariesSnapshot } from '@umalytics/core/profiles/profileTypes';
 import {
   getLatestDraftSnapshot,
   LATEST_DRAFT_SNAPSHOT_STORAGE_KEY

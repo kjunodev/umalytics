@@ -1,7 +1,6 @@
-import { recordDiagnostic } from '../runtime/diagnosticRecorder';
+import { getCoreStorage, recordCoreDiagnostic } from '../platform';
 import { abortable, deadline, RequestQueue } from './requestQueue';
 import type { RequestPriority } from './requestQueue';
-import { browser } from 'wxt/browser';
 import { getErrorMessage } from '../room/recordReaders';
 
 const API_ORIGIN = 'https://drafter-api.uma.guide';
@@ -65,9 +64,9 @@ function isPersistentResponse(path: string): boolean {
 
 function loadPersistentResponses(): Promise<void> {
   return persistentCacheLoad ??= (async () => {
-    if (typeof browser === 'undefined' || browser.storage?.session === undefined) return;
+    if (getCoreStorage()?.session === undefined) return;
     try {
-      const stored = await browser.storage.session.get(RESPONSE_CACHE_STORAGE_KEY);
+      const stored = await getCoreStorage()!.session!.get(RESPONSE_CACHE_STORAGE_KEY);
       const entries = stored[RESPONSE_CACHE_STORAGE_KEY] as Record<string, { value: unknown; expiresAt: number }> | undefined;
       for (const [path, entry] of Object.entries(entries ?? {})) {
         if (!isPersistentResponse(path) || !Number.isFinite(entry?.expiresAt) || entry.expiresAt <= Date.now()) continue;
@@ -78,7 +77,7 @@ function loadPersistentResponses(): Promise<void> {
 }
 
 function persistResponses(): void {
-  if (typeof browser === 'undefined' || browser.storage?.session === undefined) return;
+  if (getCoreStorage()?.session === undefined) return;
   persistentCacheDirty = true;
   if (persistentCacheWriteTimer !== undefined || persistentCacheWriteInFlight) return;
   persistentCacheWriteTimer = setTimeout(() => {
@@ -97,7 +96,7 @@ async function flushPersistentResponses(): Promise<void> {
   const profiles = entries.filter(([path]) => path.endsWith('/profile')).slice(0, 200);
   const snapshot = Object.fromEntries([...shared, ...profiles]);
   try {
-    await browser.storage.session.set({ [RESPONSE_CACHE_STORAGE_KEY]: snapshot });
+    await getCoreStorage()!.session!.set({ [RESPONSE_CACHE_STORAGE_KEY]: snapshot });
   } catch { /* Session storage can be unavailable; the memory cache still works. */ }
   finally {
     persistentCacheWriteInFlight = false;
@@ -149,7 +148,7 @@ async function fetchJsonOnce<T>(path: string, signal: AbortSignal, priority: Req
   // fragment diagnostics per-request; callers with such paths pass a stable label.
   const endpoint = endpointLabel ?? path.split('?')[0]!.split('/').at(-1);
   const cached = responseCache.get(path);
-  if (cached !== undefined && cached.expiresAt > Date.now()) { recordDiagnostic({ kind: 'cache', endpoint, reason: 'hit' }); return cached.value as T; }
+  if (cached !== undefined && cached.expiresAt > Date.now()) { recordCoreDiagnostic({ kind: 'cache', endpoint, reason: 'hit' }); return cached.value as T; }
   assertApiAvailable(path);
   const queuedAt = Date.now();
   const queueBudget = deadline(signal, PROFILE_SUMMARY_TIMEOUT_MS, `Request queue timed out: ${path}`);
@@ -164,7 +163,7 @@ async function fetchJsonOnce<T>(path: string, signal: AbortSignal, priority: Req
         cache: 'no-store', credentials: 'omit', signal: budget.signal
       });
       if (!response.ok) {
-        recordDiagnostic({ kind: 'request', endpoint, reason: 'http-error', status: response.status, queueMs: startedAt - queuedAt, networkMs: Date.now() - startedAt });
+        recordCoreDiagnostic({ kind: 'request', endpoint, reason: 'http-error', status: response.status, queueMs: startedAt - queuedAt, networkMs: Date.now() - startedAt });
         // Release an error response body without keeping a connection occupied.
         void response.body?.cancel().catch(() => undefined);
         if (response.status === 429 || response.status >= 500) {
@@ -186,7 +185,7 @@ async function fetchJsonOnce<T>(path: string, signal: AbortSignal, priority: Req
       }
       const value = await response.json() as T;
       budget.signal.throwIfAborted();
-      recordDiagnostic({ kind: 'request', endpoint, reason: 'success', status: response.status, queueMs: startedAt - queuedAt, networkMs: Date.now() - startedAt });
+      recordCoreDiagnostic({ kind: 'request', endpoint, reason: 'success', status: response.status, queueMs: startedAt - queuedAt, networkMs: Date.now() - startedAt });
       consecutiveSuccessCount += 1;
       if (requestStartIntervalMs > baseRequestIntervalMs && consecutiveSuccessCount % PACING_RECOVERY_SUCCESS_STREAK === 0) {
         requestStartIntervalMs = Math.max(baseRequestIntervalMs, requestStartIntervalMs * PACING_RECOVERY_FACTOR);
@@ -200,7 +199,7 @@ async function fetchJsonOnce<T>(path: string, signal: AbortSignal, priority: Req
       return value;
       } catch (error) {
         if (!(error instanceof ApiRequestError)) {
-          recordDiagnostic({ kind: 'request', endpoint,
+          recordCoreDiagnostic({ kind: 'request', endpoint,
             reason: signal?.aborted ? 'cancelled' : /timed out/i.test(getErrorMessage(error, '')) ? 'timeout' : 'network-error', queueMs: startedAt - queuedAt, networkMs: Date.now() - startedAt });
           // A timeout or network failure breaks the success streak; a caller's
           // cancellation says nothing about the API. (429/5xx reset it when

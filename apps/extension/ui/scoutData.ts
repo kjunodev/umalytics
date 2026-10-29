@@ -1,10 +1,10 @@
 import { browser } from 'wxt/browser';
 import type { DraftSnapshot, PlayerProfileSummary, PlayerStatsScope, PrematchRoster, PrematchTeam } from '@umalytics/shared';
-import { latestStatsCheckAt } from '../profiles/profileTiming';
-import { BEST_UMA_SCORE_VERSION, RECENT_HISTORY_VERSION } from '../profiles/profileConstants';
-import { isRecord } from '../room/recordReaders';
-import { normalizeRosterForDisplay } from '../room/rosterDisplay';
-import type { PlayerProfileLoadState, PlayerProfileSummariesSnapshot } from '../profiles/profileTypes';
+import { latestStatsCheckAt } from '@umalytics/core/profiles/profileTiming';
+import { BEST_UMA_SCORE_VERSION, RECENT_HISTORY_VERSION } from '@umalytics/core/profiles/profileConstants';
+import { isRecord } from '@umalytics/core/room/recordReaders';
+import { normalizeRosterForDisplay } from '@umalytics/core/room/rosterDisplay';
+import type { PlayerProfileLoadState, PlayerProfileSummariesSnapshot } from '@umalytics/core/profiles/profileTypes';
 import type { LobbyLockState } from '../storage/lobbyLockStorage';
 import { formatRelativeAge, formatStatsScopeShortLabel } from './common/format';
 import { getDisplayedProfileStats } from './player/playerProfileDisplay';

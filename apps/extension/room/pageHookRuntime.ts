@@ -1,6 +1,6 @@
-import { decodeRoomEvent } from './roomEvents';
-import { selectRoomSyncedState } from './syncPayload';
-import { extractMatchCodeFromUrl } from './matchDetection';
+import { decodeRoomEvent } from '@umalytics/core/room/roomEvents';
+import { selectRoomSyncedState } from '@umalytics/core/room/syncPayload';
+import { extractMatchCodeFromUrl } from '@umalytics/core/room/matchDetection';
 import { extractRoomCodeFromRoomDom } from './domLobbyExtraction';
 const SYNCED_DRAFT_STATE_MESSAGE_TYPE = 'umalytics:synced-draft-state';
 const SYNC_EFFECT_LOG_PREFIX = '[SYNC EFFECT] Starting sync';

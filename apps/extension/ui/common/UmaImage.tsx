@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { getUmaPortraitUrl } from '../../umas/umaPortraits';
+import { getUmaPortraitUrl } from '@umalytics/core/umas/umaPortraits';
 
 export function UmaImage({
   imageUrl,

@@ -1,6 +1,6 @@
 import type { PlayerProfileSummary, PlayerTopUmaSummary } from '@umalytics/shared';
 import { formatDecimal, formatPercent } from './format';
-import { NEWCOMER_MAX_ALL_TIME_MATCHES } from '../../profiles/profileConstants';
+import { NEWCOMER_MAX_ALL_TIME_MATCHES } from '@umalytics/core/profiles/profileConstants';
 
 export type NotableBadgeTone = 'rank' | 'scoring' | 'sample' | 'style' | 'private';
 export type NotableBadgeKind =

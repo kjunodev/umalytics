@@ -11,7 +11,7 @@ import type {
   PrematchPlayer,
   PrematchRoster
 } from '@umalytics/shared';
-import { getUmaPortraitUrl, isHashedUmaAssetUrl } from '../../umas/umaPortraits';
+import { getUmaPortraitUrl, isHashedUmaAssetUrl } from '@umalytics/core/umas/umaPortraits';
 import { UmaImage } from '../common/UmaImage';
 import { formatDecimal, formatPercent } from '../common/format';
 import { TEAM_IDS, TEAM_SLOT_COUNT, getDraftRosterPlayersForTeam, getDraftSlots } from '../common/roster';

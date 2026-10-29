@@ -8,6 +8,7 @@ import ts from 'typescript';
 import { loadFunction, loadModule, parseTsxModule } from './support/harness.mjs';
 
 const ROOT = fileURLToPath(new URL('../apps/extension/', import.meta.url));
+const CORE = fileURLToPath(new URL('../packages/core/src/', import.meta.url));
 const FORBIDDEN = /historyDerived|recentForm|EstimatedChip|buildStatsSummaryFromHistory|buildUmaEntriesFromHistory|fetchBatchPlayerProfileSummaries|\/batch\?|__UMALYTICS_[A-Z_]*PROFILE_DATA__/i;
 
 function sourceFiles(dir) {
@@ -18,7 +19,7 @@ function sourceFiles(dir) {
 }
 
 test('extension source displays history without converting it to ranked statistics', () => {
-  for (const file of sourceFiles(ROOT)) {
+  for (const file of [...sourceFiles(ROOT), ...sourceFiles(CORE)]) {
     const source = fs.readFileSync(file, 'utf8');
     assert.doesNotMatch(source, FORBIDDEN, path.relative(ROOT, file));
   }

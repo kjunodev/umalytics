@@ -23,6 +23,9 @@ importers:
       '@fontsource/ibm-plex-sans':
         specifier: ^5.3.0
         version: 5.3.0
+      '@umalytics/core':
+        specifier: workspace:*
+        version: link:../../packages/core
       '@umalytics/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -57,6 +60,16 @@ importers:
       wxt:
         specifier: ^0.21.5
         version: 0.21.5(esbuild@0.27.7)(rolldown@1.2.15)(rollup@4.66.0)(typescript@5.9.3)(vite@6.4.5(@types/node@26.2.0)(jiti@2.7.0)(lightningcss@1.33.0))
+
+  packages/core:
+    dependencies:
+      '@umalytics/shared':
+        specifier: workspace:*
+        version: link:../shared
+    devDependencies:
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
 
   packages/shared:
     devDependencies:
