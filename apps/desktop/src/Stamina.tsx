@@ -96,10 +96,11 @@ export function Stamina() {
         <label>Race<select aria-label="Course / Champions Meeting preset" value={selection} onChange={event => chooseCourse(event.target.value)}>
           <optgroup label="Champions Meeting presets">{catalog?.presets.map(preset => {
             const course = catalog.courses.find(course => course.id === preset.course_set_id);
-            return <option key={preset.id} value={`cm:${preset.id}`}>{preset.name} · {course ? `${course.track_name} ${course.distance} · ${course.surface === 1 ? 'Turf' : 'Dirt'}` : preset.course_set_id}</option>;
+            return <option key={preset.id} value={`cm:${preset.id}`}>{preset.name}{course ? ` · ${course.distance}m` : ''}</option>;
           })}</optgroup>
-          <optgroup label="All courses">{catalog?.courses.map(course => <option key={course.id} value={`course:${course.id}`} disabled={course.race_instance_id === null}>{courseLabel(course)}{course.race_instance_id === null ? ' · No G1 instance' : ''}</option>)}</optgroup>
+          <optgroup label="All courses">{catalog?.courses.map(course => <option key={course.id} value={`course:${course.id}`} disabled={course.race_instance_id === null}>{course.track_name} {course.distance}m · {course.surface === 1 ? 'Turf' : 'Dirt'}{course.race_instance_id === null ? ' · Unavailable' : ''}</option>)}</optgroup>
         </select></label>
+        {selectedCourse && <small className="muted">{courseLabel(selectedCourse)}</small>}
         <small className="muted">{['Good', 'Soft', 'Hard', 'Bad'][input.ground_condition - 1]} · {['Sunny', 'Cloudy', 'Rainy', 'Snow'][input.weather - 1]} · {['Spring', 'Summer', 'Fall', 'Winter', 'Cherry Blossom'][input.season - 1]}</small>
         <div className="field"><span>Strategy</span><div className="seg" role="group" aria-label="Strategy">{['Front', 'Pace', 'Late', 'End'].map((style, i) => <button type="button" key={style} aria-pressed={input.running_style === i + 1} onClick={() => patch({ running_style: i + 1 })}>{style}</button>)}</div></div>
         <div className="raw-stats">{(Object.keys(input.stats) as (keyof StaminaInput['stats'])[]).map(stat => <label key={stat}>{({ speed: 'Spd', stamina: 'Sta', pow: 'Pow', guts: 'Guts', wiz: 'Wit' })[stat]}

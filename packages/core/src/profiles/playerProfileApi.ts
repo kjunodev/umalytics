@@ -172,7 +172,8 @@ export async function fetchPlayerHistoryPage(
   signal?: AbortSignal
 ): Promise<PlayerHistoryPage> {
   if (!isDiscordSnowflake(discordId) || !Number.isInteger(page) || page < 1) throw new Error('Invalid history request.');
-  const season = scope === 'currentSeason' ? await getActiveSeasonId() : undefined;
+  const season = scope === 'currentSeason' ? await getActiveSeasonId(signal) : undefined;
+  signal?.throwIfAborted();
   if (scope === 'currentSeason' && season?.activeSeasonId === undefined) throw new Error('Active season unavailable.');
   const query = `/api/stats/players/${encodeURIComponent(discordId)}/history?page=${page}&pageSize=20&mode=ranked${season?.activeSeasonId ? `&season=${encodeURIComponent(season.activeSeasonId)}` : ''}`;
   const result = await fetchJson<unknown>(query, signal, 'history');
@@ -346,8 +347,8 @@ async function fetchPlayerProfileSummary(
   }
 }
 
-function getActiveSeasonId(): Promise<SeasonLookup> {
-  const budget = deadline(undefined, 15_000, 'Season request timed out.');
+function getActiveSeasonId(signal?: AbortSignal): Promise<SeasonLookup> {
+  const budget = deadline(signal, 15_000, 'Season request timed out.');
   return abortable(fetchJson<ApiSeason[]>('/api/seasons', budget.signal, 'shared'), budget.signal)
     .then((seasons): SeasonLookup => {
       const active = seasons.find(season => season.active === true && typeof season.id === 'string');

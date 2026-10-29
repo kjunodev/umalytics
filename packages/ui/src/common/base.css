@@ -578,3 +578,23 @@ button {
   line-height: 1.25;
   margin: -1px 0 0;
 }
+
+/* Icon buttons are also used by the shared player drawer. */
+.iconbtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-default);
+  background: var(--bg-surface-2);
+  cursor: pointer;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.iconbtn:hover {
+  background: var(--bg-raised);
+  color: var(--text-primary);
+}

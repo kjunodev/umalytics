@@ -19,6 +19,7 @@
     "@tauri-apps/plugin-store": "^2",
     "@umalytics/core": "workspace:*",
     "@umalytics/shared": "workspace:*",
+    "@umalytics/ui": "workspace:*",
     "react": "^19.3.1",
     "react-dom": "^19.3.1"
   },

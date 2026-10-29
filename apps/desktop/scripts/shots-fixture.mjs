@@ -25,7 +25,22 @@ export const catalog = {
 export function apiResponse(url) {
   const parsed = new URL(url);
   if (parsed.pathname === '/api/seasons') return [{ id: 'replay-season', active: true, name: 'Replay Season' }];
-  if (parsed.pathname === '/api/leaderboard') return { entries: players.map((p, i) => ({ userId: p.discordId, rating: 1800 - i * 31, rd: 50, wins: 12, losses: 8 })) };
+  if (parsed.pathname === '/api/leaderboard') return { entries: players.map((p, i) => ({ userId: p.discordId, displayName: p.displayName, rating: 1800 - i * 31, rd: 50, wins: 12, losses: 8 })) };
+  if (parsed.pathname === '/api/players/directory-search') return { players: players.map(p => ({ discordId: p.discordId, discordUsername: p.displayName })) };
+  if (/^\/api\/stats\/players\/\d+\/profile$/.test(parsed.pathname)) return { title: 'Replay Champion' };
+  if (/^\/api\/stats\/players\/\d+\/history$/.test(parsed.pathname)) return { total: 6, playerHistory: Array.from({ length: 6 }, (_, i) => ({
+    matchId: 'ABC123', verificationState: 'confirmed', isWinner: i % 2 === 0, pointsScored: 12 - i,
+    reportedAt: '2026-10-20T12:00:00Z', mode: 'ranked', selectedUmaId: '100101',
+    podiumPlacements: 2, isMvp: i === 0, eloDelta: i % 2 === 0 ? 12 : -8, eloPlacement: false
+  })) };
+  if (parsed.pathname === '/api/matches/ABC123') {
+    const savedSide = (offset) => ({ ...side(offset, 5), bannedMaps: [],
+      pickedMaps: [{ id: `fixture-course-${offset}`, name: `Replay track ${offset + 1}`, track: `Replay track ${offset + 1}`, distance: 2400, surface: 'Turf' }] });
+    return { id: 'ABC123', status: 'completed', report: { participants: players,
+      draftSnapshot: { phase: 'complete', team1: savedSide(0), team2: savedSide(1),
+        multiplayer: { team1Name: 'Replay Blue', team2Name: 'Replay Orange' },
+        rules: { map: { picksPerTeam: 1 }, uma: { teamSize: 5, preBansPerTeam: 1 } } } } };
+  }
   const player = parsed.pathname.match(/^\/api\/stats\/players\/(\d+)\/stats$/)?.[1];
   if (player) {
     const i = players.findIndex(p => p.discordId === player);
