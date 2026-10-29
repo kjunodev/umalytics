@@ -38,8 +38,9 @@ export function apiResponse(url) {
       pickedMaps: [{ id: `fixture-course-${offset}`, name: `Replay track ${offset + 1}`, track: `Replay track ${offset + 1}`, distance: 2400, surface: 'Turf' }] });
     return { id: 'ABC123', status: 'completed', report: { participants: players,
       draftSnapshot: { phase: 'complete', team1: savedSide(0), team2: savedSide(1),
+        draftActionHistory: [0, 1].map(offset => ({ action: 'map-pick', actorTeam: `team${offset + 1}`, map: { id: `fixture-course-${offset}` } })),
         multiplayer: { team1Name: 'Replay Blue', team2Name: 'Replay Orange' },
-        rules: { map: { picksPerTeam: 1 }, uma: { teamSize: 5, preBansPerTeam: 1 } } } } };
+        rules: { map: { picksPerTeam: 1, bansPerTeam: 0 }, uma: { teamSize: 5, preBansPerTeam: 1 } } } } };
   }
   const player = parsed.pathname.match(/^\/api\/stats\/players\/(\d+)\/stats$/)?.[1];
   if (player) {

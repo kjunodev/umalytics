@@ -39,13 +39,18 @@ binary data messages increment a counts-only diagnostic. Ping/pong control
 frames do not increment rejections. Bad JSON does not close
 the connection. A port conflict appears in the UI.
 
-The sidebar opens the live Lobby, an interim Draft view, Stamina, and upcoming
-tools. Below 760 CSS pixels the shell shows compact Lobby/Draft; Compact and
+The sidebar opens the shared Lobby, Draft, Players, History and Umas views,
+plus Stamina. Skills by map remains a placeholder.
+Below 760 CSS pixels the shell shows compact Lobby/Draft; Compact and
 Expand resize the native window and restore its previous logical size. Pin on
 top, display mode, and the last page are saved locally in `shell.json`.
 Settings exposes feed counters and draft state during Vite development only.
-The scope selector loads existing core profile
-functions through the Rust HTTP plugin. Request pacing, cancellation and 429
+The scope selector drives the shared views through desktop UiServices.
+Explorer, title and history requests call the existing core functions through
+CorePlatform and the Rust HTTP plugin. Request IDs own abort controllers so
+cancelling a drawer request aborts its underlying fetch. Recent player chips
+use the extension's `playersRecentViewed` key and shape in the Tauri store.
+Request pacing, cancellation and 429
 cooldowns remain in core. HTTP access is limited to the drafter API, redirects
 are disabled, and requests identify `UmaLytics-Desktop/<version>`. Persistent
 profile storage uses the store plugin; session caches remain in memory.
@@ -59,10 +64,13 @@ pnpm --filter @umalytics/desktop exec playwright install chromium
 pnpm --filter @umalytics/desktop shots
 ```
 
-The script starts and stops its own Vite server. It captures full Lobby and
-Stamina at 1280×800 and 1000×700, compact Lobby/Draft at 440×860, and an empty
-Lobby. Screenshots go to `.shots/` (or `DESKTOP_SHOTS_DIR`). It rejects horizontal
-overflow, clipped text, unexpected external requests, and page errors, and
+The script starts and stops its own Vite server. It captures full Lobby,
+drawer, mid-draft, Players leaderboard and directory results, History, Umas
+and Stamina at 1280×800 and 1000×700, compact Lobby/drawer/Draft at 440×860,
+the 760px full-mode floor, and an empty Lobby.
+Screenshots go to `.shots/` (or `DESKTOP_SHOTS_DIR`). It rejects horizontal
+overflow, wrapped team rows and KPI labels, clipped text (including every
+select option), unexpected external requests, and page errors, and
 checks scope changes, persistence, skill editing, stale results and cancellation.
 All replay accounts and simulation results in this harness are synthetic.
 Window resizing and pin checks use mocked IPC; verify actual OS behavior in
