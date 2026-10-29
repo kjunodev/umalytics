@@ -1,0 +1,17 @@
+:root {
+  --page: #0D111B; --panel: #121826; --card: #161D2C;
+  --border: #1F2738; --border-strong: #263048; --border-hover: #3A4868;
+  --text: #E8ECF4; --muted: #9AA4B8; --label: #8591A7;
+  --blue: #6A9BFF; --primary: #2F6FDB; --orange: #F0A05A;
+  --green: #4CC38A; --green-text: #9FE0C0; --selected: #232C40;
+  --hover: #1F2840; --sidebar-text: #AEB7C8; --button-text: #C6CDDA;
+  --status-bg: #0F1420; --stat-bg: #111726;
+  --rank-bg: #2E2716; --rank-text: #F0CD74;
+  --blue-bg: #16243F; --blue-text: #CFE0FF; --threshold: #9CC2FF;
+  --orange-bg: #1A1512; --orange-border: #6B4128; --blue-border: #2B4170;
+  --radius: 12px; --control-radius: 8px;
+  --body-font: 'IBM Plex Sans', system-ui, sans-serif;
+  --number-font: 'Barlow Semi Condensed', 'IBM Plex Sans', sans-serif;
+  font-family: var(--body-font); color: var(--text); background: var(--page);
+  font-synthesis: none; color-scheme: dark;
+}

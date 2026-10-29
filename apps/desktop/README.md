@@ -39,13 +39,34 @@ binary data messages increment a counts-only diagnostic. Ping/pong control
 frames do not increment rejections. Bad JSON does not close
 the connection. A port conflict appears in the UI.
 
-The debug UI shows status/counters, room, draft phase, each team's roster and
-Uma/map pick and ban counts. The scope selector loads existing core profile
+The sidebar opens the live Lobby, an interim Draft view, Stamina, and upcoming
+tools. Below 760 CSS pixels the shell shows compact Lobby/Draft; Compact and
+Expand resize the native window and restore its previous logical size. Pin on
+top, display mode, and the last page are saved locally in `shell.json`.
+Settings exposes feed counters and draft state during Vite development only.
+The scope selector loads existing core profile
 functions through the Rust HTTP plugin. Request pacing, cancellation and 429
 cooldowns remain in core. HTTP access is limited to the drafter API, redirects
 are disabled, and requests identify `UmaLytics-Desktop/<version>`. Persistent
 profile storage uses the store plugin; session caches remain in memory.
 History never supplies statistics or badges.
+
+Frontend screenshots and interaction checks run locally with mocked Tauri IPC:
+
+```powershell
+pnpm --version # must be 9.15.4, with the PATH above
+pnpm --filter @umalytics/desktop exec playwright install chromium
+pnpm --filter @umalytics/desktop shots
+```
+
+The script starts and stops its own Vite server. It captures full Lobby and
+Stamina at 1280×800 and 1000×700, compact Lobby/Draft at 440×860, and an empty
+Lobby. Screenshots go to `.shots/` (or `DESKTOP_SHOTS_DIR`). It rejects horizontal
+overflow, clipped text, unexpected external requests, and page errors, and
+checks scope changes, persistence, skill editing, stale results and cancellation.
+All replay accounts and simulation results in this harness are synthetic.
+Window resizing and pin checks use mocked IPC; verify actual OS behavior in
+`tauri dev` before release. These checks are not part of CI.
 
 ```powershell
 cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml --locked
