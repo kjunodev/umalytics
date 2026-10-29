@@ -1,5 +1,5 @@
 import { browser } from 'wxt/browser';
-import { isRecord } from '../room/recordReaders';
+import { isRecord } from '@umalytics/core/room/recordReaders';
 import type { DraftSnapshot, PrematchRoster, PlayerProfileSummary, PlayerRecentMatchSummary, PlayerStatsScope } from '@umalytics/shared';
 
 export interface PlayerHistoryPage { page: number; total: number; matches: PlayerRecentMatchSummary[]; summary?: PlayerProfileSummary['historySummary'] }

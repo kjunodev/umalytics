@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 
 const ORIGIN = 'https://drafter.uma.guide';
 const root = fileURLToPath(new URL('../', import.meta.url));
-const umasDir = path.join(root, 'apps', 'extension', 'umas');
+const umasDir = path.join(root, 'packages', 'core', 'src', 'umas');
 
 const STRING = '"(?:[^"\\\\]|\\\\.)*"';
 const RELEASE_ENTRY = `\\{name:(${STRING}),variant:(${STRING}),outfitId:"(\\d{6})"\\}`;

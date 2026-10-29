@@ -1,33 +1,34 @@
+import '../runtime/corePlatform';
 import { recordDiagnostic, getDiagnosticTrace } from '../runtime/diagnosticRecorder';
-import { mergeProfileScopes } from '../profiles/profileMerge';
+import { mergeProfileScopes } from '@umalytics/core/profiles/profileMerge';
 import { registerExplorerService } from '../explorer/explorerService';
-import { normalizeRosterForDisplay } from '../room/rosterDisplay';
+import { normalizeRosterForDisplay } from '@umalytics/core/room/rosterDisplay';
 import { browser } from 'wxt/browser';
 import type { PlayerProfileSummary, PlayerStatsScope, PrematchPlayer, PrematchRoster } from '@umalytics/shared';
 import {
   isUmaLyticsMessage,
   type LobbyReconnectResult
 } from '../runtime/messaging';
-import { getApiCooldown, restoreApiCooldown } from '../profiles/apiClient';
+import { getApiCooldown, restoreApiCooldown } from '@umalytics/core/profiles/apiClient';
 import {
   buildUnavailablePlayerSummary,
   fetchPlayerAllTimeStats,
   fetchPlayerHistoryPage,
   fetchPlayerProfileSummaries,
   fetchPlayerProfileTitle
-} from '../profiles/playerProfileApi';
+} from '@umalytics/core/profiles/playerProfileApi';
 import {
   getPlayerProfileSummaries,
   getCachedPlayerProfiles,
   rememberCachedPlayerProfiles,
   setPlayerProfileSummaries
-} from '../storage/profileStorage';
-import type { PlayerProfileLoadState } from '../profiles/profileTypes';
+} from '@umalytics/core/storage/profileStorage';
+import type { PlayerProfileLoadState } from '@umalytics/core/profiles/profileTypes';
 import {
   MANUAL_PROFILE_REFRESH_COOLDOWN_MS,
   NEWCOMER_MAX_ALL_TIME_MATCHES
-} from '../profiles/profileConstants';
-import { isFreshProfile } from '../profiles/profileCache';
+} from '@umalytics/core/profiles/profileConstants';
+import { isFreshProfile } from '@umalytics/core/profiles/profileCache';
 import { getLatestDraftSnapshot, clearLatestDraftSnapshot, setLatestDraftSnapshot } from '../storage/draftStorage';
 import {
   clearLatestPrematchRoster,
@@ -60,8 +61,8 @@ import {
   reconnectOpenDrafterTabs,
   requestRoomDomScan
 } from '../background/drafterTabs';
-import { getErrorMessage } from '../room/recordReaders';
-import { isDiscordSnowflake } from '../room/rosterIdentity';
+import { getErrorMessage } from '@umalytics/core/room/recordReaders';
+import { isDiscordSnowflake } from '@umalytics/core/room/rosterIdentity';
 
 let enrichmentRunId = 0;
 let reconnecting: Promise<LobbyReconnectResult> | undefined;

@@ -1,7 +1,7 @@
 import { browser } from 'wxt/browser';
 import type { PlayerProfileSummary, PlayerStatsScope, PrematchPlayer } from '@umalytics/shared';
-import type { SeasonLeaderboard } from '../profiles/playerProfileApi';
-import { EXPLORER_PORT, type ExplorerRequest, type ExplorerReply, type HistoricalMatch, type PlayerSearchResult } from './explorerTypes';
+import type { SeasonLeaderboard } from '@umalytics/core/profiles/playerProfileApi';
+import { EXPLORER_PORT, type ExplorerRequest, type ExplorerReply, type HistoricalMatch, type PlayerSearchResult } from '@umalytics/core/explorer/explorerTypes';
 
 function request<T>(message: ExplorerRequest, signal: AbortSignal, onProgress?: (profiles: Record<string, PlayerProfileSummary>) => void): Promise<T> {
   signal.throwIfAborted();

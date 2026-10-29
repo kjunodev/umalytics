@@ -1,7 +1,7 @@
 import type { PlayerProfileSummary, PlayerRecentMatchSummary, PlayerStatsScope, PrematchPlayer } from '@umalytics/shared';
 import { hasDisplayableProfileLists } from '../common/badges';
 import { formatRelativeAge } from '../common/format';
-import { RECENT_HISTORY_DISPLAY_MATCHES } from '../../profiles/profileConstants';
+import { RECENT_HISTORY_DISPLAY_MATCHES } from '@umalytics/core/profiles/profileConstants';
 
 export function withDetailHistory(
   profile: PlayerProfileSummary | undefined, firstPageMatches: PlayerRecentMatchSummary[],

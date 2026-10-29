@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import './umas.css';
 import type { DraftUmaAction, PlayerProfileSummary, PlayerStatsScope, PrematchPlayer, PrematchRoster, PrematchTeam, TeamId } from '@umalytics/shared';
-import { missingUmaHistoryLabel } from '../../profiles/profileAvailability';
-import { getTeamGroups } from '../../room/rosterDisplay';
+import { missingUmaHistoryLabel } from '@umalytics/core/profiles/profileAvailability';
+import { getTeamGroups } from '@umalytics/core/room/rosterDisplay';
 import { UmaImage } from '../common/UmaImage';
 import { formatDecimal, formatPercent, formatStatsScopeShortLabel } from '../common/format';
 import { TEAM_IDS, TEAM_SLOT_COUNT, getDraftRosterPlayersForTeam, getDraftSlots, getPlayerKey } from '../common/roster';

@@ -1,5 +1,5 @@
 import type { PlayerTopUmaSummary } from '@umalytics/shared';
-import { isHashedUmaAssetUrl } from '../../umas/umaPortraits';
+import { isHashedUmaAssetUrl } from '@umalytics/core/umas/umaPortraits';
 import { UmaImage, getFallbackUmaImageUrl } from '../common/UmaImage';
 
 export function BestUmaPortrait({ uma }: { uma: PlayerTopUmaSummary }) {

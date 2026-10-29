@@ -7,7 +7,7 @@ import { getUmaDisplayName, normalizeUmaOutfitId, resolveDrafterImageUrl } from 
 type RoomRecord = Record<string, any>;
 const ROOM_EVENT_TYPES = new Set(['match.snapshot', 'room.presence.updated', 'participant.uma-assignments.snapshot', 'room.captain.changed']);
 
-/** Decode only the site's documented-in-client server-event envelope. Never scan
+/** Decode only the site's client-defined server-event envelope. Never scan
  * arbitrary objects for player arrays, chat messages, or saved credentials. */
 export function decodeRoomEvent(payload: unknown): RoomRecord | null {
   let event: unknown = payload;

@@ -1,12 +1,12 @@
 import type { DraftUmaAction, PlayerProfileSummary, PlayerStatsScope, PlayerTopUmaSummary, PrematchPlayer, TeamId } from '@umalytics/shared';
-import { releaseOrder } from '../../umas/umaReleaseOrder';
+import { releaseOrder } from '@umalytics/core/umas/umaReleaseOrder';
 import {
   getUmaDisplayName,
   getUmaPortraitUrl,
   isHashedUmaAssetUrl,
   isKnownUmaOutfitId,
   normalizeUmaOutfitId
-} from '../../umas/umaPortraits';
+} from '@umalytics/core/umas/umaPortraits';
 import { normalizeSearchText, normalizeUmaNameForLookup } from '../common/format';
 import { getDisplayedProfileStats } from '../player/playerProfileDisplay';
 

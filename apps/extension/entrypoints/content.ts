@@ -1,8 +1,8 @@
-import { decodeRoomEvent, RoomEventState, summarizeRoomEvent } from '../room/roomEvents';
-import { canReuseSyncedRoster } from '../room/rosterIdentity';
+import { decodeRoomEvent, RoomEventState, summarizeRoomEvent } from '@umalytics/core/room/roomEvents';
+import { canReuseSyncedRoster } from '@umalytics/core/room/rosterIdentity';
 import { browser } from 'wxt/browser';
 import type { DraftSnapshot, PrematchRoster } from '@umalytics/shared';
-import { extractMatchCodeFromUrl } from '../room/matchDetection';
+import { extractMatchCodeFromUrl } from '@umalytics/core/room/matchDetection';
 import {
   isUmaLyticsContentMessage,
   sendDraftSnapshot,
@@ -18,8 +18,8 @@ import {
   extractDraftSnapshotFromDraftDom,
   extractDraftSnapshotFromSyncedDraftState
 } from '../room/draftExtraction';
-import { extractPrematchRosterFromSyncedDraftState } from '../room/playerExtraction';
-import { isRecord } from '../room/recordReaders';
+import { extractPrematchRosterFromSyncedDraftState } from '@umalytics/core/room/playerExtraction';
+import { isRecord } from '@umalytics/core/room/recordReaders';
 
 const SYNCED_DRAFT_STATE_MESSAGE_TYPE = 'umalytics:synced-draft-state';
 const CONTENT_SCRIPT_CLEANUP_KEY = '__umalyticsContentScriptCleanup';

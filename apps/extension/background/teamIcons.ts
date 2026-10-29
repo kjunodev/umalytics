@@ -1,4 +1,4 @@
-import { fetchTeamIconMap } from '../profiles/esportsTeamApi';
+import { fetchTeamIconMap } from '@umalytics/core/profiles/esportsTeamApi';
 import { getTeamIconSnapshot, isTeamIconSnapshotFresh, setTeamIconSnapshot } from '../storage/teamIconStorage';
 
 let writes = Promise.resolve();

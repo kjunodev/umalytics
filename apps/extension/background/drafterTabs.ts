@@ -1,7 +1,7 @@
 import { browser } from 'wxt/browser';
 import type { ScriptPublicPath } from '#imports';
 import { sendRoomDomScanRequest, type RoomDomScanResult } from '../runtime/messaging';
-import { extractMatchCodeFromUrl } from '../room/matchDetection';
+import { extractMatchCodeFromUrl } from '@umalytics/core/room/matchDetection';
 
 const CONTENT_SCRIPT_PATH = '/content-scripts/content.js' as ScriptPublicPath;
 const DRAFTER_URL_PATTERN = 'https://drafter.uma.guide/*';

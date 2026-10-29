@@ -1,4 +1,4 @@
-import { readPayloadRoomCode } from './syncPayload';
+import { readPayloadRoomCode } from '@umalytics/core/room/syncPayload';
 import type {
   DraftMapSelection,
   DraftSnapshot,
@@ -10,10 +10,10 @@ import type {
   TeamId
 } from '@umalytics/shared';
 import { extractRoomCodeFromRoomDom } from './domLobbyExtraction';
-import { isRecord, normalizeText, readOptionalNumber, readOptionalString, readOptionalTeamId } from './recordReaders';
-import { cleanTeamName } from './textCleanup';
-import { TEAM_IDS } from './teams';
-import { getUmaDisplayName, normalizeUmaOutfitId, normalizeUmaPortraitId, resolveDrafterImageUrl } from '../umas/umaPortraits';
+import { isRecord, normalizeText, readOptionalNumber, readOptionalString, readOptionalTeamId } from '@umalytics/core/room/recordReaders';
+import { cleanTeamName } from '@umalytics/core/room/textCleanup';
+import { TEAM_IDS } from '@umalytics/core/room/teams';
+import { getUmaDisplayName, normalizeUmaOutfitId, normalizeUmaPortraitId, resolveDrafterImageUrl } from '@umalytics/core/umas/umaPortraits';
 
 export function extractDraftSnapshotFromSyncedDraftState(
   value: unknown,

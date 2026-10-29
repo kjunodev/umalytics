@@ -1,8 +1,8 @@
-import { normalizeMatchCode } from './matchDetection';
+import { normalizeMatchCode } from '@umalytics/core/room/matchDetection';
 import type { MatchCode, PrematchPlayer, PrematchRoster, PrematchTeam, TeamId } from '@umalytics/shared';
-import { normalizeText } from './recordReaders';
-import { cleanTeamName } from './textCleanup';
-import { TEAM_IDS } from './teams';
+import { normalizeText } from '@umalytics/core/room/recordReaders';
+import { cleanTeamName } from '@umalytics/core/room/textCleanup';
+import { TEAM_IDS } from '@umalytics/core/room/teams';
 
 const PLAYER_ROLES = new Set(['Player', 'Captain']);
 

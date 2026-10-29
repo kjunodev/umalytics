@@ -7,8 +7,8 @@ import type {
   PrematchPlayer,
   PrematchRoster
 } from '@umalytics/shared';
-import type { SeasonLeaderboard, SeasonLeaderboardEntry } from '../../profiles/playerProfileApi';
-import type { PlayerSearchResult } from '../../explorer/explorerTypes';
+import type { SeasonLeaderboard, SeasonLeaderboardEntry } from '@umalytics/core/profiles/playerProfileApi';
+import type { PlayerSearchResult } from '@umalytics/core/explorer/explorerTypes';
 
 // Fixture data for apps/extension/dev/preview only. Never imported by the
 // extension itself, so it never reaches a build.

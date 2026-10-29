@@ -1,7 +1,7 @@
 import type { PrematchPlayer, PrematchRoster, PrematchTeam } from '@umalytics/shared';
-import { lookupPlayer, parsePlayerInput } from '../../explorer/explorerData';
-import type { SeasonLeaderboardEntry } from '../../profiles/playerProfileApi';
-import { getTeamGroups } from '../../room/rosterDisplay';
+import { lookupPlayer, parsePlayerInput } from '@umalytics/core/explorer/explorerData';
+import type { SeasonLeaderboardEntry } from '@umalytics/core/profiles/playerProfileApi';
+import { getTeamGroups } from '@umalytics/core/room/rosterDisplay';
 import { formatNumber, formatPercent } from '../common/format';
 import type { RecentPlayerEntry } from '../../storage/playersRecentStorage';
 
