@@ -5,8 +5,10 @@ import { fetchPlayerProfileSummaries } from '@umalytics/core/profiles/playerProf
 import { isDiscordSnowflake } from '@umalytics/core/room/rosterIdentity';
 import type { PlayerProfileSummary, PlayerStatsScope } from '@umalytics/shared';
 import { DesktopRoom, type FeedEnvelope, type FeedStatus } from './feed';
+import { Stamina } from './Stamina';
 
 export function App() {
+  const [view, setView] = useState<'feed' | 'stamina'>('feed');
   const room = useRef(new DesktopRoom());
   const [revision, setRevision] = useState(0);
   const [status, setStatus] = useState<FeedStatus>();
@@ -51,6 +53,12 @@ export function App() {
 
   return <main data-revision={revision}>
     <h1>UmaLytics desktop</h1>
+    <nav aria-label="Desktop views">
+      <button aria-pressed={view === 'feed'} onClick={() => setView('feed')}>Debug feed</button>
+      <button aria-pressed={view === 'stamina'} onClick={() => setView('stamina')}>Stamina</button>
+    </nav>
+    <div hidden={view !== 'stamina'}><Stamina /></div>
+    <div hidden={view !== 'feed'}>
     <p role="status">Feed: {status?.state ?? 'starting'} · accepted {status?.accepted ?? 0} · rejected {status?.rejected ?? 0}</p>
     {status?.state === 'port-in-use' && <p role="alert">Port 38917 is in use. Close the other listener and restart UmaLytics.</p>}
     <p>Room: {room.current.state.matchCode ?? 'none'} · Draft phase: {draft?.phase ?? 'none'}</p>
@@ -74,5 +82,6 @@ export function App() {
         })}</ul>
       </section>;
     })}</div>
+    </div>
   </main>;
 }
