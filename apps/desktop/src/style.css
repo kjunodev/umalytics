@@ -236,3 +236,6 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; }
 .chart-legend span + span i { background: var(--accent-orange); }
 
 .result-table td small { display: block; font-size: 10px; color: var(--text-muted); }
+
+.field-options { flex-direction: column; }
+.stamina-form .field-options button { min-height: 40px; padding: 6px 8px; white-space: normal; line-height: 1.35; }

@@ -175,7 +175,16 @@ fn validates_conditions_build_ids_and_defaults() {
     });
     assert_eq!(seed_count(&healing, e), 512);
     assert!(decoded.assume_heals_activate);
-    assert_eq!(decoded.field, Field::Pacemaker);
+    assert_eq!(decoded.field, Field::AverageLobby);
+    let course = validate(&decoded, e).unwrap();
+    let field = race_input(&decoded, &course);
+    assert_eq!(field.horses.len(), 9);
+    assert_eq!(race::init(&field, &e.data).info.num_race_horses, 9);
+    let multi: MultiInput = serde_json::from_value(
+        serde_json::json!({ "build": decoded.build, "races": [decoded.race] }),
+    )
+    .unwrap();
+    assert_eq!(multi.field, Field::AverageLobby);
 }
 #[test]
 fn ground_weather_season_pass_through_exactly() {
@@ -576,7 +585,13 @@ fn benchmark_seed_banks() {
             i.seeds = if seeds == 0 { None } else { Some(seeds) };
             i.race.map_id = map.into();
             i.build.running_style = style;
-            i.field = field;
+            i.field = match std::env::var("STAMINA_BENCH_FIELD").as_deref() {
+                Ok("average_lobby") => Field::AverageLobby,
+                Ok("pacemaker") => Field::Pacemaker,
+                Err(_) => field,
+                Ok(other) => panic!("Unknown benchmark field {other}"),
+            };
+            let field = i.field;
             i.build.skills = skills;
             i.build.stats.speed = 1600;
             i.build.stats.pow = 1200;
@@ -897,4 +912,40 @@ fn topups_are_bounded_and_seed_banks_remain_disjoint() {
     let a: HashSet<_> = (0..MAX_POINT_SEEDS).map(|i| seed(i, 0)).collect();
     assert_eq!(a.len(), MAX_POINT_SEEDS);
     assert!((0..MAX_POINT_SEEDS).all(|i| !a.contains(&seed(i, 1))));
+}
+
+#[test]
+fn real_lobby_allows_order_five_conditions_while_two_runners_cannot() {
+    let e = engine().unwrap();
+    let mut data = GameData::load(engine_data_dir(), DataEra::current()).unwrap();
+    let mut skill = data.skills[&200351].clone();
+    skill.id = 999992;
+    skill.activate_lot = 0;
+    skill.details[0].precondition.clear();
+    skill.details[0].condition = "order>=5".into();
+    data.skills.insert(skill.id, skill);
+    let mut i = input();
+    i.build.running_style = 4;
+    i.build.skills = vec![SelectedSkill {
+        id: 999992,
+        level: 1,
+    }];
+    let c = validate(&input(), e).unwrap();
+    for (field, should_activate) in [(Field::AverageLobby, true), (Field::Pacemaker, false)] {
+        i.field = field;
+        let r = race_input(&i, &c);
+        let mut race = race::init(&r, &data);
+        tick::start(&mut race);
+        while !race.horses[0].is_finished {
+            tick::step(&mut race);
+        }
+        assert_eq!(
+            race.horses[0]
+                .activate_skill_count_by_phase
+                .iter()
+                .sum::<i32>()
+                > 0,
+            should_activate
+        );
+    }
 }

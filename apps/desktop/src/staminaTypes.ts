@@ -44,7 +44,7 @@ export const defaultStaminaInput: StaminaInput = {
   request_id: '', race: { map_id: 'nakayama-2500-turf-inner', ground_condition: 1, weather: 1, season: 4 },
   build: { running_style: 2, stats: { speed: 1200, stamina: 800, pow: 1000, guts: 600, wiz: 1000 },
     motivation: 5, distance: [7, 7, 7, 7], style: [7, 7, 7, 7], ground: [7, 7], skills: [] },
-  field: 'pacemaker', seeds: null, assume_heals_activate: true,
+  field: 'average_lobby', seeds: null, assume_heals_activate: true,
 };
 export function courseLabel(course: Course): string {
   return `${course.track_name} · ${course.distance} m · ${course.surface === 1 ? 'Turf' : 'Dirt'}${course.variant ? ` · ${course.variant}` : ''} · ${['Unknown', 'Right', 'Left', 'Straight (right)', 'Straight (left)'][course.direction] ?? 'Unknown'}`;

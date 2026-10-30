@@ -103,7 +103,7 @@ export function Stamina() {
         <Segments label="Ground" value={input.race.ground_condition} options={groundNames} onChange={ground_condition => patchRace({ ground_condition })}/>
         <Segments label="Weather" value={input.race.weather} options={weatherNames} onChange={weather => patchRace({ weather })}/>
         <Segments label="Season" value={input.race.season} options={seasonNames} onChange={season => patchRace({ season })}/>
-        <div className="field"><span>Field</span><div className="seg" role="group" aria-label="Field">{(['pacemaker', 'average_lobby'] as const).map(field => <button type="button" key={field} aria-pressed={input.field === field} onClick={() => patch({ field })}>{field === 'pacemaker' ? 'Pacemaker' : 'Average lobby'}</button>)}</div></div>
+        <div className="field"><span>Field</span><div className="seg field-options" role="group" aria-label="Field">{(['average_lobby', 'pacemaker'] as const).map(field => <button type="button" key={field} aria-pressed={input.field === field} onClick={() => patch({ field })}>{field === 'pacemaker' ? '2-runner (skill position conditions see 2 runners)' : 'Average lobby'}</button>)}</div></div>
         <div className="field"><span>Strategy</span><div className="seg" role="group" aria-label="Strategy">{['Front', 'Pace', 'Late', 'End'].map((style, i) => <button type="button" key={style} aria-pressed={input.build.running_style === i + 1} onClick={() => patchBuild({ running_style: i + 1 })}>{style}</button>)}</div></div>
         <div className="raw-stats">{(Object.keys(input.build.stats) as (keyof StaminaBuild['stats'])[]).map(stat => <label key={stat}>{({ speed: 'Spd', stamina: 'Sta', pow: 'Pow', guts: 'Guts', wiz: 'Wit' })[stat]}
           <input className={`num ${stat === 'stamina' ? 'stamina-input' : ''}`} aria-label={stat === 'pow' ? 'Power' : stat === 'wiz' ? 'Wit' : stat[0]!.toUpperCase() + stat.slice(1)} type="number" required min={1} max={2000} value={input.build.stats[stat]} onChange={event => patchBuild({ stats: { ...input.build.stats, [stat]: Number(event.target.value) } })}/></label>)}</div>
@@ -137,7 +137,7 @@ export function Stamina() {
         {JSON.stringify({ ...input, request_id: '' }) !== JSON.stringify({ ...result.data.input, request_id: '' }) && <p className="stale-notice" role="status">Inputs changed since this run; press Run check to update</p>}
         <StaminaResults result={result.data} course={result.course}/>
       </> : <div className="panel result-empty"><h2>Check your stamina</h2><p>Choose a race and build to check full spurt and survival rates.</p><p className="muted">90% thresholds are refined to 10 stamina. The curve shows 600–1400. Results are finite-sample estimates.</p></div>}
-      <footer>Pacemaker: two runners; order skills use a field of two. Average lobby: nine runners. Simulated with uma-race-simulator (MIT). Game data © Cygames.</footer>
+      <footer>Average lobby: 9 real runners. 2-runner mode: skill position conditions see 2 runners. Simulated with uma-race-simulator (MIT). Game data © Cygames.</footer>
     </section>
   </section>;
 }

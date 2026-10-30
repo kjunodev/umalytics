@@ -145,8 +145,13 @@ try {
     check(await page.getByText('Engine course geometry missing: courseeventparam 11504.', { exact: true }).isVisible(), 'Unavailability has an explicit reason');
     await page.getByRole('group', { name: 'Track', exact: true }).getByRole('button', { name: 'Hanshin', exact: true }).click();
     await page.getByRole('group', { name: 'Race', exact: true }).getByRole('button', { name: '3200 · Turf · Outer to Inner', exact: true }).click();
+    check(await page.getByRole('group', { name: 'Field', exact: true }).getByRole('button', { name: 'Average lobby', exact: true }).getAttribute('aria-pressed') === 'true', 'Average lobby defaults on');
+    await page.getByRole('group', { name: 'Field', exact: true }).getByRole('button', { name: '2-runner (skill position conditions see 2 runners)', exact: true }).click();
+    check(await page.getByRole('group', { name: 'Field', exact: true }).getByRole('button', { name: '2-runner (skill position conditions see 2 runners)', exact: true }).getAttribute('aria-pressed') === 'true', '2-runner option remains selectable with explicit condition semantics');
     await page.getByRole('group', { name: 'Field', exact: true }).getByRole('button', { name: 'Average lobby', exact: true }).click();
     check(await page.getByRole('group', { name: 'Field', exact: true }).getByRole('button', { name: 'Average lobby', exact: true }).getAttribute('aria-pressed') === 'true', 'Average lobby selectable');
+    await page.getByRole('group', { name: 'Field', exact: true }).evaluate(element => element.scrollIntoView({ block: 'center' }));
+    await shot(page, `stamina-field-${width}x${height}`);
     await page.getByRole('button', { name: 'Run check', exact: true }).click();
     await page.locator('.stamina-chart').waitFor();
     check(await page.getByRole('group', { name: 'Assume heals activate', exact: true }).getByRole('button', { name: 'On', exact: true }).getAttribute('aria-pressed') === 'true', 'Heal lottery assumption defaults on');
