@@ -4230,7 +4230,7 @@ checksum = "b6f5e870be6c3b371b77fe0ee0bafb859fa4964b4404c27de1d380043c4dda20"
 [[package]]
 name = "uma_race_sim"
 version = "0.1.0"
-source = "git+https://github.com/kachi-dev/uma-race-simulator?rev=1750b13d56bf96a3608c9e108b6131170ad98ef8#1750b13d56bf96a3608c9e108b6131170ad98ef8"
+source = "git+https://github.com/skimuic/uma-race-simulator?rev=09aa4e03575075fe0d2772b81fb2f5219c8df6c2#09aa4e03575075fe0d2772b81fb2f5219c8df6c2"
 dependencies = [
  "base64 0.22.1",
  "flate2",
