@@ -300,7 +300,7 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; }
 .skill-level select { width: 42px; padding: 0 2px; font-size: 12px; }
 .skill-typeahead { flex: 1 0 100%; min-width: 0; }
 .skill-typeahead > input { border-color: var(--accent-blue); border-radius: var(--radius-xl); }
-.skill-options { margin-top: 6px; max-height: 220px; overflow-y: auto; border: 1px solid var(--border-emphasis); border-radius: var(--radius-md); background: var(--bg-page); }
+.skill-options { margin-top: 6px; max-height: 220px; overflow-y: auto; overscroll-behavior: contain; border: 1px solid var(--border-emphasis); border-radius: var(--radius-md); background: var(--bg-page); }
 .skill-options button { display: flex; width: 100%; align-items: center; text-align: left; gap: 8px; padding: 6px 8px; border: 0; border-radius: 0; font-size: 12px; white-space: normal; }
 .skill-options button > span:not(.skill-icon) { flex: 1; overflow-wrap: anywhere; }
 .skill-options button[aria-selected=true] { background: var(--tone-sample-bg); }

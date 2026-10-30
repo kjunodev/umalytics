@@ -5,7 +5,7 @@ import type { Catalog, CatalogSkill, StaminaBuild } from './staminaTypes';
 
 function SkillIcon({ skill }: { skill: CatalogSkill | undefined }) {
   const [failed, setFailed] = useState(false);
-  return skill?.icon_path && !failed ? <img className="skill-icon" alt="" src={convertFileSrc(skill.icon_path)} onError={() => setFailed(true)}/> : <span className="skill-icon skill-icon-fallback" aria-hidden="true">◇</span>;
+  return skill?.icon_path && !failed ? <img className="skill-icon" alt="" loading="lazy" decoding="async" src={convertFileSrc(skill.icon_path)} onError={() => setFailed(true)}/> : <span className="skill-icon skill-icon-fallback" aria-hidden="true">◇</span>;
 }
 export function SkillPicker({ catalog, skills, onChange, recent, onRecent, showAll, onShowAll }: {
   catalog: Catalog; skills: StaminaBuild['skills']; onChange: (skills: StaminaBuild['skills']) => void;
@@ -17,7 +17,7 @@ export function SkillPicker({ catalog, skills, onChange, recent, onRecent, showA
   useLayoutEffect(() => { if (adding) typeahead.current?.scrollIntoView({ block: 'nearest' }); }, [adding, query, showAll]);
   const matches = useMemo(() => catalog.skills.filter(s => (showAll || s.global) && !skills.some(selected => selected.id === s.id))
     .map(skill => ({ skill, score: fuzzyScore(`${skill.name} ${skill.id}`, query), recent: recent.includes(skill.id) ? recent.indexOf(skill.id) : 100 }))
-    .filter(s => Number.isFinite(s.score)).sort((a, b) => a.recent - b.recent || a.score - b.score || a.skill.name.localeCompare(b.skill.name)).slice(0, 40), [catalog, skills, query, recent, showAll]);
+    .filter(s => Number.isFinite(s.score)).sort((a, b) => a.recent - b.recent || a.score - b.score || a.skill.name.localeCompare(b.skill.name)), [catalog, skills, query, recent, showAll]);
   const selected = Math.min(active, Math.max(0, matches.length - 1));
   const add = (skill: CatalogSkill) => {
     if (skills.length >= 100) return;
