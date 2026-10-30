@@ -21,7 +21,7 @@ export const catalog = {
   courses: pool.maps.map((map, i) => ({ id: map.id, track_name: map.track, distance: map.distance,
     surface: map.surface === 'Turf' ? 1 : 2, direction: map.direction === 'right' ? 1 : map.direction === 'left' ? 2 : 3,
     variant: map.variant, course_set_id: 10000 + i, race_instance_id: 9001 + i, race_id: 1000 + i,
-    grade: 100, time: 2, month: 4, instance_reason: 'Screenshot fixture on exact course', unavailable_reason: map.id === 'morioka-2000-dirt' ? 'Engine course geometry missing: courseeventparam 11504.' : null })),
+    grade: 100, time: 2, month: 4, instance_reason: 'Screenshot fixture on exact course', unavailable_reason: null })),
   skills: [{ id: 1, name: 'Replay Recovery', hp_recovery: true }, { id: 2, name: 'Replay Recovery II', hp_recovery: true }]
 };
 export function apiResponse(url) {
@@ -63,9 +63,7 @@ export function staminaResult(input) {
       full_spurt_at_entry_percent: rate(stamina, 950), avg_min_hp: Math.max(0, (stamina - 790) * .42) };
     const unconditional = { ...conditional, survival_percent: conditional.survival_percent * passRate,
       full_spurt_percent: conditional.full_spurt_percent * passRate, full_spurt_at_entry_percent: conditional.full_spurt_at_entry_percent * passRate };
-    const attempts = input.assume_heals_activate ? Math.ceil(samples / passRate) : samples;
-    return { stamina, seeds: attempts, conditional_samples: input.assume_heals_activate ? samples : Math.round(samples * passRate),
-      conditional, unconditional, ...(input.assume_heals_activate ? conditional : unconditional) };
+    return { stamina, seeds: samples, ...(input.assume_skills_activate ? conditional : unconditional) };
   };
   const curve = Array.from({ length: 17 }, (_, i) => point(600 + i * 50));
   const course = catalog.courses.find(c => c.id === input.race.map_id);
@@ -73,7 +71,7 @@ export function staminaResult(input) {
   const coef = [.95, .89, 1, .995][input.build.running_style - 1];
   const equivalent = stamina => fraction * (stamina + course.distance / (.8 * coef));
   return { input: structuredClone(input), request_id: input.request_id, curve, current: point(input.build.stats.stamina, seeds),
-    thresholds, threshold_samples: { full_spurt: { conditional: point(1050, seeds).conditional_samples, attempted: point(1050, seeds).seeds }, survival: { conditional: point(950, seeds).conditional_samples, attempted: point(950, seeds).seeds } }, needed_effective_stamina: { full_spurt: thresholds.full_spurt + equivalent(thresholds.full_spurt), survival: thresholds.survival + equivalent(thresholds.survival) },
+    thresholds, threshold_samples: { full_spurt: { seeds }, survival: { seeds } }, needed_effective_stamina: { full_spurt: thresholds.full_spurt + equivalent(thresholds.full_spurt), survival: thresholds.survival + equivalent(thresholds.survival) },
     effective_stamina: input.build.stats.stamina + equivalent(input.build.stats.stamina),
     heal_equivalents: input.build.skills.map(s => ({ skill_id: s.id, fraction: .055, stamina: equivalent(input.build.stats.stamina), variable: false })),
     seeds, races: 3456, elapsed_ms: 1250, ms_per_race: .36, course };

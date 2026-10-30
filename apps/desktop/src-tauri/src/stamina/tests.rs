@@ -25,7 +25,11 @@ fn input() -> Input {
         },
         field: Field::Pacemaker,
         seeds: Some(8),
-        assume_heals_activate: true,
+        assume_skills_activate: true,
+        rushed: true,
+        spot_struggle: false,
+        dueling: false,
+        lane_movement: true,
     }
 }
 #[test]
@@ -52,11 +56,7 @@ fn pool_maps_all_104_exact_courses_and_instances() {
         assert_eq!(instance.date / 100, c.month);
         let mut i = input();
         i.race.map_id = c.id.clone();
-        if c.unavailable_reason.is_some() {
-            assert_eq!(c.id, "morioka-2000-dirt");
-            assert!(validate(&i, e).unwrap_err().contains("geometry missing"));
-            continue;
-        }
+        assert!(c.unavailable_reason.is_none(), "{}", c.id);
         let sample = one_race(&race_input(&i, c), &e.data, &AtomicBool::new(false)).unwrap();
         assert!(sample.min_hp.is_finite(), "{}", c.id);
     }
@@ -71,7 +71,7 @@ fn pool_maps_all_104_exact_courses_and_instances() {
             .iter()
             .filter(|c| c.unavailable_reason.is_some())
             .count(),
-        1
+        0
     );
 }
 #[test]
@@ -164,7 +164,15 @@ fn validates_conditions_build_ids_and_defaults() {
     let mut v = serde_json::to_value(&i).unwrap();
     v.as_object_mut().unwrap().remove("seeds");
     v.as_object_mut().unwrap().remove("field");
-    v.as_object_mut().unwrap().remove("assume_heals_activate");
+    for key in [
+        "assume_skills_activate",
+        "rushed",
+        "spot_struggle",
+        "dueling",
+        "lane_movement",
+    ] {
+        v.as_object_mut().unwrap().remove(key);
+    }
     let decoded: Input = serde_json::from_value(v).unwrap();
     assert_eq!(decoded.seeds, None);
     assert_eq!(seed_count(&decoded, e), 256);
@@ -174,7 +182,9 @@ fn validates_conditions_build_ids_and_defaults() {
         level: 1,
     });
     assert_eq!(seed_count(&healing, e), 512);
-    assert!(decoded.assume_heals_activate);
+    assert!(decoded.assume_skills_activate);
+    assert!(decoded.rushed && decoded.lane_movement);
+    assert!(!decoded.spot_struggle && !decoded.dueling);
     assert_eq!(decoded.field, Field::AverageLobby);
     let course = validate(&decoded, e).unwrap();
     let field = race_input(&decoded, &course);
@@ -185,6 +195,8 @@ fn validates_conditions_build_ids_and_defaults() {
     )
     .unwrap();
     assert_eq!(multi.field, Field::AverageLobby);
+    assert!(multi.assume_skills_activate && multi.rushed && multi.lane_movement);
+    assert!(!multi.spot_struggle && !multi.dueling);
 }
 #[test]
 fn ground_weather_season_pass_through_exactly() {
@@ -280,8 +292,7 @@ fn effective_stamina_known_numbers_and_engine_heals() {
             r.input.build.running_style
         )
     );
-    assert_eq!(r.current.conditional_samples, r.seeds);
-    assert!(r.current.seeds >= r.seeds);
+    assert_eq!(r.current.seeds, r.seeds);
 }
 #[test]
 fn full_spurt_fixture_and_recording_do_not_change_result() {
@@ -361,9 +372,6 @@ fn stable_crossing_rejects_isolated_lucky_crossings() {
             Point {
                 stamina: s,
                 seeds: 8,
-                conditional_samples: 8,
-                unconditional: Rates::default(),
-                conditional: None,
                 survival_percent: rate,
                 full_spurt_percent: rate,
                 full_spurt_at_entry_percent: rate,
@@ -490,7 +498,11 @@ fn multi_race_validation_events_and_cancellation() {
         races,
         field: i.field,
         seeds: Some(1),
-        assume_heals_activate: i.assume_heals_activate,
+        assume_skills_activate: i.assume_skills_activate,
+        rushed: i.rushed,
+        spot_struggle: i.spot_struggle,
+        dueling: i.dueling,
+        lane_movement: i.lane_movement,
     };
     assert!(batch_inputs(make(vec![]), engine().unwrap()).is_err());
     assert!(batch_inputs(make(vec![i.race.clone(); 8]), engine().unwrap()).is_err());
@@ -550,6 +562,7 @@ fn benchmark_seed_banks() {
     for seeds in counts {
         for (map, style, field, skills) in [
             ("tokyo-1600-turf", 1, Field::Pacemaker, vec![]),
+            ("morioka-2000-dirt", 2, Field::AverageLobby, vec![]),
             ("tokyo-2000-turf", 2, Field::Pacemaker, vec![]),
             ("nakayama-2500-turf-inner", 2, Field::Pacemaker, vec![]),
             (
@@ -601,17 +614,17 @@ fn benchmark_seed_banks() {
             let b = run_bank(i, &AtomicBool::new(false), &|_| {}, 1).unwrap();
             let counts = |r: &CheckResult| {
                 serde_json::json!({
-                    "current": r.current.conditional_samples,
+                    "current": r.current.seeds,
                     "thresholds": r.threshold_samples,
-                    "curve": r.curve.iter().map(|p| serde_json::json!({"stamina": p.stamina, "conditional": p.conditional_samples, "attempts": p.seeds})).collect::<Vec<_>>(),
+                    "curve": r.curve.iter().map(|p| serde_json::json!({"stamina": p.stamina, "samples": p.seeds})).collect::<Vec<_>>(),
                 })
             };
             println!(
                 "FIXTURE {map} {field:?} seeds={seeds} a={:?} b={:?} current={}/{} ms={:.0}/{:.0}",
                 a.thresholds,
                 b.thresholds,
-                a.current.conditional_samples,
-                b.current.conditional_samples,
+                a.current.seeds,
+                b.current.seeds,
                 a.elapsed_ms,
                 b.elapsed_ms
             );
@@ -633,97 +646,93 @@ fn mapping_report() {
 }
 
 #[test]
-fn conditional_rates_keep_lottery_and_condition_failures_distinct() {
-    let samples = vec![
+fn rates_include_every_simulated_outcome() {
+    let samples = [
         Sample {
-            heals_passed: true,
             survival: true,
             full_spurt: true,
-            entry_full: true,
+            entry_full: false,
             min_hp: 100.0,
         },
         Sample {
-            heals_passed: false,
             survival: false,
             full_spurt: false,
             entry_full: false,
             min_hp: 0.0,
         },
         Sample {
-            heals_passed: true,
-            survival: false,
+            survival: true,
             full_spurt: false,
             entry_full: false,
-            min_hp: 0.0,
+            min_hp: 50.0,
         },
     ];
-    let on = point(800, &samples, true);
-    assert_eq!((on.seeds, on.conditional_samples), (3, 2));
-    assert_eq!(on.full_spurt_percent, 50.0);
-    assert_eq!(on.unconditional.full_spurt_percent, 100.0 / 3.0);
-    let off = point(800, &samples, false);
-    assert_eq!(off.full_spurt_percent, off.unconditional.full_spurt_percent);
-    assert_eq!(off.conditional, on.conditional);
+    let point = point(800, &samples);
+    assert_eq!(point.seeds, 3);
+    assert_eq!(point.full_spurt_percent, 100.0 / 3.0);
+    assert_eq!(point.survival_percent, 200.0 / 3.0);
+    assert_eq!(point.avg_min_hp, 50.0);
 }
 
 #[test]
-fn real_lottery_flags_require_every_heal_and_ignore_non_heals() {
+fn options_reach_engine_and_all_skills_pass_wit_only() {
     let e = engine().unwrap();
     let mut i = input();
+    i.build.stats.wiz = 1;
     i.build.skills = vec![
         SelectedSkill {
             id: 200351,
             level: 1,
         },
         SelectedSkill {
-            id: 200381,
+            id: 200331,
             level: 1,
         },
     ];
     let c = validate(&i, e).unwrap();
-    let mut saw_pass = false;
-    let mut saw_failure = false;
+    let mut failures = 0;
     for index in 0..32 {
-        let mut r = race_input(&i, &c);
-        r.random_seed = seed(index, 0);
-        let mut race = race::init(&r, &e.data);
-        tick::start(&mut race);
-        let expected = race.horses[0]
-            .skill_manager
-            .skills
-            .iter()
-            .all(|s| s.is_activate_enable);
-        let sample = one_race(&r, &e.data, &AtomicBool::new(false)).unwrap();
-        assert_eq!(sample.heals_passed, expected);
-        saw_pass |= expected;
-        saw_failure |= !expected;
-    }
-    assert!(saw_pass && saw_failure);
-    i.build.skills = vec![SelectedSkill {
-        id: 200331,
-        level: 1,
-    }];
-    let mut saw_non_heal_failure = false;
-    for index in 0..64 {
-        let mut r = race_input(&i, &c);
-        r.random_seed = seed(index, 0);
-        let mut race = race::init(&r, &e.data);
-        tick::start(&mut race);
-        if !race.horses[0].skill_manager.skills[0].is_activate_enable {
-            assert!(
-                one_race(&r, &e.data, &AtomicBool::new(false))
-                    .unwrap()
-                    .heals_passed
+        for enabled in [true, false] {
+            i.assume_skills_activate = enabled;
+            i.rushed = enabled;
+            i.spot_struggle = !enabled;
+            i.dueling = !enabled;
+            i.lane_movement = enabled;
+            let mut r = race_input(&i, &c);
+            assert_eq!(
+                r.analysis_options,
+                AnalysisOptions {
+                    skill_wiz_check: if enabled {
+                        SkillWizCheck::AlwaysPass
+                    } else {
+                        SkillWizCheck::Normal
+                    },
+                    rushed: enabled,
+                    spot_struggle: !enabled,
+                    dueling: !enabled,
+                    lane_movement: enabled
+                }
             );
-            saw_non_heal_failure = true;
-            break;
+            r.random_seed = seed(index, 0);
+            let mut race = race::init(&r, &e.data);
+            tick::start(&mut race);
+            let all = race.horses[0]
+                .skill_manager
+                .skills
+                .iter()
+                .all(|s| s.is_activate_enable);
+            if enabled {
+                assert!(all);
+            } else {
+                failures += usize::from(!all);
+            }
         }
     }
-    assert!(saw_non_heal_failure);
+    assert!(failures > 0);
 }
 
 #[test]
-fn lottery_success_does_not_force_a_condition_to_activate() {
+fn always_pass_keeps_impossible_position_conditions_in_the_rates() {
     let e = engine().unwrap();
     let mut data = GameData::load(engine_data_dir(), DataEra::current()).unwrap();
     let mut skill = data.skills[&200351].clone();
@@ -736,105 +745,52 @@ fn lottery_success_does_not_force_a_condition_to_activate() {
         id: 999991,
         level: 1,
     }];
-    let c = e
-        .catalog
-        .courses
-        .iter()
-        .find(|c| c.id == i.race.map_id)
-        .unwrap();
-    for index in 0..32 {
-        let mut r = race_input(&i, c);
-        r.random_seed = seed(index, 0);
-        let mut race = race::init(&r, &data);
-        tick::start(&mut race);
-        if !race.horses[0].skill_manager.skills[0].is_activate_enable {
-            continue;
-        }
-        let sample = one_race(&r, &data, &AtomicBool::new(false)).unwrap();
-        while !race.horses[0].is_finished {
-            tick::step(&mut race);
-        }
-        assert!(sample.heals_passed);
-        assert_eq!(
-            race.horses[0]
-                .activate_skill_count_by_phase
-                .iter()
-                .sum::<i32>(),
-            0
-        );
-        assert!(!sample.full_spurt);
-        return;
+    let c = validate(&input(), e).unwrap();
+    let r = race_input(&i, &c);
+    let mut race = race::init(&r, &data);
+    tick::start(&mut race);
+    assert!(race.horses[0].skill_manager.skills[0].is_activate_enable);
+    while !race.horses[0].is_finished {
+        tick::step(&mut race);
     }
-    panic!("fixture needs a passing lottery");
+    assert_eq!(
+        race.horses[0]
+            .activate_skill_count_by_phase
+            .iter()
+            .sum::<i32>(),
+        0
+    );
+    let sample = one_race(&r, &data, &AtomicBool::new(false)).unwrap();
+    let p = point(10, &[sample]);
+    assert_eq!(p.seeds, 1);
+    assert_eq!(p.full_spurt_percent, 0.0);
 }
 
 #[test]
-fn topups_fill_the_conditional_bank_and_current_uses_it() {
+fn every_seed_counts_with_assumption_on_or_off_and_current_uses_full_bank() {
     let mut i = input();
     i.seeds = Some(64);
     i.build.skills = vec![SelectedSkill {
         id: 200351,
         level: 1,
     }];
-    let e = engine().unwrap();
-    let c = validate(&i, e).unwrap();
     let token = AtomicBool::new(false);
-    let mut solver = Solver {
-        input: &i,
-        engine: e,
-        token: &token,
-        progress: &|_| {},
-        base: race_input(&i, &c),
-        cache: BTreeMap::new(),
-        samples: BTreeMap::new(),
-        races: 0,
-        bank: 0,
-        seeds: 64,
-    };
-    solver.evaluate([800, 900], 64).unwrap();
-    for p in solver.cache.values() {
-        assert_eq!(p.conditional_samples, 64);
-        assert!(p.seeds > 64);
+    for enabled in [true, false] {
+        i.assume_skills_activate = enabled;
+        let r = run(i.clone(), &token, &|_| {}).unwrap();
+        let repeat = run(i.clone(), &token, &|_| {}).unwrap();
+        assert_eq!(r.current, repeat.current);
+        assert_eq!(r.thresholds, repeat.thresholds);
+        assert_eq!(r.races, repeat.races);
+        assert_eq!(r.current.seeds, 64);
+        for counts in [r.threshold_samples.full_spurt, r.threshold_samples.survival]
+            .into_iter()
+            .flatten()
+        {
+            assert_eq!(counts.seeds, 64);
+        }
+        assert!(r.races <= 64 * 35);
     }
-    assert_eq!(
-        solver.samples[&800]
-            .iter()
-            .map(|s| s.heals_passed)
-            .collect::<Vec<_>>(),
-        solver.samples[&900]
-            .iter()
-            .map(|s| s.heals_passed)
-            .collect::<Vec<_>>()
-    );
-    i.build.stats.stamina = 825;
-    let r = run(i.clone(), &token, &|_| {}).unwrap();
-    let repeat = run(i.clone(), &token, &|_| {}).unwrap();
-    assert_eq!(r.thresholds, repeat.thresholds);
-    assert_eq!(r.curve, repeat.curve);
-    assert_eq!(r.current, repeat.current);
-    assert_eq!(r.races, repeat.races);
-    assert_eq!(r.current.conditional_samples, 64);
-    assert!(r.current.seeds > 64);
-    assert_eq!(
-        r.threshold_samples.full_spurt.as_ref().unwrap().conditional,
-        64
-    );
-    assert_eq!(
-        r.threshold_samples.survival.as_ref().unwrap().conditional,
-        64
-    );
-    assert_eq!(
-        r.current.full_spurt_percent,
-        r.current.conditional.as_ref().unwrap().full_spurt_percent
-    );
-    assert!(r.races < 64 * 35);
-    i.assume_heals_activate = false;
-    let off = run(i, &token, &|_| {}).unwrap();
-    assert_eq!(off.current.seeds, 64);
-    assert_eq!(
-        off.current.full_spurt_percent,
-        off.current.unconditional.full_spurt_percent
-    );
 }
 
 #[test]
@@ -875,43 +831,10 @@ fn effective_needs_use_each_true_threshold_without_a_second_solve() {
 }
 
 #[test]
-fn topups_are_bounded_and_seed_banks_remain_disjoint() {
-    let i = input();
-    let e = engine().unwrap();
-    let c = validate(&i, e).unwrap();
-    let token = AtomicBool::new(false);
-    let mut solver = Solver {
-        input: &i,
-        engine: e,
-        token: &token,
-        progress: &|_| {},
-        base: race_input(&i, &c),
-        cache: BTreeMap::new(),
-        samples: BTreeMap::new(),
-        races: 0,
-        bank: 0,
-        seeds: 8,
-    };
-    solver.samples.insert(
-        800,
-        vec![
-            Sample {
-                heals_passed: false,
-                survival: false,
-                full_spurt: false,
-                entry_full: false,
-                min_hp: 0.0
-            };
-            MAX_POINT_SEEDS
-        ],
-    );
-    assert!(solver
-        .evaluate([800], 8)
-        .unwrap_err()
-        .contains("Could not collect"));
-    let a: HashSet<_> = (0..MAX_POINT_SEEDS).map(|i| seed(i, 0)).collect();
-    assert_eq!(a.len(), MAX_POINT_SEEDS);
-    assert!((0..MAX_POINT_SEEDS).all(|i| !a.contains(&seed(i, 1))));
+fn seed_banks_remain_disjoint() {
+    let a: HashSet<_> = (0..1000).map(|i| seed(i, 0)).collect();
+    assert_eq!(a.len(), 1000);
+    assert!((0..1000).all(|i| !a.contains(&seed(i, 1))));
 }
 
 #[test]
