@@ -1,7 +1,7 @@
 import { load } from '@tauri-apps/plugin-store';
 import { defaultStaminaInput, type Catalog, type StaminaInput } from './staminaTypes';
 
-export interface StaminaMemory { input: StaminaInput; recent: number[]; showAll: boolean }
+export interface StaminaMemory { input: StaminaInput; draftInput?: StaminaInput; recent: number[] }
 const object = (value: unknown): Record<string, unknown> => value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 const integer = (value: unknown, low: number, high: number): value is number => typeof value === 'number' && Number.isInteger(value) && value >= low && value <= high;
 
@@ -27,19 +27,21 @@ export function restoreStaminaMemory(value: unknown, catalog: Catalog): StaminaM
     }
   }
   if (['average_lobby', 'mirror', 'pacemaker'].includes(String(raw.field))) input.field = raw.field as StaminaInput['field'];
+  if (raw.target === 90 || raw.target === 95 || raw.target === 99) input.target = raw.target;
   if (integer(raw.seeds, 1, 1000)) input.seeds = raw.seeds;
   for (const key of ['assume_skills_activate', 'rushed', 'spot_struggle', 'dueling', 'lane_movement'] as const) if (typeof raw[key] === 'boolean') input[key] = raw[key];
-  return { input, recent: Array.isArray(saved.recent) ? [...new Set(saved.recent.filter((id): id is number => typeof id === 'number' && catalog.skills.some(s => s.id === id)))].slice(0, 30) : [], showAll: saved.showAll === true };
+  return { input, ...(saved.draftInput ? { draftInput: restoreStaminaMemory({ input: saved.draftInput }, catalog).input } : {}), recent: Array.isArray(saved.recent) ? [...new Set(saved.recent.filter((id): id is number => typeof id === 'number' && catalog.skills.some(s => s.id === id)))].slice(0, 30) : [] };
 }
 
 let store: ReturnType<typeof load> | undefined;
-const getStore = () => store ??= load('stamina.json', { autoSave: false, defaults: {} });
+export const getStaminaStore = () => store ??= load('stamina.json', { autoSave: false, defaults: {} });
 let saving = Promise.resolve();
-export async function loadStaminaMemory(catalog: Catalog) { return restoreStaminaMemory(await (await getStore()).get('last-inputs-v1'), catalog); }
+export async function loadStaminaMemory(catalog: Catalog) { return restoreStaminaMemory(await (await getStaminaStore()).get('last-inputs-v1'), catalog); }
 export function saveStaminaMemory(memory: StaminaMemory) {
   const snapshot = structuredClone(memory);
   snapshot.input.request_id = '';
-  saving = saving.catch(() => {}).then(async () => { const target = await getStore(); await target.set('last-inputs-v1', snapshot); await target.save(); });
+  if (snapshot.draftInput) snapshot.draftInput.request_id = '';
+  saving = saving.catch(() => {}).then(async () => { const target = await getStaminaStore(); await target.set('last-inputs-v1', snapshot); await target.save(); });
   return saving;
 }
 

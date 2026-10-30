@@ -1,3 +1,4 @@
+import kits from '../src-tauri/data/role-kits.json' with { type: 'json' };
 import pool from '../src-tauri/data/drafter-map-pool-global.json' with { type: 'json' };
 import { replayEnvelopes } from './replay-fixture.mjs';
 import fixture from '../../../tests/fixtures/casual-room-replay.json' with { type: 'json' };
@@ -23,10 +24,10 @@ export const catalog = {
     variant: map.variant, course_set_id: 10000 + i, race_instance_id: 9001 + i, race_id: 1000 + i,
     grade: 100, time: 2, month: 4, instance_reason: 'Screenshot fixture on exact course', unavailable_reason: null })),
   local_skill_data: true,
-  skills: [{ id: 1, name: 'Replay Recovery', hp_recovery: true, global: true, rarity: 'gold', icon_path: 'fixture-heal.webp' },
-    { id: 2, name: 'Replay Recovery II', hp_recovery: true, global: true, rarity: 'white', icon_path: 'fixture-heal.webp' },
-    { id: 3, name: 'Replay Unique', hp_recovery: false, global: true, rarity: 'unique', icon_path: 'fixture-heal.webp' },
-    { id: 4, name: 'Replay All Regions', hp_recovery: false, global: false, rarity: 'white', icon_path: 'fixture-heal.webp' }]
+  skills: [{ id: 1, name: 'Replay Recovery', hp_recovery: true, rarity: 'gold', icon_path: 'fixture-heal.webp' },
+    { id: 2, name: 'Replay Recovery II', hp_recovery: true, rarity: 'white', icon_path: 'fixture-heal.webp' },
+    { id: 3, name: 'Replay Unique', hp_recovery: false, rarity: 'unique', icon_path: 'fixture-heal.webp' },
+    { id: 201241, name: 'Front Runner Straightaways ◎', hp_recovery: false, rarity: 'white', icon_path: 'fixture-heal.webp' }, ...[...new Set([...Object.values(kits).filter(Array.isArray).flat(), 202051, 210052])].map(id => ({ id, name: id === 202051 ? 'Runaway' : id === 210052 ? 'Ignited Spirit WIT' : `Fixture kit skill ${id}`, hp_recovery: false, rarity: 'white', icon_path: null }))]
 };
 export function apiResponse(url) {
   const parsed = new URL(url);
@@ -57,12 +58,12 @@ export function apiResponse(url) {
   }
   throw new Error(`Unexpected API path: ${parsed.pathname}`);
 }
-export function staminaResult(input) {
+export function staminaResult(input, thresholdOffset = 0) {
   const healing = input.build.skills.filter(s => catalog.skills.find(meta => meta.id === s.id)?.hp_recovery);
-  const seeds = input.seeds ?? (healing.length ? 512 : 256);
+  const seeds = (input.seeds ?? (healing.length ? 512 : 256)) * (input.target === 99 ? 10 : input.target === 95 ? 2 : 1);
   const fraction = .055 * healing.length;
   const passRate = .925 ** healing.length;
-  const rate = (stamina, center) => Math.min(100, Math.max(0, 100 / (1 + Math.exp(-(stamina - center) / 57))));
+  const rate = (stamina, center) => Math.min(100, Math.max(0, 100 / (1 + Math.exp(-(stamina - center - thresholdOffset) / 57))));
   const point = (stamina, samples = 32) => {
     const conditional = { survival_percent: rate(stamina, 820), full_spurt_percent: rate(stamina, 920),
       full_spurt_at_entry_percent: rate(stamina, 950), avg_min_hp: Math.max(0, (stamina - 790) * .42) };
@@ -73,8 +74,9 @@ export function staminaResult(input) {
   };
   const curve = Array.from({ length: 17 }, (_, i) => point(600 + i * 50));
   const course = catalog.courses.find(c => c.id === input.race.map_id);
-  const thresholds = { joint: 1070, full_spurt: 1050, survival: 950 };
-  const coef = [.95, .89, 1, .995][input.build.running_style - 1];
+  const offset = thresholdOffset + (input.target === 99 ? 150 : input.target === 95 ? 50 : 0);
+  const thresholds = { joint: 1070 + offset, full_spurt: 1050 + offset, survival: 950 + offset };
+  const coef = input.build.running_style === 1 && input.build.skills.some(s => s.id === 202051) ? .86 : [.95, .89, 1, .995][input.build.running_style - 1];
   const equivalent = stamina => fraction * (stamina + course.distance / (.8 * coef));
   return { input: structuredClone(input), request_id: input.request_id, curve, current: point(input.build.stats.stamina, seeds),
     thresholds, threshold_samples: { joint: { seeds }, full_spurt: { seeds }, survival: { seeds } }, needed_effective_stamina: { joint: thresholds.joint + equivalent(thresholds.joint), full_spurt: thresholds.full_spurt + equivalent(thresholds.full_spurt), survival: thresholds.survival + equivalent(thresholds.survival) },

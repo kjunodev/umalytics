@@ -1,3 +1,4 @@
+import { draftSnapshotFixture } from '../../../tests/fixtures/stamina-draft.mjs';
 import { mockIPC, mockWindows, mockConvertFileSrc } from '@tauri-apps/api/mocks';
 import { emit } from '@tauri-apps/api/event';
 import { apiResponse, catalog, messages, staminaResult } from './shots-fixture.mjs';
@@ -8,7 +9,13 @@ const stores = new Map([[1, 'shell.json'], [2, 'profiles.json']]);
 const calls = [];
 let id = 10;
 let pending;
-window.__SHOT_CONTROL__ = { calls, emit, slow: false };
+const draftMessage = (partial, version = 1001) => {
+  const snapshot = draftSnapshotFixture(partial);
+  const raw = m => ({ id: m.mapId, track: m.track, distance: m.distance, surface: m.surface, variant: m.variant, conditions: { ground: m.ground, weather: m.weather, season: m.season } });
+  const side = team => ({ pickedMaps: snapshot.teams[team].maps.map(raw), bannedMaps: [], pickedUmas: [], bannedUmas: [], preBannedUmas: [] });
+  return { v: 1, roomCode: 'ABC123', event: { type: 'match.snapshot', matchId: 'ABC123', version, state: { phase: snapshot.phase, team1: side('team1'), team2: side('team2'), wildcardMap: snapshot.tiebreakerMap ? raw(snapshot.tiebreakerMap) : undefined } } };
+};
+window.__SHOT_CONTROL__ = { calls, emit, draftMessage, slow: false };
 mockWindows('main');
 mockConvertFileSrc('windows');
 mockIPC(async (command, args) => {
@@ -31,10 +38,22 @@ mockIPC(async (command, args) => {
     if (scene !== 'empty') setTimeout(async () => { for (const message of messages) await emit('feed-message', message); }, 0);
     return { state: scene === 'empty' ? 'listening' : 'connected', accepted: scene === 'empty' ? 0 : messages.length, rejected: 0 };
   }
-  if (command === 'engine_catalog') return scene === 'stamina-no-data' ? { ...catalog, local_skill_data: false, skills: catalog.skills.map(s => ({ ...s, global: true, icon_path: null })) } : catalog;
+  if (command === 'engine_catalog') return scene === 'stamina-no-data' ? { ...catalog, local_skill_data: false, skills: catalog.skills.map(s => ({ ...s, icon_path: null })) } : catalog;
   if (command === 'stamina_check') {
     if (window.__SHOT_CONTROL__.slow) return new Promise((resolve, reject) => { pending = { resolve, reject }; void emit('stamina-progress', { request_id: args.input.request_id, completed: 100, total: 544, stage: 'mapping', percent: 15 }); });
     return staminaResult(args.input);
+  }
+  if (command === 'stamina_check_races') {
+    const results = [];
+    for (const [index, race] of args.input.races.entries()) {
+      const { races: _races, ...input } = args.input;
+      const result = staminaResult({ ...input, race }, index < 2 ? -400 : index * 20); results.push(result);
+      await emit('stamina-progress', { request_id: input.request_id, map_id: race.map_id, stage: 'refining', percent: (index * 100 + 65) / args.input.races.length, race_index: index, race_total: args.input.races.length });
+      await emit('stamina-race-result', { request_id: input.request_id, index, total: args.input.races.length, result });
+      if (window.__SHOT_CONTROL__.slow && index === 1) return new Promise((resolve, reject) => { pending = { resolve, reject }; });
+    }
+    await emit('stamina-progress', { request_id: args.input.request_id, stage: 'done', percent: 100, race_index: results.length - 1, race_total: results.length });
+    return results;
   }
   if (command === 'cancel_stamina_check') { pending?.reject('Simulation cancelled.'); pending = undefined; return; }
   if (command === 'plugin:http|fetch') { const rid = ++id; requests.set(rid, { url: args.clientConfig.url, body: apiResponse(args.clientConfig.url) }); return rid; }
