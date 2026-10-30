@@ -30,7 +30,7 @@ test('stamina memory restores race, conditions, every build field and advanced o
   input.build.skills = [{ id: 1, level: 6 }, { id: 2, level: 1 }];
   for (const key of ['assume_skills_activate', 'rushed', 'lane_movement']) input[key] = false;
   input.dueling = true; input.spot_struggle = true; input.seeds = 512;
-  assert.deepEqual(plain(restoreStaminaMemory({ input, recent: [2, 1], showAll: true }, catalog)), { input, recent: [2, 1], showAll: true });
+  assert.deepEqual(plain(restoreStaminaMemory({ input, recent: [2, 1], showAll: true }, catalog)), { input, recent: [2, 1] });
 });
 
 test('stamina memory rejects corrupt values, stale skill IDs and duplicate skills', () => {

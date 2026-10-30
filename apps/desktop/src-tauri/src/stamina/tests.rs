@@ -1,4 +1,148 @@
 use super::*;
+
+#[test]
+fn bundled_role_kits_only_reference_catalog_skills() {
+    let e = engine().unwrap();
+    let kits: serde_json::Value =
+        serde_json::from_str(include_str!("../../data/role-kits.json")).unwrap();
+    let mut count = 0;
+    for role in ["front", "pace", "late", "end", "runaway"] {
+        let mut seen = HashSet::new();
+        for id in kits[role].as_array().unwrap() {
+            let id = id.as_i64().unwrap() as i32;
+            assert!(seen.insert(id), "Duplicate {id} in {role}");
+            let skill = e
+                .catalog
+                .skills
+                .iter()
+                .find(|s| s.id == id)
+                .unwrap_or_else(|| panic!("Unknown {role} skill {id}"));
+            assert_ne!(skill.rarity, "unique", "User unique in kit {role}: {id}");
+            assert!(!skill.hp_recovery, "Heal in kit {role}: {id}");
+            count += 1;
+        }
+    }
+    assert_eq!(count, 69);
+}
+
+#[test]
+fn catalog_includes_upgrades_and_scenario_skills_without_region_flags() {
+    let e = engine().unwrap();
+    for id in [201241, 210052, 202051] {
+        let skill = e.catalog.skills.iter().find(|s| s.id == id).unwrap();
+        let payload = serde_json::to_value(skill).unwrap();
+        assert!(payload.get("global").is_none());
+        let mut i = input();
+        i.build.skills.push(SelectedSkill { id, level: 1 });
+        assert!(validate(&i, e).is_ok());
+    }
+}
+
+#[test]
+fn runaway_is_front_with_skill_and_changes_engine_behavior() {
+    use uma_race_sim::sim::defs::RunningStyleEx;
+    let e = engine().unwrap();
+    let mut i = input();
+    i.build.running_style = 1;
+    let c = validate(&i, e).unwrap();
+    let front_input = race_input(&i, &c);
+    let mut front = race::init(&front_input, &e.data);
+    tick::start(&mut front);
+    i.build.skills.push(SelectedSkill {
+        id: 202051,
+        level: 1,
+    });
+    let runaway_input = race_input(&i, &c);
+    let mut runaway = race::init(&runaway_input, &e.data);
+    tick::start(&mut runaway);
+    assert_eq!(
+        front.horses[0].horse_data.running_style_ex,
+        RunningStyleEx::None
+    );
+    assert_eq!(
+        runaway.horses[0].horse_data.running_style_ex,
+        RunningStyleEx::Oonige
+    );
+    assert!(runaway.horses[0].max_hp < front.horses[0].max_hp);
+    for _ in 0..300 {
+        tick::step(&mut front);
+        tick::step(&mut runaway);
+    }
+    assert_ne!(front.horses[0].distance, runaway.horses[0].distance);
+    assert_eq!(effective_style(&i.build), 5);
+    assert!(heal_equivalent(800, 2500, 5, 0.055) > heal_equivalent(800, 2500, 1, 0.055));
+}
+
+#[test]
+fn targets_reject_100_and_scale_sampling_without_changing_90() {
+    let e = engine().unwrap();
+    let mut i = input();
+    i.seeds = None;
+    for (target, samples) in [(90, 256), (95, 512), (99, 2560)] {
+        i.target = target;
+        assert!(validate(&i, e).is_ok());
+        assert_eq!(seed_count(&i, e), samples);
+        i.build.skills = vec![SelectedSkill {
+            id: 200351,
+            level: 1,
+        }];
+        assert_eq!(seed_count(&i, e), samples * 2);
+        i.build.skills.clear();
+    }
+    for target in [0, 89, 91, 100] {
+        i.target = target;
+        assert!(validate(&i, e).is_err());
+    }
+    let p = Point {
+        joint_percent: 95.0,
+        survival_percent: 99.0,
+        full_spurt_percent: 95.0,
+        full_spurt_at_entry_percent: 95.0,
+        avg_min_hp: 1.0,
+        seeds: 100,
+        stamina: 1000,
+    };
+    let points = BTreeMap::from([(1000, p)]);
+    assert_eq!(
+        stable_crossing(&points, |p| p.joint_percent, 95),
+        Some(1000)
+    );
+    assert_eq!(stable_crossing(&points, |p| p.joint_percent, 99), None);
+}
+
+#[test]
+#[ignore = "local target stability measurement; two seed banks at each target"]
+fn measure_targets() {
+    for (map, style, heal) in [
+        ("kyoto-3000-turf-outer", 4, true),
+        ("hanshin-3200-turf-outer-to-inner", 1, false),
+    ] {
+        for target in [90, 95, 99] {
+            for bank in [0, 1] {
+                let mut i = input();
+                i.seeds = None;
+                i.field = Field::AverageLobby;
+                i.target = target;
+                i.race.map_id = map.into();
+                i.build.running_style = style;
+                i.build.stats.speed = 1600;
+                i.build.stats.pow = 1200;
+                i.build.stats.wiz = 1200;
+                if heal {
+                    i.build.skills.push(SelectedSkill {
+                        id: 200351,
+                        level: 1,
+                    });
+                }
+                let r = run_bank(i, &AtomicBool::new(false), &|_| {}, bank).unwrap();
+                println!(
+                    "TARGET_MEASUREMENT {}",
+                    serde_json::json!({"map":map,"target":target,"bank":bank,"thresholds":r.thresholds,"effective":r.needed_effective_stamina,"seeds":r.seeds,"races":r.races,"ms":r.elapsed_ms})
+                );
+            }
+        }
+    }
+}
 fn input() -> Input {
     Input {
         request_id: "test".into(),
@@ -25,6 +169,7 @@ fn input() -> Input {
         },
         field: Field::Pacemaker,
         seeds: Some(8),
+        target: 90,
         assume_skills_activate: true,
         rushed: true,
         spot_struggle: false,
@@ -380,7 +525,10 @@ fn stable_crossing_rejects_isolated_lucky_crossings() {
             },
         );
     }
-    assert_eq!(stable_crossing(&points, |p| p.survival_percent), Some(750));
+    assert_eq!(
+        stable_crossing(&points, |p| p.survival_percent, 90),
+        Some(750)
+    );
     // Raising the required rate cannot lower the crossing.
     let mut prior = 0;
     for target in 80..=100 {
@@ -503,6 +651,7 @@ fn multi_race_validation_events_and_cancellation() {
         races,
         field: i.field,
         seeds: Some(1),
+        target: 90,
         assume_skills_activate: i.assume_skills_activate,
         rushed: i.rushed,
         spot_struggle: i.spot_struggle,
@@ -552,6 +701,25 @@ fn multi_race_validation_events_and_cancellation() {
         })
         .is_err()
     );
+    assert_eq!(count.load(Ordering::Relaxed), 1);
+
+    // Cancellation after the completed-race progress event must retain that
+    // race's result, even when it arrives before the result event is emitted.
+    let token = AtomicBool::new(false);
+    let count = AtomicUsize::new(0);
+    assert!(run_races(
+        make(vec![i.race.clone(); 2]),
+        &token,
+        &|p| {
+            if p.stage == "done" {
+                token.store(true, Ordering::Relaxed);
+            }
+        },
+        &|_| {
+            count.fetch_add(1, Ordering::Relaxed);
+        },
+    )
+    .is_err());
     assert_eq!(count.load(Ordering::Relaxed), 1);
 }
 #[test]

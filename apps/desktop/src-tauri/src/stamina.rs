@@ -60,7 +60,6 @@ pub struct Skill {
     id: i32,
     name: String,
     hp_recovery: bool,
-    global: bool,
     rarity: String,
     icon_path: Option<String>,
 }
@@ -213,7 +212,6 @@ fn load_engine() -> Result<Engine, String> {
         .keys()
         .map(|id| Skill {
             id: *id,
-            global: true,
             rarity: skill_data::rarity(data.skills[id].rarity).into(),
             icon_path: None,
             hp_recovery: hp_recovery(&data.skills[id]),
@@ -226,6 +224,16 @@ fn load_engine() -> Result<Engine, String> {
                 .unwrap_or_else(|| format!("Skill {id}")),
         })
         .collect();
+    let kits: serde_json::Value =
+        serde_json::from_str(include_str!("../data/role-kits.json")).map_err(|e| e.to_string())?;
+    for role in ["front", "pace", "late", "end", "runaway"] {
+        for id in kits[role].as_array().ok_or("Invalid role kit")? {
+            let id = id.as_i64().ok_or("Invalid role skill ID")? as i32;
+            if !data.skills.contains_key(&id) {
+                return Err(format!("Unknown role kit skill {id}"));
+            }
+        }
+    }
     let local_skill_data = skill_data::enrich(&mut skills);
     skills.sort_by_key(|s| (s.name.clone(), s.id));
     Ok(Engine {
@@ -285,7 +293,7 @@ fn default_seeds() -> usize {
     256
 }
 fn seed_count(input: &Input, engine: &Engine) -> usize {
-    input.seeds.unwrap_or_else(|| {
+    let base = input.seeds.unwrap_or_else(|| {
         if input
             .build
             .skills
@@ -296,7 +304,19 @@ fn seed_count(input: &Input, engine: &Engine) -> usize {
         } else {
             default_seeds()
         }
-    })
+    });
+    base * target_scale(input.target)
+}
+fn default_target() -> i32 {
+    90
+}
+// Keep roughly the same expected number of failures at the target crossing.
+fn target_scale(target: i32) -> usize {
+    match target {
+        95 => 2,
+        99 => 10,
+        _ => 1,
+    }
 }
 fn default_true() -> bool {
     true
@@ -319,6 +339,8 @@ pub struct Input {
     field: Field,
     #[serde(default)]
     seeds: Option<usize>,
+    #[serde(default = "default_target")]
+    target: i32,
     #[serde(default = "default_true")]
     assume_skills_activate: bool,
     #[serde(default = "default_true")]
@@ -341,6 +363,8 @@ pub struct MultiInput {
     field: Field,
     #[serde(default)]
     seeds: Option<usize>,
+    #[serde(default = "default_target")]
+    target: i32,
     #[serde(default = "default_true")]
     assume_skills_activate: bool,
     #[serde(default = "default_true")]
@@ -366,6 +390,9 @@ fn validate(input: &Input, engine: &Engine) -> Result<Course, String> {
     range("Ground condition", input.race.ground_condition, 1, 4)?;
     range("Weather", input.race.weather, 1, 4)?;
     range("Season", input.race.season, 1, 4)?;
+    if ![90, 95, 99].contains(&input.target) {
+        return Err("Target must be 90%, 95% or 99%.".into());
+    }
     let b = &input.build;
     range("Running style", b.running_style, 1, 4)?;
     range("Motivation", b.motivation, 1, 5)?;
@@ -530,6 +557,8 @@ pub struct Progress {
     completed: usize,
     total: usize,
     stage: &'static str,
+    race_index: usize,
+    race_total: usize,
     percent: f64,
 }
 #[derive(Clone, Serialize)]
@@ -675,8 +704,15 @@ fn one_race(input: &RaceInput, data: &GameData, token: &AtomicBool) -> Result<Sa
     Err("The race engine exceeded the race time limit.".into())
 }
 fn heal_equivalent(stamina: i32, distance: i32, style: i32, fraction: f64) -> f64 {
-    let coef = [0.95, 0.89, 1.0, 0.995][(style - 1) as usize];
+    let coef = [0.95, 0.89, 1.0, 0.995, 0.86][(style - 1) as usize];
     fraction * (f64::from(stamina) + f64::from(distance) / (0.8 * coef))
+}
+fn effective_style(build: &Build) -> i32 {
+    if build.running_style == 1 && build.skills.iter().any(|s| s.id == 202051) {
+        5
+    } else {
+        build.running_style
+    }
 }
 fn heals(input: &Input, engine: &Engine, distance: i32) -> Vec<HealEquivalent> {
     input
@@ -716,7 +752,7 @@ fn heals(input: &Input, engine: &Engine, distance: i32) -> Vec<HealEquivalent> {
                 stamina: heal_equivalent(
                     input.build.stats.stamina,
                     distance,
-                    input.build.running_style,
+                    effective_style(&input.build),
                     fraction,
                 ),
                 variable: abilities.iter().any(|a| {
@@ -816,6 +852,8 @@ impl Solver<'_> {
         };
         (self.progress)(Progress {
             request_id: self.input.request_id.clone(),
+            race_index: 0,
+            race_total: 1,
             map_id: self.input.race.map_id.clone(),
             completed: offset,
             total: offset + total,
@@ -850,6 +888,8 @@ impl Solver<'_> {
                                 if count.is_multiple_of(32) || count == total {
                                     (this.progress)(Progress {
                                         request_id: this.input.request_id.clone(),
+                                        race_index: 0,
+                                        race_total: 1,
                                         map_id: this.input.race.map_id.clone(),
                                         completed: offset + count,
                                         total: offset + total,
@@ -897,11 +937,11 @@ impl Solver<'_> {
         // Promote the coarse crossing and the preceding value to the full seed
         // bank; walk either way until the bracket is stable at that sample count.
         let (mut low, mut high) = loop {
-            let high = match stable_crossing(&self.cache, metric) {
+            let high = match stable_crossing(&self.cache, metric, self.input.target) {
                 Some(high) => high,
                 None => {
                     self.evaluate([2000], seeds)?;
-                    match stable_crossing(&self.cache, metric) {
+                    match stable_crossing(&self.cache, metric, self.input.target) {
                         Some(high) => high,
                         None => return Ok(None),
                     }
@@ -918,23 +958,23 @@ impl Solver<'_> {
                 continue;
             }
             self.evaluate([low, high].into_iter().filter(|s| *s > 0), seeds)?;
-            if stable_crossing(&self.cache, metric) == Some(high) {
+            if stable_crossing(&self.cache, metric, self.input.target) == Some(high) {
                 break (low, high);
             }
         };
         while high - low > 10 {
             let middle = ((low + high) / 20) * 10;
             self.evaluate([middle], seeds)?;
-            if metric(&self.cache[&middle]) >= 90.0 {
+            if metric(&self.cache[&middle]) >= f64::from(self.input.target) {
                 high = middle;
             } else {
                 low = middle;
             }
         }
-        Ok(stable_crossing(&self.cache, metric))
+        Ok(stable_crossing(&self.cache, metric, self.input.target))
     }
     fn solve(&mut self) -> Result<Thresholds, String> {
-        let curve_seeds = self.seeds.min(32);
+        let curve_seeds = self.seeds.min(32 * target_scale(self.input.target));
         self.evaluate((600..=1400).step_by(50), curve_seeds)?;
         let thresholds = loop {
             let full_spurt = self.threshold(|p| p.full_spurt_percent)?;
@@ -942,8 +982,10 @@ impl Solver<'_> {
             let joint = self.threshold(|p| p.joint_percent)?;
             // All metrics share seeds and cached outcomes. A refinement can
             // reveal a dip in an earlier metric; reconcile every crossing.
-            if full_spurt == stable_crossing(&self.cache, |p| p.full_spurt_percent)
-                && survival == stable_crossing(&self.cache, |p| p.survival_percent)
+            if full_spurt
+                == stable_crossing(&self.cache, |p| p.full_spurt_percent, self.input.target)
+                && survival
+                    == stable_crossing(&self.cache, |p| p.survival_percent, self.input.target)
             {
                 break Thresholds {
                     joint,
@@ -999,12 +1041,16 @@ fn effective_thresholds(
     }
 }
 
-fn stable_crossing(points: &BTreeMap<i32, Point>, metric: fn(&Point) -> f64) -> Option<i32> {
+fn stable_crossing(
+    points: &BTreeMap<i32, Point>,
+    metric: fn(&Point) -> f64,
+    target: i32,
+) -> Option<i32> {
     let mut minimum = 100.0_f64;
     let mut crossing = None;
     for (stamina, point) in points.iter().rev().filter(|(s, _)| **s % 10 == 0) {
         minimum = minimum.min(metric(point));
-        if minimum >= 90.0 {
+        if minimum >= f64::from(target) {
             crossing = Some(*stamina);
         }
     }
@@ -1066,11 +1112,13 @@ fn run_bank(
         &thresholds,
         &equivalents,
         course.distance,
-        input.build.running_style,
+        effective_style(&input.build),
     );
     cancelled(token)?;
     let elapsed_ms = start.elapsed().as_secs_f64() * 1000.0;
     progress(Progress {
+        race_index: 0,
+        race_total: 1,
         request_id: input.request_id.clone(),
         map_id: input.race.map_id.clone(),
         completed: races,
@@ -1109,6 +1157,7 @@ fn batch_inputs(input: MultiInput, engine: &Engine) -> Result<Vec<Input>, String
             race,
             field: input.field,
             seeds: input.seeds,
+            target: input.target,
             assume_skills_activate: input.assume_skills_activate,
             rushed: input.rushed,
             spot_struggle: input.spot_struggle,
@@ -1134,8 +1183,12 @@ fn run_races(
     let mut results = Vec::with_capacity(total);
     for (index, input) in inputs.into_iter().enumerate() {
         cancelled(token)?;
-        let completed = run(input, token, progress)?;
-        cancelled(token)?;
+        let completed = run(input, token, &|mut p| {
+            p.race_index = index;
+            p.race_total = total;
+            p.percent = (index as f64 * 100.0 + p.percent) / total as f64;
+            progress(p);
+        })?;
         result(RaceResultEvent {
             request_id: completed.request_id.clone(),
             index,

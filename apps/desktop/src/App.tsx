@@ -138,14 +138,14 @@ export function App() {
         <span className="compact-room num" title={feedLabel}><i className={status?.state === 'connected' ? 'live-dot' : 'idle-dot'}/>{code ?? 'No room'}</span>
         <button className="icon-button" aria-label="Pin on top" aria-pressed={pinned} disabled={windowBusy} onClick={() => { void togglePin(); }}><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 2h4l-.5 4 2.5 2v1H4V8l2.5-2L6 2zM8 9v5"/></svg></button>
         <button className="icon-button" aria-label="Expand to full mode" disabled={windowBusy} onClick={() => { void toggleMode(); }}><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M9.5 2.5h4v4M6.5 13.5h-4v-4M13.5 2.5 9 7M2.5 13.5 7 9"/></svg></button>
-      </header> : <header className="page-header"><h1>{page === 'Stamina' ? 'Stamina check' : page}</h1><span className="subtitle">{page === 'Stamina' ? 'Full spurt and survival at 90%' : page === 'Lobby' ? code ? `${roster?.players.length ?? 0} players · ${phaseLabel(draft?.phase)}` : 'Waiting for a live room' : page === 'Draft' ? phaseLabel(draft?.phase) : ''}</span>
+      </header> : <header className="page-header"><h1>{page === 'Stamina' ? 'Stamina check' : page}</h1><span className="subtitle">{page === 'Stamina' ? 'Full spurt and survival' : page === 'Lobby' ? code ? `${roster?.players.length ?? 0} players · ${phaseLabel(draft?.phase)}` : 'Waiting for a live room' : page === 'Draft' ? phaseLabel(draft?.phase) : ''}</span>
         <div className="page-actions">{['Lobby', 'Draft', 'Players', 'History', 'Umas'].includes(page) && <div className="seg" role="group" aria-label="Stats scope">{(['currentSeason', 'allTime'] as const).map(value => <button key={value} aria-pressed={scope === value} onClick={() => setScope(value)}>{value === 'currentSeason' ? 'Season' : 'All-time'}</button>)}</div>}
         <button disabled={windowBusy} onClick={() => { void toggleMode(); }}>Compact</button></div></header>}
       <main className="content">
         {(shellError || feedError || profileError) && <div role="alert">{shellError || feedError || profileError}{profileError && <button onClick={() => setRefresh(value => value + 1)}>Retry stats</button>}</div>}
         {displayedPage === 'Lobby' && <Lobby roster={roster} profiles={profiles} loading={profilesLoading} compact={compact} scope={scope} emptyStatus={feedLabel} onOpenMatch={openMatch} onRetry={() => setRefresh(value => value + 1)}/>}
         {displayedPage === 'Draft' && (compact ? <Draft draft={draft}/> : <DraftScene snapshot={draft} roster={roster} profiles={profiles} statsScope={scope}/>)}
-        <div className="desktop-tool" hidden={displayedPage !== 'Stamina'}><Stamina/></div>
+        <div className="desktop-tool" hidden={displayedPage !== 'Stamina'}><Stamina draft={draft}/></div>
         <div hidden={displayedPage !== 'Players'}><PlayersView roster={roster} statsScope={scope} active={displayedPage === 'Players'} onOpenMatch={openMatch}/></div>
         {displayedPage === 'History' && <>
           <div className="history-tabs seg" role="group" aria-label="History view">{(['lobby', 'draft', 'umas'] as const).map(scene => <button key={scene} aria-pressed={historyScene === scene} onClick={() => setHistoryScene(scene)}>{scene === 'lobby' ? 'Lobby' : scene === 'draft' ? 'Draft' : 'Umas'}</button>)}</div>

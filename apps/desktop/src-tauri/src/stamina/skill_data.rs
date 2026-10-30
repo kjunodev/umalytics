@@ -42,22 +42,17 @@ fn icon_path(dir: &Path, icon: i64) -> Option<String> {
 fn apply(skills: &mut [Skill], rows: &[Value], dir: &Path) {
     let mut metadata = HashMap::new();
     for row in rows {
-        let global = row.pointer("/loc/en").is_some_and(Value::is_object);
         if let Some(id) = row["id"].as_i64() {
-            metadata.insert(id, (row, global, false));
+            metadata.insert(id, (row, false));
         }
         if let Some(gene) = row.get("gene_version") {
             if let Some(id) = gene["id"].as_i64() {
-                metadata.insert(id, (gene, global, true));
+                metadata.insert(id, (gene, true));
             }
         }
     }
     for skill in skills {
-        // When local metadata exists, unlisted skills have no verified Global
-        // release. Without metadata the complete engine catalog stays usable.
-        skill.global = false;
-        if let Some((row, global, inherited)) = metadata.get(&i64::from(skill.id)) {
-            skill.global = *global;
+        if let Some((row, inherited)) = metadata.get(&i64::from(skill.id)) {
             if let Some(name) = row["name_en"]
                 .as_str()
                 .or_else(|| row["enname"].as_str())
@@ -100,12 +95,11 @@ fn enrich_from(skills: &mut [Skill], dir: &Path) -> bool {
 mod tests {
     use super::*;
     #[test]
-    fn local_metadata_maps_global_inherited_and_rarity_without_bundling_data() {
+    fn local_metadata_maps_inherited_and_rarity_without_filtering_sources() {
         let make = |id| Skill {
             id,
             name: "Engine name".into(),
             hp_recovery: false,
-            global: true,
             rarity: "white".into(),
             icon_path: None,
         };
@@ -116,8 +110,6 @@ mod tests {
             {"id":200001,"name_en":"Fixture gold","rarity":2}
         ]);
         apply(&mut skills, rows.as_array().unwrap(), Path::new("missing"));
-        assert!(skills[0].global && skills[1].global);
-        assert!(!skills[2].global && !skills[3].global);
         assert_eq!(skills[0].rarity, "unique");
         assert_eq!(skills[1].rarity, "white");
         assert_eq!(skills[1].name, "Fixture inherited (inherited)");
@@ -140,13 +132,12 @@ mod tests {
             id: 123,
             name: "Engine fallback".into(),
             hp_recovery: true,
-            global: true,
             rarity: "white".into(),
             icon_path: None,
         }];
         assert!(!enrich_from(&mut skills, &root));
         assert_eq!(skills[0].name, "Engine fallback");
-        assert!(skills[0].global && skills[0].icon_path.is_none());
+        assert!(skills[0].icon_path.is_none());
         std::fs::write(root.join("icons/123.png"), b"synthetic").unwrap();
         std::fs::write(root.join("icons/456.svg"), b"synthetic").unwrap();
         std::fs::write(root.join("789.png"), b"synthetic").unwrap();
