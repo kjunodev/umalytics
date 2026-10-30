@@ -103,7 +103,7 @@ body { margin: 0; font-size: 13px; }
 .slot.now { border-color: var(--accent-blue); box-shadow: 0 0 0 1px var(--accent-blue) inset; color: var(--accent-blue-soft); }
 .slot.ban { background: var(--status-loss-bg); border-color: var(--accent-orange); color: var(--accent-orange); }
 .panel { display: flex; flex-direction: column; gap: 12px; padding: 14px; background: var(--bg-surface-1); border: 1px solid var(--border-subtle); border-radius: var(--radius-xl); min-width: 0; }
-.stamina-layout { display: grid; grid-template-columns: 360px minmax(0, 1fr); align-items: start; gap: 18px; }
+.stamina-layout { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
 .stamina-form fieldset { display: flex; flex-direction: column; gap: 12px; padding: 0; margin: 0; border: 0; min-width: 0; }
 .stamina-form label, .field { display: flex; flex-direction: column; gap: 4px; min-width: 0; color: var(--text-secondary); font-size: 12px; }
 .desktop-tool :is(input, select) { width: 100%; padding: 0 10px; font-size: 14px; min-width: 0; }
@@ -179,9 +179,7 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; }
   .chart-heading { flex-wrap: wrap; }
   .chart-heading h2 { flex-basis: 100%; }
   .kpi { padding: 12px 10px; }
-  .stamina-layout { grid-template-columns: 300px minmax(0, 1fr); }
 }
-@container (max-width: 672px) { .stamina-layout { grid-template-columns: minmax(0, 1fr); } }
 @container (max-width: 390px) {
   .compact-header { gap: 6px; padding: 0 8px; }
   .compact-header .seg button { padding: 0 9px; }
@@ -239,3 +237,81 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; }
 
 .field-options { flex-direction: column; }
 .stamina-form .field-options button { min-height: 40px; padding: 6px 8px; white-space: normal; line-height: 1.35; }
+
+.stamina-toolbar { position: relative; display: grid; grid-template-columns: minmax(220px, 1fr) auto minmax(330px, 1.25fr) auto 36px; align-items: center; gap: 8px; padding: 10px; z-index: 5; }
+.toolbar-race { min-width: 0; }
+.toolbar-race button { width: 100%; text-align: left; white-space: normal; padding: 8px 10px; }
+.condition-chips { display: flex; gap: 4px; }
+.condition-chips button { padding: 0 9px; border-radius: 18px; font-size: 12px; }
+.toolbar-build { display: flex; align-items: center; gap: 8px; text-align: left; padding: 8px 10px; min-width: 0; font-size: 12px; }
+.toolbar-build > span:last-child { overflow-wrap: anywhere; }
+.stamina-toolbar .run { min-height: 36px; padding: 0 18px; font-size: 13px; }
+.stamina-popover { position: absolute; left: 0; top: calc(100% + 6px); width: min(600px, 100%); max-height: min(490px, calc(100dvh - 220px)); overflow-y: auto; box-shadow: 0 10px 32px var(--bg-page); border-color: var(--border-emphasis); }
+.popover-ground, .popover-weather, .popover-season { width: min(340px, 100%); }
+.popover-advanced { left: auto; right: 0; width: min(380px, 100%); gap: 8px; padding: 12px; }
+.popover-advanced .field-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.popover-advanced .field-options button:last-child { grid-column: 1 / -1; }
+.popover-heading, .drawer-heading, .drawer-footer { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.popover-heading > button, .drawer-heading > button { width: 36px; padding: 0; font-size: 20px; flex-shrink: 0; }
+.stamina-popover .seg button { flex: 1; padding: 0 8px; }
+.stamina-popover .field-options button { padding: 7px 10px; white-space: normal; }
+.simulation-progress { display: flex; flex-direction: row; align-items: center; gap: 12px; }
+.simulation-progress > span { flex-shrink: 0; font-size: 12px; color: var(--text-secondary); }
+.simulation-progress progress { flex: 1; min-width: 0; height: 6px; }
+.simulation-progress button { min-height: 30px; }
+.stamina-headline { gap: 8px; padding: 18px; }
+.headline-answer { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.headline-answer b { font-size: 48px; }
+.headline-answer > span { color: var(--text-secondary); }
+.answer-state { margin-left: auto; padding: 4px 10px; border: 1px solid currentColor; border-radius: var(--radius-md); font-size: 13px; color: var(--accent-orange); }
+.sufficient .answer-state { color: var(--accent-green-soft); }
+.stamina-headline p { margin: 0; }
+.kpi.heal-contributions { gap: 7px; }
+.heal-contributions > span { overflow-wrap: anywhere; }
+.kpi > .label { white-space: normal; }
+.heal-note { font-size: 11px; }
+.joint-curve { stroke: var(--accent-green-soft); stroke-width: 3; stroke-dasharray: 2 4; }
+.chart-legend span:nth-child(3) i { background: var(--accent-green-soft); }
+.result-table summary { font-size: 12px; }
+.build-drawer { position: fixed; z-index: 20; top: 60px; right: 0; bottom: 0; width: min(440px, calc(100vw - 260px)); border-radius: var(--radius-xl) 0 0 var(--radius-xl); border-color: var(--border-emphasis); padding: 0; gap: 0; box-shadow: -12px 0 40px var(--bg-page); animation: build-enter 160ms ease-out; }
+@keyframes build-enter { from { transform: translateX(100%); } to { transform: translateX(0); } }
+@media (prefers-reduced-motion: reduce) { .build-drawer { animation: none; } }
+.drawer-heading { padding: 14px 18px; border-bottom: 1px solid var(--border-subtle); flex-shrink: 0; }
+.build-body { display: flex; flex-direction: column; gap: 12px; padding: 14px; overflow-y: auto; min-height: 0; flex: 1; }
+.build-body label, .stamina-popover label { display: flex; flex-direction: column; gap: 5px; min-width: 0; color: var(--text-secondary); font-size: 12px; }
+.build-body .seg button { flex: 1; padding: 0 8px; }
+.build-body .aptitude-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); margin-top: 4px; }
+.build-body .aptitude-ground { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.build-body .aptitude-grid label { font-size: 10px; }
+.build-body .aptitude-grid select { padding: 0 6px; }
+.desktop-tool label.toggle-row { flex-direction: row; align-items: center; gap: 8px; }
+.toggle-row > span { flex: 1; }
+.desktop-tool .toggle-row input { width: 16px; height: 16px; min-height: 16px; accent-color: var(--accent-blue); flex-shrink: 0; }
+.drawer-footer { padding: 10px 18px; border-top: 1px solid var(--border-subtle); font-size: 11px; flex-shrink: 0; }
+.skill-picker { display: flex; flex-direction: column; gap: 10px; }
+.skill-chip { border: 1px solid var(--border-default); border-radius: var(--radius-xl); padding-left: 5px; color: var(--text-primary); background: var(--bg-surface-2); }
+.rarity-gold { color: var(--accent-gold); }
+.rarity-unique { color: var(--accent-blue-soft); }
+.skill-chip.rarity-gold { border-color: var(--accent-gold); }
+.skill-chip.rarity-unique { border-color: var(--accent-blue); }
+.skill-icon { width: 28px; height: 28px; object-fit: contain; flex-shrink: 0; }
+.skill-icon-fallback { display: inline-grid; place-items: center; color: var(--text-muted); }
+.skill-chip .skill-level { display: flex; flex-direction: row; align-items: center; gap: 3px; font-size: 10px; }
+.skill-level select { width: 42px; padding: 0 2px; font-size: 12px; }
+.skill-typeahead { flex: 1 0 100%; min-width: 0; }
+.skill-typeahead > input { border-color: var(--accent-blue); border-radius: var(--radius-xl); }
+.skill-options { margin-top: 6px; max-height: 220px; overflow-y: auto; border: 1px solid var(--border-emphasis); border-radius: var(--radius-md); background: var(--bg-page); }
+.skill-options button { display: flex; width: 100%; align-items: center; text-align: left; gap: 8px; padding: 6px 8px; border: 0; border-radius: 0; font-size: 12px; white-space: normal; }
+.skill-options button > span:not(.skill-icon) { flex: 1; overflow-wrap: anywhere; }
+.skill-options button[aria-selected=true] { background: var(--tone-sample-bg); }
+.skill-options p { padding: 12px; }
+.skill-options small { color: var(--text-muted); }
+@container desktop-content (max-width: 980px) {
+  .stamina-toolbar { grid-template-columns: minmax(0, 1fr) auto auto 36px; }
+  .toolbar-race { grid-column: 1; grid-row: 1; }
+  .condition-chips { grid-column: 2; grid-row: 1; }
+  .stamina-toolbar .run { grid-column: 3; grid-row: 1; }
+  .stamina-toolbar > button:last-of-type { grid-column: 4; grid-row: 1; padding: 0; }
+  .toolbar-build { grid-column: 1 / -1; grid-row: 2; }
+}
+@container desktop-content (max-width: 600px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } .heal-contributions { grid-column: 1 / -1; } }

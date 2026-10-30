@@ -69,7 +69,7 @@ drawer, mid-draft, Players leaderboard and directory results, History, Umas
 and Stamina at 1280×800 and 1000×700, compact Lobby/drawer/Draft at 440×860,
 the 760px full-mode floor, and an empty Lobby.
 Screenshots go to `.shots/` (or `DESKTOP_SHOTS_DIR`). It rejects horizontal
-overflow, wrapped team rows and KPI labels, clipped text (including every
+overflow, wrapped team rows, clipped text (including every
 select option), unexpected external requests, and page errors, and
 checks scope changes, persistence, skill editing, stale results and cancellation.
 All replay accounts and simulation results in this harness are synthetic.
@@ -97,6 +97,28 @@ Average lobby is the default: your runner plus eight skill-free opponents at
 1 End). Pacemaker is selectable as a real two-runner field, with a Front Runner
 at 1605/1200/1194/664/1200. Position and order skill conditions see the actual
 field size. Opponent builds stay fixed throughout the stamina search.
+Mirror uses eight opponents with the submitted runner's five raw stats,
+A aptitudes, Great mood, no skills and the same 2/3/2/1 strategy distribution.
+Their stamina stays fixed at the submitted value throughout the search.
+
+The toolbar opens race/condition pickers and advanced options. Build opens a
+side panel over the results; Escape closes the active picker or panel. The
+last race, conditions, build, skills and analysis options are saved in the
+Tauri store (`stamina.json`, `last-inputs-v1`) and validated on restore.
+
+Optional local GameTora metadata is read at startup from
+`UMALYTICS_GAMEDATA_DIR`, defaulting in development to
+`%USERPROFILE%\Documents\Coding Projects\UmaLytics-GameData\gametora`.
+This folder supplies `skills.json` and `icons/<iconid>.webp` (or `.png`).
+Engine IDs remain authoritative; inherited skills join through `gene_version`.
+Global filtering uses the parent's `loc.en`; Show all regions includes the
+remaining engine skills. Search supports fuzzy name matching and remembers
+recent selections. Only unique skills expose a level control.
+Without readable local metadata, the engine catalog remains available with
+engine names, no icons, and one quiet notice in the skill section. No game
+data or artwork is copied into the repository or frontend build.
+Tauri's asset scope starts empty and allows only individually resolved icon
+files; canonical paths outside the configured icons folder are rejected.
 
 Analysis defaults are Assume skills activate On, Rushed On, Spot Struggle Off,
 Dueling Off, and Lane movement On. The skill assumption uses the engine's
@@ -110,6 +132,12 @@ Survival requires positive HP throughout every tick, including the goal-crossing
 tick, and no sticky HP-out flag. Full spurt uses the retained engine plan
 TRUE_EXCEED_NEED_MAX_HP when your runner finishes. At-entry spurt is the first
 late-race plan, before later heal recalculations.
+The headline uses the joint 90% threshold: count races where both full spurt
+and survival succeed, using the same cached race outcomes. This is distinct
+from requiring two marginal 90% rates. The two marginal thresholds, each
+heal's nominal contribution, and all three curves remain available. The
+per-stamina table starts collapsed. Pass/short uses the simulated joint rate
+and the conservative raw threshold; heal equivalents alone do not decide it.
 
 The displayed curve spans 600–1400 in steps of 50, initially using 32 seeds.
 The conservative 90% thresholds are refined to 10 stamina over 10–2000, requiring
@@ -133,6 +161,9 @@ stamina-race-result events, and returns results in input order. Both commands
 emit stamina-progress and support cancel_stamina_check. Results retain the
 submitted input snapshot. Workers check cancellation before each race and
 every 32 ticks; at most eight workers simulate concurrently.
+Progress reports Mapping the curve, Refining thresholds, and Done. Only the
+fixed coarse mapping stage reports partial work. Adaptive refinement marks a
+stage rather than dividing by an expanding race total; the bar never retreats.
 
 The engine dependency is pinned to the fork commit in Cargo.toml/Cargo.lock.
 GameData loads lazily from uma_race_sim::data::DATA_DIR in that Cargo checkout.
@@ -147,3 +178,8 @@ multi-race API. The local two-bank acceptance benchmark uses a release build:
 ```powershell
 cargo test --release --manifest-path apps/desktop/src-tauri/Cargo.toml --locked benchmark_seed_banks -- --ignored --nocapture
 ```
+
+The opt-in `measure_field_strength` native test compares the seven round-1
+fixtures against Average, Mirror and Weak (1200/900/900/500/900) fields with
+the default 256/512 seed banks and emits raw/effective thresholds. Weak is a
+measurement fixture, not a toolbar choice. Average remains the default.
