@@ -370,6 +370,7 @@ fn stable_crossing_rejects_isolated_lucky_crossings() {
         points.insert(
             s,
             Point {
+                joint_percent: rate,
                 stamina: s,
                 seeds: 8,
                 survival_percent: rate,
@@ -411,9 +412,13 @@ fn deterministic_curve_threshold_resolution_and_current_independence() {
     assert_eq!(a.curve.len(), 17);
     assert_eq!(a.curve[0].stamina, 600);
     assert_eq!(a.curve[16].stamina, 1400);
-    for t in [a.thresholds.full_spurt, a.thresholds.survival]
-        .into_iter()
-        .flatten()
+    for t in [
+        a.thresholds.joint,
+        a.thresholds.full_spurt,
+        a.thresholds.survival,
+    ]
+    .into_iter()
+    .flatten()
     {
         assert_eq!(t % 10, 0);
     }
@@ -461,7 +466,7 @@ fn adaptive_promotion_reuses_seeds_and_brackets_at_full_precision() {
     direct.evaluate([800], 64).unwrap();
     assert_eq!(incremental.cache, direct.cache);
     let thresholds = incremental.solve().unwrap();
-    for t in [thresholds.full_spurt, thresholds.survival]
+    for t in [thresholds.joint, thresholds.full_spurt, thresholds.survival]
         .into_iter()
         .flatten()
     {
@@ -803,6 +808,7 @@ fn effective_needs_use_each_true_threshold_without_a_second_solve() {
     };
     let needed = effective_thresholds(
         &Thresholds {
+            joint: Some(1200),
             full_spurt: Some(1000),
             survival: Some(1200),
         },
@@ -814,6 +820,7 @@ fn effective_needs_use_each_true_threshold_without_a_second_solve() {
     assert_eq!(needed.survival.unwrap().round(), 1411.0);
     let empty = effective_thresholds(
         &Thresholds {
+            joint: None,
             full_spurt: None,
             survival: Some(1000),
         },
@@ -824,6 +831,7 @@ fn effective_needs_use_each_true_threshold_without_a_second_solve() {
     assert_eq!(
         empty,
         EffectiveThresholds {
+            joint: None,
             full_spurt: None,
             survival: Some(1000.0)
         }
@@ -835,6 +843,118 @@ fn seed_banks_remain_disjoint() {
     let a: HashSet<_> = (0..1000).map(|i| seed(i, 0)).collect();
     assert_eq!(a.len(), 1000);
     assert!((0..1000).all(|i| !a.contains(&seed(i, 1))));
+}
+
+#[test]
+fn joint_counts_the_intersection_not_two_marginal_passes() {
+    let samples: Vec<_> = (0..100)
+        .map(|n| Sample {
+            survival: n >= 10,
+            full_spurt: n < 90,
+            entry_full: true,
+            min_hp: 0.0,
+        })
+        .collect();
+    let p = point(800, &samples);
+    assert_eq!(p.full_spurt_percent, 90.0);
+    assert_eq!(p.survival_percent, 90.0);
+    assert_eq!(p.joint_percent, 80.0);
+}
+
+#[test]
+fn mirror_is_fixed_to_submitted_stats_and_has_no_opponent_skills() {
+    let mut i = input();
+    i.field = Field::Mirror;
+    i.build.distance = [8; 4];
+    i.build.motivation = 2;
+    i.build.skills = vec![SelectedSkill {
+        id: 200351,
+        level: 1,
+    }];
+    let c = validate(&i, engine().unwrap()).unwrap();
+    let mut race = race_input(&i, &c);
+    race.horses[0].stamina = 1500;
+    assert_eq!(race.horses.len(), 9);
+    assert_eq!(
+        race.horses[1..]
+            .iter()
+            .map(|h| h.running_style)
+            .collect::<Vec<_>>(),
+        [1, 1, 2, 2, 2, 3, 3, 4]
+    );
+    for h in &race.horses[1..] {
+        assert_eq!(
+            (h.speed, h.stamina, h.pow, h.guts, h.wiz),
+            (1200, 800, 1000, 600, 1000)
+        );
+        assert_eq!(h.motivation, 5);
+        assert_eq!(h.proper_distance, [7; 4]);
+        assert_eq!(h.proper_running_style, [7; 4]);
+        assert_eq!(h.proper_ground, [7; 2]);
+        assert!(h.skills.is_empty());
+    }
+    i.field = Field::WeakLobby;
+    let weak = race_input(&i, &c);
+    let h = &weak.horses[1];
+    assert_eq!(
+        (h.speed, h.stamina, h.pow, h.guts, h.wiz),
+        (1200, 900, 900, 500, 900)
+    );
+}
+
+#[test]
+fn progress_reports_stages_and_bounded_work_without_a_growing_denominator() {
+    let events = Mutex::new(Vec::new());
+    let result = run(input(), &AtomicBool::new(false), &|p| {
+        events.lock().unwrap().push(p)
+    })
+    .unwrap();
+    let events = events.lock().unwrap();
+    assert_eq!(events.first().unwrap().stage, "mapping");
+    assert!(events.iter().any(|p| p.stage == "refining"));
+    assert!(events.iter().all(|p| (0.0..=100.0).contains(&p.percent)));
+    assert_eq!(events.last().unwrap().stage, "done");
+    assert_eq!(events.last().unwrap().percent, 100.0);
+    assert_eq!(events.last().unwrap().completed, result.races);
+    assert!(result.thresholds.joint >= result.thresholds.full_spurt);
+    assert!(result.thresholds.joint >= result.thresholds.survival);
+}
+
+#[test]
+#[ignore = "local field-strength measurement; seven round-1 fixtures"]
+fn measure_field_strength() {
+    for (map, style, heal) in [
+        ("tokyo-1600-turf", 1, false),
+        ("morioka-2000-dirt", 2, false),
+        ("tokyo-2000-turf", 2, false),
+        ("nakayama-2500-turf-inner", 2, false),
+        ("kyoto-3000-turf-outer", 4, true),
+        ("hanshin-3200-turf-outer-to-inner", 1, false),
+        ("fukushima-1150-dirt", 3, false),
+    ] {
+        for field in [Field::AverageLobby, Field::Mirror, Field::WeakLobby] {
+            let mut i = input();
+            i.seeds = None;
+            i.race.map_id = map.into();
+            i.build.running_style = style;
+            i.build.stats.speed = 1600;
+            i.build.stats.pow = 1200;
+            i.build.stats.wiz = 1200;
+            i.field = field;
+            if heal {
+                i.build.skills.push(SelectedSkill {
+                    id: 200351,
+                    level: 1,
+                });
+            }
+            let r = run(i, &AtomicBool::new(false), &|_| {}).unwrap();
+            println!(
+                "FIELD_MEASUREMENT {}",
+                serde_json::json!({"map":map,"style":style,"field":field,"thresholds":r.thresholds,
+                "effective":r.needed_effective_stamina,"seeds":r.seeds,"samples":r.threshold_samples,"races":r.races,"ms":r.elapsed_ms})
+            );
+        }
+    }
 }
 
 #[test]

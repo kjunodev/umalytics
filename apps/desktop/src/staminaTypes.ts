@@ -3,7 +3,8 @@ export interface Course {
   variant: string | null; course_set_id: number; race_instance_id: number;
   race_id: number; grade: number; time: number; month: number; instance_reason: string; unavailable_reason: string | null;
 }
-export interface Catalog { courses: Course[]; skills: { id: number; name: string; hp_recovery: boolean }[] }
+export interface CatalogSkill { id: number; name: string; hp_recovery: boolean; global: boolean; rarity: 'white' | 'gold' | 'unique'; icon_path: string | null }
+export interface Catalog { courses: Course[]; skills: CatalogSkill[]; local_skill_data: boolean }
 export interface StaminaBuild {
   running_style: number;
   stats: { speed: number; stamina: number; pow: number; guts: number; wiz: number };
@@ -14,7 +15,7 @@ export interface StaminaBuild {
   skills: { id: number; level: number }[];
 }
 export interface RaceSelection { map_id: string; ground_condition: number; weather: number; season: number }
-export type StaminaField = 'pacemaker' | 'average_lobby';
+export type StaminaField = 'pacemaker' | 'average_lobby' | 'mirror';
 export interface StaminaInput {
   request_id: string; build: StaminaBuild; race: RaceSelection; field: StaminaField; seeds: number | null; assume_skills_activate: boolean; rushed: boolean; spot_struggle: boolean; dueling: boolean; lane_movement: boolean;
 }
@@ -22,19 +23,20 @@ export interface StaminaRacesInput {
   request_id: string; build: StaminaBuild; races: RaceSelection[]; field: StaminaField; seeds: number | null; assume_skills_activate: boolean; rushed: boolean; spot_struggle: boolean; dueling: boolean; lane_movement: boolean;
 }
 export interface StaminaRates {
+  joint_percent: number;
   survival_percent: number; full_spurt_percent: number; full_spurt_at_entry_percent: number; avg_min_hp: number;
 }
 export interface StaminaPoint extends StaminaRates {
   stamina: number; seeds: number;
 }
-export interface Thresholds { full_spurt: number | null; survival: number | null }
+export interface Thresholds { joint: number | null; full_spurt: number | null; survival: number | null }
 export interface StaminaResult {
   input: StaminaInput; request_id: string; curve: StaminaPoint[]; current: StaminaPoint;
-  thresholds: Thresholds; threshold_samples: { full_spurt: { seeds: number } | null; survival: { seeds: number } | null }; needed_effective_stamina: Thresholds; effective_stamina: number;
+  thresholds: Thresholds; threshold_samples: { joint: { seeds: number } | null; full_spurt: { seeds: number } | null; survival: { seeds: number } | null }; needed_effective_stamina: Thresholds; effective_stamina: number;
   heal_equivalents: { skill_id: number; fraction: number; stamina: number; variable: boolean }[];
   seeds: number; races: number; elapsed_ms: number; ms_per_race: number; course: Course;
 }
-export interface StaminaProgress { request_id: string; map_id: string; completed: number; total: number }
+export interface StaminaProgress { request_id: string; map_id: string; completed: number; total: number; stage: 'mapping' | 'refining' | 'done'; percent: number }
 export interface StaminaRaceResult { request_id: string; index: number; total: number; result: StaminaResult }
 export const groundNames = ['Firm', 'Good', 'Soft', 'Heavy'];
 export const weatherNames = ['Sunny', 'Cloudy', 'Rainy', 'Snowy'];

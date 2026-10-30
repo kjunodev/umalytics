@@ -14,6 +14,7 @@ use uma_race_sim::{
     sim::{defs::last_spurt_calc_result, race, tick},
     AnalysisOptions, HorseInput, RaceInput, SkillInput, SkillWizCheck,
 };
+mod skill_data;
 
 fn engine_data_dir() -> &'static Path {
     Path::new(uma_race_sim::data::DATA_DIR)
@@ -59,11 +60,15 @@ pub struct Skill {
     id: i32,
     name: String,
     hp_recovery: bool,
+    global: bool,
+    rarity: String,
+    icon_path: Option<String>,
 }
 #[derive(Clone, Serialize)]
 pub struct Catalog {
     courses: Vec<Course>,
     skills: Vec<Skill>,
+    local_skill_data: bool,
 }
 struct Engine {
     data: GameData,
@@ -208,6 +213,9 @@ fn load_engine() -> Result<Engine, String> {
         .keys()
         .map(|id| Skill {
             id: *id,
+            global: true,
+            rarity: skill_data::rarity(data.skills[id].rarity).into(),
+            icon_path: None,
             hp_recovery: hp_recovery(&data.skills[id]),
             name: names
                 .skill
@@ -218,10 +226,15 @@ fn load_engine() -> Result<Engine, String> {
                 .unwrap_or_else(|| format!("Skill {id}")),
         })
         .collect();
+    let local_skill_data = skill_data::enrich(&mut skills);
     skills.sort_by_key(|s| (s.name.clone(), s.id));
     Ok(Engine {
         data,
-        catalog: Catalog { courses, skills },
+        catalog: Catalog {
+            courses,
+            skills,
+            local_skill_data,
+        },
     })
 }
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -265,6 +278,8 @@ pub enum Field {
     Pacemaker,
     #[default]
     AverageLobby,
+    Mirror,
+    WeakLobby,
 }
 fn default_seeds() -> usize {
     256
@@ -441,6 +456,7 @@ fn cancelled(token: &AtomicBool) -> Result<(), String> {
 }
 #[derive(Clone, Debug, Default, Serialize, PartialEq)]
 pub struct Rates {
+    joint_percent: f64,
     survival_percent: f64,
     full_spurt_percent: f64,
     full_spurt_at_entry_percent: f64,
@@ -448,6 +464,7 @@ pub struct Rates {
 }
 #[derive(Clone, Debug, Serialize, PartialEq)]
 pub struct Point {
+    joint_percent: f64,
     seeds: usize,
     stamina: i32,
     survival_percent: f64,
@@ -457,11 +474,13 @@ pub struct Point {
 }
 #[derive(Clone, Debug, Serialize, PartialEq)]
 pub struct Thresholds {
+    joint: Option<i32>,
     full_spurt: Option<i32>,
     survival: Option<i32>,
 }
 #[derive(Clone, Debug, Serialize, PartialEq)]
 pub struct EffectiveThresholds {
+    joint: Option<f64>,
     full_spurt: Option<f64>,
     survival: Option<f64>,
 }
@@ -476,6 +495,7 @@ impl From<&Point> for SampleCounts {
 }
 #[derive(Clone, Debug, Serialize)]
 pub struct ThresholdSamples {
+    joint: Option<SampleCounts>,
     full_spurt: Option<SampleCounts>,
     survival: Option<SampleCounts>,
 }
@@ -509,6 +529,8 @@ pub struct Progress {
     map_id: String,
     completed: usize,
     total: usize,
+    stage: &'static str,
+    percent: f64,
 }
 #[derive(Clone, Serialize)]
 pub struct RaceResultEvent {
@@ -547,17 +569,34 @@ fn race_input(input: &Input, course: &Course) -> RaceInput {
     };
     let opponents: &[i32] = match input.field {
         Field::Pacemaker => &[1],
-        Field::AverageLobby => &[1, 1, 2, 2, 2, 3, 3, 4],
+        Field::AverageLobby | Field::Mirror | Field::WeakLobby => &[1, 1, 2, 2, 2, 3, 3, 4],
     };
     let mut horses = vec![build];
     for (i, style) in opponents.iter().enumerate() {
         let pacer = input.field == Field::Pacemaker;
+        let stats = match input.field {
+            Field::Mirror => b.stats.clone(),
+            Field::WeakLobby => Stats {
+                speed: 1200,
+                stamina: 900,
+                pow: 900,
+                guts: 500,
+                wiz: 900,
+            },
+            _ => Stats {
+                speed: if pacer { 1605 } else { 1600 },
+                stamina: 1200,
+                pow: if pacer { 1194 } else { 1200 },
+                guts: if pacer { 664 } else { 600 },
+                wiz: 1200,
+            },
+        };
         horses.push(HorseInput {
-            speed: if pacer { 1605 } else { 1600 },
-            stamina: 1200,
-            pow: if pacer { 1194 } else { 1200 },
-            guts: if pacer { 664 } else { 600 },
-            wiz: 1200,
+            speed: stats.speed,
+            stamina: stats.stamina,
+            pow: stats.pow,
+            guts: stats.guts,
+            wiz: stats.wiz,
             running_style: *style,
             motivation: 5,
             proper_distance: [7; 4],
@@ -765,11 +804,23 @@ impl Solver<'_> {
             .map(|s| s.parse::<usize>().expect("worker count"))
             .map_or(workers, |n| n.clamp(1, total));
         let offset = self.races;
+        let progress_value = |count: usize| {
+            if offset == 0 {
+                40.0 * count as f64 / total as f64
+            }
+            // Adaptive refinement has no known race total. Mark the stage,
+            // rather than pretending its expanding work queue is a percentage.
+            else {
+                65.0
+            }
+        };
         (self.progress)(Progress {
             request_id: self.input.request_id.clone(),
             map_id: self.input.race.map_id.clone(),
             completed: offset,
             total: offset + total,
+            stage: if offset == 0 { "mapping" } else { "refining" },
+            percent: progress_value(0),
         });
         let samples = std::thread::scope(|scope| {
             let this = &*self;
@@ -802,6 +853,8 @@ impl Solver<'_> {
                                         map_id: this.input.race.map_id.clone(),
                                         completed: offset + count,
                                         total: offset + total,
+                                        stage: if offset == 0 { "mapping" } else { "refining" },
+                                        percent: progress_value(count),
                                     });
                                 }
                             }
@@ -886,9 +939,14 @@ impl Solver<'_> {
         let thresholds = loop {
             let full_spurt = self.threshold(|p| p.full_spurt_percent)?;
             let survival = self.threshold(|p| p.survival_percent)?;
-            // Refining one metric can reveal a dip in the other; reconcile both.
-            if full_spurt == stable_crossing(&self.cache, |p| p.full_spurt_percent) {
+            let joint = self.threshold(|p| p.joint_percent)?;
+            // All metrics share seeds and cached outcomes. A refinement can
+            // reveal a dip in an earlier metric; reconcile every crossing.
+            if full_spurt == stable_crossing(&self.cache, |p| p.full_spurt_percent)
+                && survival == stable_crossing(&self.cache, |p| p.survival_percent)
+            {
                 break Thresholds {
+                    joint,
                     full_spurt,
                     survival,
                 };
@@ -906,6 +964,7 @@ fn rates(samples: &[Sample]) -> Option<Rates> {
         100.0 * samples.iter().filter(|s| test(s)).count() as f64 / samples.len() as f64
     };
     Some(Rates {
+        joint_percent: percent(|s| s.survival && s.full_spurt),
         survival_percent: percent(|s| s.survival),
         full_spurt_percent: percent(|s| s.full_spurt),
         full_spurt_at_entry_percent: percent(|s| s.entry_full),
@@ -915,6 +974,7 @@ fn rates(samples: &[Sample]) -> Option<Rates> {
 fn point(stamina: i32, samples: &[Sample]) -> Point {
     let rates = rates(samples).unwrap_or_default();
     Point {
+        joint_percent: rates.joint_percent,
         stamina,
         seeds: samples.len(),
         survival_percent: rates.survival_percent,
@@ -933,6 +993,7 @@ fn effective_thresholds(
     let effective =
         |stamina| f64::from(stamina) + heal_equivalent(stamina, distance, style, fraction);
     EffectiveThresholds {
+        joint: thresholds.joint.map(effective),
         full_spurt: thresholds.full_spurt.map(effective),
         survival: thresholds.survival.map(effective),
     }
@@ -982,6 +1043,9 @@ fn run_bank(
     };
     let thresholds = solver.solve()?;
     let threshold_samples = ThresholdSamples {
+        joint: thresholds
+            .joint
+            .map(|s| SampleCounts::from(&solver.cache[&s])),
         full_spurt: thresholds
             .full_spurt
             .map(|s| SampleCounts::from(&solver.cache[&s])),
@@ -1006,6 +1070,14 @@ fn run_bank(
     );
     cancelled(token)?;
     let elapsed_ms = start.elapsed().as_secs_f64() * 1000.0;
+    progress(Progress {
+        request_id: input.request_id.clone(),
+        map_id: input.race.map_id.clone(),
+        completed: races,
+        total: races,
+        stage: "done",
+        percent: 100.0,
+    });
     Ok(CheckResult {
         request_id: input.request_id.clone(),
         curve,
@@ -1075,10 +1147,21 @@ fn run_races(
     Ok(results)
 }
 #[tauri::command]
-pub async fn engine_catalog() -> Result<Catalog, String> {
-    tauri::async_runtime::spawn_blocking(|| engine().map(|e| e.catalog.clone()))
-        .await
-        .map_err(|_| "Unable to load engine catalog.".to_string())?
+pub async fn engine_catalog(app: tauri::AppHandle) -> Result<Catalog, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        use tauri::Manager;
+        let catalog = engine()?.catalog.clone();
+        for skill in &catalog.skills {
+            if let Some(path) = &skill.icon_path {
+                app.asset_protocol_scope()
+                    .allow_file(path)
+                    .map_err(|e| e.to_string())?;
+            }
+        }
+        Ok(catalog)
+    })
+    .await
+    .map_err(|_| "Unable to load engine catalog.".to_string())?
 }
 #[tauri::command]
 pub async fn stamina_check(
