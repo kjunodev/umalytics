@@ -1,0 +1,942 @@
+{
+ "source": "drafter.uma.guide assets/index-BOT8t7Km.js (map list Dj), extracted 2026-10-29",
+ "game_version": "global",
+ "maps": [
+  {
+   "id": "sapporo-1200-turf",
+   "track": "Sapporo",
+   "distance": 1200,
+   "surface": "Turf",
+   "direction": "right",
+   "variant": null,
+   "name": "Sapporo - 1200m Turf"
+  },
+  {
+   "id": "sapporo-1500-turf",
+   "track": "Sapporo",
+   "distance": 1500,
+   "surface": "Turf",
+   "direction": "right",
+   "variant": null,
+   "name": "Sapporo - 1500m Turf"
+  },
+  {
+   "id": "sapporo-1800-turf",
+   "track": "Sapporo",
+   "distance": 1800,
+   "surface": "Turf",
+   "direction": "right",
+   "variant": null,
+   "name": "Sapporo - 1800m Turf"
+  },
+  {
+   "id": "sapporo-2000-turf",
+   "track": "Sapporo",
+   "distance": 2000,
+   "surface": "Turf",
+   "direction": "right",
+   "variant": null,
+   "name": "Sapporo - 2000m Turf"
+  },
+  {
+   "id": "sapporo-2600-turf",
+   "track": "Sapporo",
+   "distance": 2600,
+   "surface": "Turf",
+   "direction": "right",
+   "variant": null,
+   "name": "Sapporo - 2600m Turf"
+  },
+  {
+   "id": "sapporo-1700-dirt",
+   "track": "Sapporo",
+   "distance": 1700,
+   "surface": "Dirt",
+   "direction": "right",
+   "variant": null,
+   "name": "Sapporo - 1700m Dirt"
+  },
+  {
+   "id": "hakodate-1000-turf",
+   "track": "Hakodate",
+   "distance": 1000,
+   "surface": "Turf",
+   "direction": "right",
+   "variant": null,
+   "name": "Hakodate - 1000m Turf"
+  },
+  {
+   "id": "hakodate-1200-turf",
+   "track": "Hakodate",
+   "distance": 1200,
+   "surface": "Turf",
+   "direction": "right",
+   "variant": null,
+   "name": "Hakodate - 1200m Turf"
+  },
+  {
+   "id": "hakodate-1800-turf",
+   "track": "Hakodate",
+   "distance": 1800,
+   "surface": "Turf",
+   "direction": "right",
+   "variant": null,
+   "name": "Hakodate - 1800m Turf"
+  },
+  {
+   "id": "hakodate-2000-turf",
+   "track": "Hakodate",
+   "distance": 2000,
+   "surface": "Turf",
+   "direction": "right",
+   "variant": null,
+   "name": "Hakodate - 2000m Turf"
+  },
+  {
+   "id": "hakodate-2600-turf",
+   "track": "Hakodate",
+   "distance": 2600,
+   "surface": "Turf",
+   "direction": "right",
+   "variant": null,
+   "name": "Hakodate - 2600m Turf"
+  },
+  {
+   "id": "hakodate-1700-dirt",
+   "track": "Hakodate",
+   "distance": 1700,
+   "surface": "Dirt",
+   "direction": "right",
+   "variant": null,
+   "name": "Hakodate - 1700m Dirt"
+  },
+  {
+   "id": "niigata-1000-turf",
+   "track": "Niigata",
+   "distance": 1000,
+   "surface": "Turf",
+   "direction": "straight",
+   "variant": null,
+   "name": "Niigata - 1000m Turf"
+  },
+  {
+   "id": "niigata-1200-turf-inner",
+   "track": "Niigata",
+   "distance": 1200,
+   "surface": "Turf",
+   "direction": "left",
+   "variant": "Inner",
+   "name": "Niigata - 1200m Turf (Inner)"
+  },
+  {
+   "id": "niigata-1400-turf-inner",
+   "track": "Niigata",
+   "distance": 1400,
+   "surface": "Turf",
+   "direction": "left",
+   "variant": "Inner",
+   "name": "Niigata - 1400m Turf (Inner)"
+  },
+  {
+   "id": "niigata-1600-turf-outer",
+   "track": "Niigata",
+   "distance": 1600,
+   "surface": "Turf",
+   "direction": "left",
+   "variant": "Outer",
+   "name": "Niigata - 1600m Turf (Outer)"
+  },
+  {
+   "id": "niigata-1800-turf-outer",
+   "track": "Niigata",
+   "distance": 1800,
+   "surface": "Turf",
+   "direction": "left",
+   "variant": "Outer",
+   "name": "Niigata - 1800m Turf (Outer)"
+  },
+  {
+   "id": "niigata-2000-turf-inner",
+   "track": "Niigata",
+   "distance": 2000,
+   "surface": "Turf",
+   "direction": "left",
+   "variant": "Inner",
+   "name": "Niigata - 2000m Turf (Inner)"
+  },
+  {
+   "id": "niigata-2000-turf-outer",
+   "track": "Niigata",
+   "distance": 2000,
+   "surface": "Turf",
+   "direction": "left",
+   "variant": "Outer",
+   "name": "Niigata - 2000m Turf (Outer)"
+  },
+  {
+   "id": "niigata-2200-turf-inner",
+   "track": "Niigata",
+   "distance": 2200,
+   "surface": "Turf",
+   "direction": "left",
+   "variant": "Inner",
+   "name": "Niigata - 2200m Turf (Inner)"
+  },
+  {
+   "id": "niigata-2400-turf-inner",
+   "track": "Niigata",
+   "distance": 2400,
+   "surface": "Turf",
+   "direction": "left",
+   "variant": "Inner",
+   "name": "Niigata - 2400m Turf (Inner)"
+  },
+  {
+   "id": "niigata-1200-dirt",
+   "track": "Niigata",
+   "distance": 1200,
+   "surface": "Dirt",
+   "direction": "left",
+   "variant": null,
+   "name": "Niigata - 1200m Dirt"
+  },
+  {
+   "id": "niigata-1800-dirt",
+   "track": "Niigata",
+   "distance": 1800,
+   "surface": "Dirt",
+   "direction": "left",
+   "variant": null,
+   "name": "Niigata - 1800m Dirt"
+  },
+  {
+   "id": "fukushima-1200-turf",
+   "track": "Fukushima",
+   "distance": 1200,
+   "surface": "Turf",
+   "direction": "right",
+   "variant": null,
+   "name": "Fukushima - 1200m Turf"
+  },
+  {
+   "id": "fukushima-1800-turf",
+   "track": "Fukushima",
+   "distance": 1800,
+   "surface": "Turf",
+   "direction": "right",
+   "variant": null,
+   "name": "Fukushima - 1800m Turf"
+  },
+  {
+   "id": "fukushima-2000-turf",
+   "track": "Fukushima",
+   "distance": 2000,
+   "surface": "Turf",
+   "direction": "right",
+   "variant": null,
+   "name": "Fukushima - 2000m Turf"
+  },
+  {
+   "id": "fukushima-2600-turf",
+   "track": "Fukushima",
+   "distance": 2600,
+   "surface": "Turf",
+   "direction": "right",
+   "variant": null,
+   "name": "Fukushima - 2600m Turf"
+  },
+  {
+   "id": "fukushima-1150-dirt",
+   "track": "Fukushima",
+   "distance": 1150,
+   "surface": "Dirt",
+   "direction": "right",
+   "variant": null,
+   "name": "Fukushima - 1150m Dirt"
+  },
+  {
+   "id": "fukushima-1700-dirt",
+   "track": "Fukushima",
+   "distance": 1700,
+   "surface": "Dirt",
+   "direction": "right",
+   "variant": null,
+   "name": "Fukushima - 1700m Dirt"
+  },
+  {
+   "id": "nakayama-1200-turf-outer",
+   "track": "Nakayama",
+   "distance": 1200,
+   "surface": "Turf",
+   "direction": "right",
+   "variant": "Outer",
+   "name": "Nakayama - 1200m Turf (Outer)"
+  },
+  {
+   "id": "nakayama-1600-turf-outer",
+   "track": "Nakayama",
+   "distance": 1600,
+   "surface": "Turf",
+   "direction": "right",
+   "variant": "Outer",
+   "name": "Nakayama - 1600m Turf (Outer)"
+  },
+  {
+   "id": "nakayama-1800-turf-inner",
+   "track": "Nakayama",
+   "distance": 1800,
+   "surface": "Turf",
+   "direction": "right",
+   "variant": "Inner",
+   "name": "Nakayama - 1800m Turf (Inner)"
+  },
+  {
+   "id": "nakayama-2000-turf-inner",
+   "track": "Nakayama",
+   "distance": 2000,
+   "surface": "Turf",
+   "direction": "right",
+   "variant": "Inner",
+   "name": "Nakayama - 2000m Turf (Inner)"
+  },
+  {
+   "id": "nakayama-2200-turf-outer",
+   "track": "Nakayama",
+   "distance": 2200,
+   "surface": "Turf",
+   "direction": "right",
+   "variant": "Outer",
+   "name": "Nakayama - 2200m Turf (Outer)"
+  },
+  {
+   "id": "nakayama-2500-turf-inner",
+   "track": "Nakayama",
+   "distance": 2500,
+   "surface": "Turf",
+   "direction": "right",
+   "variant": "Inner",
+   "name": "Nakayama - 2500m Turf (Inner)"
+  },
+  {
+   "id": "nakayama-3600-turf-inner",
+   "track": "Nakayama",
+   "distance": 3600,
+   "surface": "Turf",
+   "direction": "right",
+   "variant": "Inner",
+   "name": "Nakayama - 3600m Turf (Inner)"
+  },
+  {
+   "id": "nakayama-1200-dirt",
+   "track": "Nakayama",
+   "distance": 1200,
+   "surface": "Dirt",
+   "direction": "right",
+   "variant": null,
+   "name": "Nakayama - 1200m Dirt"
+  },
+  {
+   "id": "nakayama-1800-dirt",
+   "track": "Nakayama",
+   "distance": 1800,
+   "surface": "Dirt",
+   "direction": "right",
+   "variant": null,
+   "name": "Nakayama - 1800m Dirt"
+  },
+  {
+   "id": "tokyo-1400-turf",
+   "track": "Tokyo",
+   "distance": 1400,
+   "surface": "Turf",
+   "direction": "left",
+   "variant": null,
+   "name": "Tokyo - 1400m Turf"
+  },
+  {
+   "id": "tokyo-1600-turf",
+   "track": "Tokyo",
+   "distance": 1600,
+   "surface": "Turf",
+   "direction": "left",
+   "variant": null,
+   "name": "Tokyo - 1600m Turf"
+  },
+  {
+   "id": "tokyo-1800-turf",
+   "track": "Tokyo",
+   "distance": 1800,
+   "surface": "Turf",
+   "direction": "left",
+   "variant": null,
+   "name": "Tokyo - 1800m Turf"
+  },
+  {
+   "id": "tokyo-2000-turf",
+   "track": "Tokyo",
+   "distance": 2000,
+   "surface": "Turf",
+   "direction": "left",
+   "variant": null,
+   "name": "Tokyo - 2000m Turf"
+  },
+  {
+   "id": "tokyo-2300-turf",
+   "track": "Tokyo",
+   "distance": 2300,
+   "surface": "Turf",
+   "direction": "left",
+   "variant": null,
+   "name": "Tokyo - 2300m Turf"
+  },
+  {
+   "id": "tokyo-2400-turf",
+   "track": "Tokyo",
+   "distance": 2400,
+   "surface": "Turf",
+   "direction": "left",
+   "variant": null,
+   "name": "Tokyo - 2400m Turf"
+  },
+  {
+   "id": "tokyo-2500-turf",
+   "track": "Tokyo",
+   "distance": 2500,
+   "surface": "Turf",
+   "direction": "left",
+   "variant": null,
+   "name": "Tokyo - 2500m Turf"
+  },
+  {
+   "id": "tokyo-3400-turf",
+   "track": "Tokyo",
+   "distance": 3400,
+   "surface": "Turf",
+   "direction": "left",
+   "variant": null,
+   "name": "Tokyo - 3400m Turf"
+  },
+  {
+   "id": "tokyo-1300-dirt",
+   "track": "Tokyo",
+   "distance": 1300,
+   "surface": "Dirt",
+   "direction": "left",
+   "variant": null,
+   "name": "Tokyo - 1300m Dirt"
+  },
+  {
+   "id": "tokyo-1400-dirt",
+   "track": "Tokyo",
+   "distance": 1400,
+   "surface": "Dirt",
+   "direction": "left",
+   "variant": null,
+   "name": "Tokyo - 1400m Dirt"
+  },
+  {
+   "id": "tokyo-1600-dirt",
+   "track": "Tokyo",
+   "distance": 1600,
+   "surface": "Dirt",
+   "direction": "left",
+   "variant": null,
+   "name": "Tokyo - 1600m Dirt"
+  },
+  {
+   "id": "tokyo-2100-dirt",
+   "track": "Tokyo",
+   "distance": 2100,
+   "surface": "Dirt",
+   "direction": "left",
+   "variant": null,
+   "name": "Tokyo - 2100m Dirt"
+  },
+  {
+   "id": "chukyo-1200-turf",
+   "track": "Chukyo",
+   "distance": 1200,
+   "surface": "Turf",
+   "direction": "left",
+   "variant": null,
+   "name": "Chukyo - 1200m Turf"
+  },
+  {
+   "id": "chukyo-1400-turf",
+   "track": "Chukyo",
+   "distance": 1400,
+   "surface": "Turf",
+   "direction": "left",
+   "variant": null,
+   "name": "Chukyo - 1400m Turf"
+  },
+  {
+   "id": "chukyo-1600-turf",
+   "track": "Chukyo",
+   "distance": 1600,
+   "surface": "Turf",
+   "direction": "left",
+   "variant": null,
+   "name": "Chukyo - 1600m Turf"
+  },
+  {
+   "id": "chukyo-2000-turf",
+   "track": "Chukyo",
+   "distance": 2000,
+   "surface": "Turf",
+   "direction": "left",
+   "variant": null,
+   "name": "Chukyo - 2000m Turf"
+  },
+  {
+   "id": "chukyo-2200-turf",
+   "track": "Chukyo",
+   "distance": 2200,
+   "surface": "Turf",
+   "direction": "left",
+   "variant": null,
+   "name": "Chukyo - 2200m Turf"
+  },
+  {
+   "id": "chukyo-1400-dirt",
+   "track": "Chukyo",
+   "distance": 1400,
+   "surface": "Dirt",
+   "direction": "left",
+   "variant": null,
+   "name": "Chukyo - 1400m Dirt"
+  },
+  {
+   "id": "chukyo-1800-dirt",
+   "track": "Chukyo",
+   "distance": 1800,
+   "surface": "Dirt",
+   "direction": "left",
+   "variant": null,
+   "name": "Chukyo - 1800m Dirt"
+  },
+  {
+   "id": "kyoto-1200-turf-inner",
+   "track": "Kyoto",
+   "distance": 1200,
+   "surface": "Turf",
+   "direction": "right",
+   "variant": "Inner",
+   "name": "Kyoto - 1200m Turf (Inner)"
+  },
+  {
+   "id": "kyoto-1400-turf-inner",
+   "track": "Kyoto",
+   "distance": 1400,
+   "surface": "Turf",
+   "direction": "right",
+   "variant": "Inner",
+   "name": "Kyoto - 1400m Turf (Inner)"
+  },
+  {
+   "id": "kyoto-1400-turf-outer",
+   "track": "Kyoto",
+   "distance": 1400,
+   "surface": "Turf",
+   "direction": "right",
+   "variant": "Outer",
+   "name": "Kyoto - 1400m Turf (Outer)"
+  },
+  {
+   "id": "kyoto-1600-turf-inner",
+   "track": "Kyoto",
+   "distance": 1600,
+   "surface": "Turf",
+   "direction": "right",
+   "variant": "Inner",
+   "name": "Kyoto - 1600m Turf (Inner)"
+  },
+  {
+   "id": "kyoto-1600-turf-outer",
+   "track": "Kyoto",
+   "distance": 1600,
+   "surface": "Turf",
+   "direction": "right",
+   "variant": "Outer",
+   "name": "Kyoto - 1600m Turf (Outer)"
+  },
+  {
+   "id": "kyoto-1800-turf-outer",
+   "track": "Kyoto",
+   "distance": 1800,
+   "surface": "Turf",
+   "direction": "right",
+   "variant": "Outer",
+   "name": "Kyoto - 1800m Turf (Outer)"
+  },
+  {
+   "id": "kyoto-2000-turf-inner",
+   "track": "Kyoto",
+   "distance": 2000,
+   "surface": "Turf",
+   "direction": "right",
+   "variant": "Inner",
+   "name": "Kyoto - 2000m Turf (Inner)"
+  },
+  {
+   "id": "kyoto-2200-turf-outer",
+   "track": "Kyoto",
+   "distance": 2200,
+   "surface": "Turf",
+   "direction": "right",
+   "variant": "Outer",
+   "name": "Kyoto - 2200m Turf (Outer)"
+  },
+  {
+   "id": "kyoto-2400-turf-outer",
+   "track": "Kyoto",
+   "distance": 2400,
+   "surface": "Turf",
+   "direction": "right",
+   "variant": "Outer",
+   "name": "Kyoto - 2400m Turf (Outer)"
+  },
+  {
+   "id": "kyoto-3000-turf-outer",
+   "track": "Kyoto",
+   "distance": 3000,
+   "surface": "Turf",
+   "direction": "right",
+   "variant": "Outer",
+   "name": "Kyoto - 3000m Turf (Outer)"
+  },
+  {
+   "id": "kyoto-3200-turf-outer",
+   "track": "Kyoto",
+   "distance": 3200,
+   "surface": "Turf",
+   "direction": "right",
+   "variant": "Outer",
+   "name": "Kyoto - 3200m Turf (Outer)"
+  },
+  {
+   "id": "kyoto-1200-dirt",
+   "track": "Kyoto",
+   "distance": 1200,
+   "surface": "Dirt",
+   "direction": "right",
+   "variant": null,
+   "name": "Kyoto - 1200m Dirt"
+  },
+  {
+   "id": "kyoto-1400-dirt",
+   "track": "Kyoto",
+   "distance": 1400,
+   "surface": "Dirt",
+   "direction": "right",
+   "variant": null,
+   "name": "Kyoto - 1400m Dirt"
+  },
+  {
+   "id": "kyoto-1800-dirt",
+   "track": "Kyoto",
+   "distance": 1800,
+   "surface": "Dirt",
+   "direction": "right",
+   "variant": null,
+   "name": "Kyoto - 1800m Dirt"
+  },
+  {
+   "id": "kyoto-1900-dirt",
+   "track": "Kyoto",
+   "distance": 1900,
+   "surface": "Dirt",
+   "direction": "right",
+   "variant": null,
+   "name": "Kyoto - 1900m Dirt"
+  },
+  {
+   "id": "hanshin-1200-turf-inner",
+   "track": "Hanshin",
+   "distance": 1200,
+   "surface": "Turf",
+   "direction": "right",
+   "variant": "Inner",
+   "name": "Hanshin - 1200m Turf (Inner)"
+  },
+  {
+   "id": "hanshin-1400-turf-inner",
+   "track": "Hanshin",
+   "distance": 1400,
+   "surface": "Turf",
+   "direction": "right",
+   "variant": "Inner",
+   "name": "Hanshin - 1400m Turf (Inner)"
+  },
+  {
+   "id": "hanshin-1600-turf-outer",
+   "track": "Hanshin",
+   "distance": 1600,
+   "surface": "Turf",
+   "direction": "right",
+   "variant": "Outer",
+   "name": "Hanshin - 1600m Turf (Outer)"
+  },
+  {
+   "id": "hanshin-1800-turf-outer",
+   "track": "Hanshin",
+   "distance": 1800,
+   "surface": "Turf",
+   "direction": "right",
+   "variant": "Outer",
+   "name": "Hanshin - 1800m Turf (Outer)"
+  },
+  {
+   "id": "hanshin-2000-turf-inner",
+   "track": "Hanshin",
+   "distance": 2000,
+   "surface": "Turf",
+   "direction": "right",
+   "variant": "Inner",
+   "name": "Hanshin - 2000m Turf (Inner)"
+  },
+  {
+   "id": "hanshin-2200-turf-inner",
+   "track": "Hanshin",
+   "distance": 2200,
+   "surface": "Turf",
+   "direction": "right",
+   "variant": "Inner",
+   "name": "Hanshin - 2200m Turf (Inner)"
+  },
+  {
+   "id": "hanshin-2400-turf-outer",
+   "track": "Hanshin",
+   "distance": 2400,
+   "surface": "Turf",
+   "direction": "right",
+   "variant": "Outer",
+   "name": "Hanshin - 2400m Turf (Outer)"
+  },
+  {
+   "id": "hanshin-2600-turf-outer",
+   "track": "Hanshin",
+   "distance": 2600,
+   "surface": "Turf",
+   "direction": "right",
+   "variant": "Outer",
+   "name": "Hanshin - 2600m Turf (Outer)"
+  },
+  {
+   "id": "hanshin-3000-turf-inner",
+   "track": "Hanshin",
+   "distance": 3000,
+   "surface": "Turf",
+   "direction": "right",
+   "variant": "Inner",
+   "name": "Hanshin - 3000m Turf (Inner)"
+  },
+  {
+   "id": "hanshin-3200-turf-outer-to-inner",
+   "track": "Hanshin",
+   "distance": 3200,
+   "surface": "Turf",
+   "direction": "right",
+   "variant": "Outer to Inner",
+   "name": "Hanshin - 3200m Turf (Outer to Inner)"
+  },
+  {
+   "id": "hanshin-1400-dirt",
+   "track": "Hanshin",
+   "distance": 1400,
+   "surface": "Dirt",
+   "direction": "right",
+   "variant": null,
+   "name": "Hanshin - 1400m Dirt"
+  },
+  {
+   "id": "hanshin-1800-dirt",
+   "track": "Hanshin",
+   "distance": 1800,
+   "surface": "Dirt",
+   "direction": "right",
+   "variant": null,
+   "name": "Hanshin - 1800m Dirt"
+  },
+  {
+   "id": "hanshin-2000-dirt",
+   "track": "Hanshin",
+   "distance": 2000,
+   "surface": "Dirt",
+   "direction": "right",
+   "variant": null,
+   "name": "Hanshin - 2000m Dirt"
+  },
+  {
+   "id": "kokura-1200-turf",
+   "track": "Kokura",
+   "distance": 1200,
+   "surface": "Turf",
+   "direction": "right",
+   "variant": null,
+   "name": "Kokura - 1200m Turf"
+  },
+  {
+   "id": "kokura-1800-turf",
+   "track": "Kokura",
+   "distance": 1800,
+   "surface": "Turf",
+   "direction": "right",
+   "variant": null,
+   "name": "Kokura - 1800m Turf"
+  },
+  {
+   "id": "kokura-2000-turf",
+   "track": "Kokura",
+   "distance": 2000,
+   "surface": "Turf",
+   "direction": "right",
+   "variant": null,
+   "name": "Kokura - 2000m Turf"
+  },
+  {
+   "id": "kokura-2600-turf",
+   "track": "Kokura",
+   "distance": 2600,
+   "surface": "Turf",
+   "direction": "right",
+   "variant": null,
+   "name": "Kokura - 2600m Turf"
+  },
+  {
+   "id": "kokura-1700-dirt",
+   "track": "Kokura",
+   "distance": 1700,
+   "surface": "Dirt",
+   "direction": "right",
+   "variant": null,
+   "name": "Kokura - 1700m Dirt"
+  },
+  {
+   "id": "ooi-1200-dirt",
+   "track": "Ooi",
+   "distance": 1200,
+   "surface": "Dirt",
+   "direction": "right",
+   "variant": null,
+   "name": "Ooi - 1200m Dirt"
+  },
+  {
+   "id": "ooi-1800-dirt",
+   "track": "Ooi",
+   "distance": 1800,
+   "surface": "Dirt",
+   "direction": "right",
+   "variant": null,
+   "name": "Ooi - 1800m Dirt"
+  },
+  {
+   "id": "ooi-2000-dirt",
+   "track": "Ooi",
+   "distance": 2000,
+   "surface": "Dirt",
+   "direction": "right",
+   "variant": null,
+   "name": "Ooi - 2000m Dirt"
+  },
+  {
+   "id": "kawasaki-1400-dirt",
+   "track": "Kawasaki",
+   "distance": 1400,
+   "surface": "Dirt",
+   "direction": "left",
+   "variant": null,
+   "name": "Kawasaki - 1400m Dirt"
+  },
+  {
+   "id": "kawasaki-1600-dirt",
+   "track": "Kawasaki",
+   "distance": 1600,
+   "surface": "Dirt",
+   "direction": "left",
+   "variant": null,
+   "name": "Kawasaki - 1600m Dirt"
+  },
+  {
+   "id": "kawasaki-2100-dirt",
+   "track": "Kawasaki",
+   "distance": 2100,
+   "surface": "Dirt",
+   "direction": "left",
+   "variant": null,
+   "name": "Kawasaki - 2100m Dirt"
+  },
+  {
+   "id": "funabashi-1000-dirt",
+   "track": "Funabashi",
+   "distance": 1000,
+   "surface": "Dirt",
+   "direction": "left",
+   "variant": null,
+   "name": "Funabashi - 1000m Dirt"
+  },
+  {
+   "id": "funabashi-1600-dirt",
+   "track": "Funabashi",
+   "distance": 1600,
+   "surface": "Dirt",
+   "direction": "left",
+   "variant": null,
+   "name": "Funabashi - 1600m Dirt"
+  },
+  {
+   "id": "funabashi-1800-dirt",
+   "track": "Funabashi",
+   "distance": 1800,
+   "surface": "Dirt",
+   "direction": "left",
+   "variant": null,
+   "name": "Funabashi - 1800m Dirt"
+  },
+  {
+   "id": "funabashi-2400-dirt",
+   "track": "Funabashi",
+   "distance": 2400,
+   "surface": "Dirt",
+   "direction": "left",
+   "variant": null,
+   "name": "Funabashi - 2400m Dirt"
+  },
+  {
+   "id": "morioka-1200-dirt",
+   "track": "Morioka",
+   "distance": 1200,
+   "surface": "Dirt",
+   "direction": "left",
+   "variant": null,
+   "name": "Morioka - 1200m Dirt"
+  },
+  {
+   "id": "morioka-1600-dirt",
+   "track": "Morioka",
+   "distance": 1600,
+   "surface": "Dirt",
+   "direction": "left",
+   "variant": null,
+   "name": "Morioka - 1600m Dirt"
+  },
+  {
+   "id": "morioka-1800-dirt",
+   "track": "Morioka",
+   "distance": 1800,
+   "surface": "Dirt",
+   "direction": "left",
+   "variant": null,
+   "name": "Morioka - 1800m Dirt"
+  },
+  {
+   "id": "morioka-2000-dirt",
+   "track": "Morioka",
+   "distance": 2000,
+   "surface": "Dirt",
+   "direction": "left",
+   "variant": null,
+   "name": "Morioka - 2000m Dirt"
+  }
+ ]
+}
