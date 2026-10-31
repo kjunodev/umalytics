@@ -30,7 +30,8 @@ release builds reject it, with no environment override. Each successful new
 handshake replaces the active producer, closing it and clearing its room
 before serving the new client. Failed handshakes leave the active client intact.
 The listener starts after frontend event subscriptions
-are ready. An unexpected disconnect clears room state and cancels profile work.
+are ready. An unexpected disconnect clears active room state; the desktop
+retains the last roster, profiles and draft for a dimmed reconnect view.
 
 Only v1 text envelopes are forwarded. Frames and assembled messages have a
 2 MiB limit enforced by tokio-tungstenite. Size and protocol errors close the
@@ -39,11 +40,12 @@ binary data messages increment a counts-only diagnostic. Ping/pong control
 frames do not increment rejections. Bad JSON does not close
 the connection. A port conflict appears in the UI.
 
-The sidebar opens the shared Lobby, Draft, Players, History and Umas views,
-plus Stamina. Skills by map remains a placeholder.
-Below 760 CSS pixels the shell shows compact Lobby/Draft; Compact and
+The icon rail groups Lobby and Draft, Stamina, then Players, History and Umas,
+with Settings at the bottom. Lobby cards and the live Draft layout are desktop
+components; player drawers and data pages reuse the shared views.
+Below 600 CSS pixels by default the shell shows compact Lobby/Draft; Compact and
 Expand resize the native window and restore its previous logical size. Pin on
-top, display mode, and the last page are saved locally in `shell.json`.
+top, display mode, compact threshold, and the last page are saved locally in `shell.json`.
 Settings exposes feed counters and draft state during Vite development only.
 The scope selector drives the shared views through desktop UiServices.
 Explorer, title and history requests call the existing core functions through
@@ -67,9 +69,11 @@ pnpm --filter @umalytics/desktop shots
 The script starts and stops its own Vite server. It captures full Lobby,
 drawer, mid-draft, Players leaderboard and directory results, History, Umas
 and Stamina at 1280×800 and 1000×700, compact Lobby/drawer/Draft at 440×860,
-the 760px full-mode floor, and an empty Lobby.
+the 5/4/3/2-column Lobby layouts, all live feed states and the three Draft phases.
+Pick order is shown only when the received snapshot includes complete explicit
+Uma pick history; per-team slot numbers never establish global order.
 Screenshots go to `.shots/` (or `DESKTOP_SHOTS_DIR`). It rejects horizontal
-overflow, wrapped team rows, clipped text (including every
+overflow, unexpected column counts, clipped text (including every
 select option), unexpected external requests, and page errors, and
 checks scope changes, persistence, skill editing, stale results and cancellation.
 All replay accounts and simulation results in this harness are synthetic.
@@ -84,6 +88,11 @@ cargo clippy --manifest-path apps/desktop/src-tauri/Cargo.toml --locked -- -D wa
 `pnpm build:all` builds only the two extension targets.
 `pnpm build:desktop` builds the desktop frontend, independently versioned at 0.1.0.
 Native builds use the Tauri CLI. Packaging, signing and auto-update are disabled.
+
+Arena tokens and font faces live in `src/tokens.css`; desktop styles live in
+`src/arena.css`. Saira Condensed, Barlow and Geist Mono are bundled under
+`src/fonts/`, each with its OFL licence. Fonts load locally under `font-src 'self'`.
+The port-conflict screen copies only listener status and accepted/rejected counts.
 
 ## Stamina check
 

@@ -17,8 +17,11 @@ let checks = 0;
 const check = (condition, message) => { assert(condition, message); checks++; };
 const failures = [];
 const staminaOnly = process.env.DESKTOP_SHOTS_SCENES === 'stamina';
+const arenaOnly = process.env.DESKTOP_SHOTS_SCENES === 'arena';
+const statesOnly = process.env.DESKTOP_SHOTS_SCENES === 'states';
 const localIcons = process.env.UMALYTICS_GAMEDATA_DIR ?? path.join(os.homedir(), 'Documents/Coding Projects/UmaLytics-GameData/gametora');
 const fixtureIcon = await fs.readFile(path.join(localIcons, 'icons/20051.webp')).catch(() => null);
+const portraitDir = process.env.DESKTOP_SHOTS_PORTRAITS;
 try {
   await server.listen();
   browser = await chromium.launch({ headless: true });
@@ -27,25 +30,31 @@ try {
     const page = await browser.newPage({ viewport: { width, height } });
     page.setDefaultTimeout(20000);
     page.on('pageerror', error => failures.push(error.message));
-    await page.route('https://**/*', route => { if (route.request().resourceType() !== 'image') failures.push(`Unexpected network: ${route.request().url()}`); return route.abort(); });
+    await page.route('https://**/*', async route => {
+      if (route.request().resourceType() !== 'image') failures.push(`Unexpected network: ${route.request().url()}`);
+      const filename = new URL(route.request().url()).pathname.split('/').at(-1);
+      const portrait = portraitDir && /^chara_stand_\d{4}_\d{6}\.webp$/.test(filename) ? await fs.readFile(path.join(portraitDir, filename)).catch(() => null) : null;
+      return portrait ? route.fulfill({ contentType: 'image/webp', body: portrait }) : route.abort();
+    });
     await page.route('http://asset.localhost/**', route => fixtureIcon ? route.fulfill({ contentType: 'image/webp', body: fixtureIcon }) : route.abort());
     await page.exposeFunction('__resizeShot__', size => page.setViewportSize({ width: Math.round(size.width), height: Math.round(size.height) }));
     await page.addInitScript(scene => { window.__SHOT_SCENE__ = scene; }, scene);
     await page.goto(origin);
     await page.locator('.app-shell').waitFor();
     await page.evaluate(() => document.fonts.ready);
-    if (scene !== 'empty') {
-      try { await page.waitForFunction(() => innerWidth < 760 ? document.querySelectorAll('.rank').length === 10 && [...document.querySelectorAll('.rank')].every(chip => chip.textContent.startsWith('#')) : document.querySelectorAll('.player-list .top-umas-rows li').length === 30 && [...document.querySelectorAll('.player-rank-line')].every(line => line.textContent.startsWith('#'))); }
+    if (scene === 'lobby' || scene === 'stamina-no-data') {
+      try { await page.waitForFunction(() => document.querySelectorAll('.rank').length === 10 && [...document.querySelectorAll('.rank')].every(chip => chip.textContent.startsWith('#'))); }
       catch (error) { console.error(await page.locator('body').innerText()); throw error; }
     }
     return page;
   }
   async function shot(page, name) {
+    await page.mouse.move(page.viewportSize().width - 8, 8);
     await page.evaluate(() => document.fonts.ready);
     const errors = await page.evaluate(() => {
       const errors = [];
       for (const grid of document.querySelectorAll('.player-list')) {
-        if (!document.querySelector('.compact')) {
+        if (!document.querySelector('.compact') && innerWidth >= 1000) {
           const tops = [...grid.children].map(card => Math.round(card.getBoundingClientRect().top));
           if (new Set(tops).size > 1) errors.push('team cards wrap to a second row');
         }
@@ -91,10 +100,11 @@ try {
     check(errors.length === 0, `${name}: ${errors.join('; ')}`);
     console.log(`PASS ${name}`);
   }
-  for (const [width, height] of [[1280, 800], [1000, 700]]) {
+  for (const [width, height] of statesOnly ? [] : [[1280, 800], [1000, 700]]) {
     const page = await open('lobby', width, height);
     if (!staminaOnly) {
     check(await page.locator('.player-list .player-row').count() === 10, 'Ten replay players');
+    check(await page.locator('.arena-card.top10').count() === 5 && await page.locator('.arena-card.top25').count() === 5, 'Gold Top 10 and silver Top 25 cards use actual leaderboard rank');
     await shot(page, `lobby-${width}x${height}`);
     await page.getByRole('button', { name: 'All-time', exact: true }).click();
     await page.waitForFunction(() => document.querySelectorAll('.compact-scouting-grid').length === 10 && [...document.querySelectorAll('.compact-scouting-grid')].every(stats => stats.textContent.includes('30-24')));
@@ -111,7 +121,7 @@ try {
     await shot(page, `draft-mid-${width}x${height}`);
     await page.getByRole('button', { name: 'Players', exact: true }).click();
     await page.locator('.players-row').first().waitFor();
-    check(await page.locator('.players-row').count() === 10, 'Players displays leaderboard results');
+    check(await page.locator('.players-row').count() === 23, 'Players displays the full leaderboard fixture');
     await shot(page, `players-${width}x${height}`);
     await page.getByRole('searchbox', { name: 'Search players' }).fill('Directory fixture');
     await page.getByRole('button', { name: 'Search all players', exact: true }).click();
@@ -137,6 +147,7 @@ try {
     await page.locator('.uma-catalog-button').first().waitFor();
     await shot(page, `umas-${width}x${height}`);
     }
+    if (!arenaOnly) {
     await page.getByRole('button', { name: 'Stamina', exact: true }).click();
     await page.getByRole('button', { name: 'Race', exact: true }).click();
     check(await page.getByRole('group', { name: 'Track', exact: true }).getByRole('button').count() === 14, 'All 14 tracks');
@@ -367,8 +378,10 @@ try {
     check((await page.getByRole('button', { name: 'Race', exact: true }).innerText()).includes('Hanshin 3200'), 'Draft never overwrites any-course race');
     await page.getByRole('button', { name: 'Advanced settings', exact: true }).click();
     check(await page.getByRole('group', { name: 'Target', exact: true }).getByRole('button', { name: '95%', exact: true }).getAttribute('aria-pressed') === 'true', 'Target remembered independently');
+    }
     await page.close();
   }
+  if (!arenaOnly && !statesOnly) {
   const noData = await open('stamina-no-data', 1000, 700);
   await noData.getByRole('button', { name: 'Stamina', exact: true }).click();
   await noData.getByRole('button', { name: 'Build', exact: true }).click();
@@ -379,9 +392,10 @@ try {
   check(await noData.locator('.skill-options img').count() === 0, 'No icons requested without local data');
   await shot(noData, 'stamina-no-data-1000x700');
   await noData.close();
-  if (!staminaOnly) {
+  }
+  if (!staminaOnly && !statesOnly) {
   const compact = await open('lobby', 440, 860);
-  check((await compact.locator('.team-heading .num').first().innerText()).includes('1688'), 'Compact and shared cards use the same conservative team rating');
+  check((await compact.locator('.team-heading .num').first().innerText()).replaceAll(',', '').includes('1688'), 'Compact and shared cards use the same conservative team rating');
   await shot(compact, 'compact-lobby-440x860');
   await compact.getByRole('button', { name: 'Open details for Replay Player 1', exact: true }).click();
   await compact.getByText('Replay Champion', { exact: true }).waitFor();
@@ -414,6 +428,87 @@ try {
   const empty = await open('empty', 1280, 800);
   await shot(empty, 'empty-lobby-1280x800');
   await empty.close();
+  }
+  if (!staminaOnly) {
+    for (const [width, height] of [[1000, 700], [1280, 800]]) {
+      const page = await open('lobby', width, height);
+      for (const name of ['Stamina', 'Settings']) {
+        await page.locator('.sidebar').getByRole('button', { name, exact: true }).click();
+        await shot(page, `shell-${name.toLowerCase()}-${width}x${height}`);
+      }
+      await page.locator('.sidebar').getByRole('button', { name: 'Draft', exact: true }).click();
+      check(await page.locator('.arena-pick-order').count() === 0, 'No strip without real snapshot history');
+      for (const [index, phase] of ['map-pick', 'uma-pick', 'complete'].entries()) {
+        await page.evaluate(async ({ index, phase }) => {
+          const c = window.__SHOT_CONTROL__, message = structuredClone(c.messages.at(-1));
+          message.event.version = 2000 + index;
+          const state = message.event.state; state.phase = phase;
+          if (phase === 'map-pick') { state.team1.pickedUmas = []; state.team2.pickedUmas = []; state.team1.pickedMaps = state.team1.pickedMaps.slice(0, 1); state.team2.pickedMaps = []; delete state.wildcardMap; }
+          if (phase === 'complete') for (const side of [state.team1, state.team2]) while (side.pickedUmas.length < 5) side.pickedUmas.push({ id: String(100101 + side.pickedUmas.length * 100) });
+          if (phase !== 'map-pick') {
+            state.team1.bannedUmas = [{ id: '100701' }];
+            const all = [...state.team2.pickedUmas.map(uma => ({ action: 'uma-pick', actorTeam: 'team2', uma })), ...[...state.team1.pickedUmas, ...state.team1.bannedUmas].map(uma => ({ action: 'uma-pick', actorTeam: 'team1', uma }))];
+            state.draftActionHistory = all;
+          }
+          await c.emit('feed-message', message);
+        }, { index, phase });
+        if (phase !== 'map-pick') {
+          await page.locator('.arena-pick-order').waitFor();
+          check(await page.locator('.arena-pick-order li').first().getAttribute('class') === 'team-2', 'Pick strip follows explicit history instead of assumed alternating order');
+          check((await page.locator('.arena-draft-team').first().innerText()).includes('Gold Ship'), 'Veto remains in the original picking team’s slot');
+        }
+        await shot(page, `draft-${phase}-${width}x${height}`);
+        if (phase === 'complete') check(await page.locator('.arena-race:not(.pending)').count() === 7, 'Finished draft shows seven races and conditions');
+      }
+      await page.evaluate(async () => { const c = window.__SHOT_CONTROL__; await c.emit('feed-message', { v: 1, type: 'left' }); await c.emit('feed-status', { state: 'disconnected', accepted: 12, rejected: 0 }); });
+      await page.locator('.reconnect').waitFor();
+      check(await page.locator('.dimmed .arena-draft-team').count() === 2, 'Native disconnect sequence retains last draft');
+      await shot(page, `draft-disconnected-${width}x${height}`);
+      await page.locator('.sidebar').getByRole('button', { name: 'Lobby', exact: true }).click();
+      check(await page.locator('.dimmed .arena-card').count() === 10, 'Native disconnect sequence retains last roster');
+      check((await page.locator('.arena-stats').first().innerText()).includes('212-119'), 'Disconnect retains loaded stats');
+      await shot(page, `lobby-disconnected-${width}x${height}`);
+      await page.close();
+      for (const scene of ['empty', 'loading', 'profile-error', 'private', 'port-in-use', 'draft-loading', 'feed-error']) {
+        const state = await open(scene, width, height);
+        if (scene === 'loading') {
+          try { await state.locator('.arena-loading').first().waitFor(); }
+          catch (error) { console.error(await state.locator('body').innerText()); console.error(await state.evaluate(() => window.__SHOT_CONTROL__.calls.filter(c => c.command === 'plugin:http|fetch').map(c => c.args.clientConfig.url))); throw error; }
+        }
+        if (scene === 'profile-error') await state.locator('.feed-banner.error').waitFor();
+        if (scene === 'private') await state.locator('.arena-card[data-state="private"]').waitFor();
+        await shot(state, `lobby-${scene}-${width}x${height}`);
+        await state.locator('.sidebar').getByRole('button', { name: 'Draft', exact: true }).click();
+        if (scene === 'draft-loading') await state.locator('.draft-loading').waitFor();
+        await shot(state, `draft-${scene}-${width}x${height}`);
+        if (scene === 'port-in-use') {
+          await state.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+          await state.getByRole('button', { name: 'Copy diagnostics', exact: true }).click();
+          await state.getByText('Diagnostics copied', { exact: true }).waitFor();
+          const diagnostic = await state.evaluate(() => navigator.clipboard.readText());
+          check(!/100000000000000|CAS7R1|token|discord/i.test(diagnostic), 'Copied diagnostics contain no room codes, IDs or tokens');
+          await state.getByRole('button', { name: 'Retry', exact: true }).click();
+          check(await state.evaluate(() => window.__SHOT_CONTROL__.calls.filter(c => c.command === 'start_feed').length) === 2, 'Port conflict Retry invokes the existing listener command');
+        }
+        await state.close();
+      }
+    }
+    for (const [width, columns] of [[1000, 5], [900, 4], [780, 3], [640, 2], [600, 2]]) {
+      const page = await open('lobby', width, 700);
+      check(await page.locator('.arena-player-grid').first().evaluate(grid => getComputedStyle(grid).gridTemplateColumns.split(' ').length) === columns, `Lobby ${columns} columns at ${width}px`);
+      check(await page.locator('.arena-card').evaluateAll(cards => new Set(cards.map(card => Math.round(card.getBoundingClientRect().height))).size) === 1, 'Lobby cards have equal heights');
+      check((await page.locator('.arena-stats').first().innerText()).includes('212-119'), 'Triple-digit records fit the four-stat row');
+      await shot(page, `lobby-${columns}columns-${width}x700`);
+      await page.locator('.sidebar').getByRole('button', { name: 'Draft', exact: true }).click();
+      await shot(page, `draft-resize-${width}x700`);
+      if (width === 600) { await page.setViewportSize({ width: 599, height: 700 }); await page.locator('.compact-header').waitFor(); check(await page.locator('.sidebar').count() === 0, '600px preference switches compact below threshold'); }
+      await page.close();
+    }
+    const focus = await open('lobby', 1000, 700);
+    await focus.locator('.arena-card-hit').first().focus();
+    check(await focus.locator('.arena-card-hit').first().evaluate(button => getComputedStyle(button).outlineStyle !== 'none'), 'Keyboard focus is visible');
+    await shot(focus, 'lobby-keyboard-focus-1000x700');
+    await focus.close();
   }
   check(failures.length === 0, failures.join('\n'));
   console.log(`${checks} checks passed; screenshots: ${out}`);

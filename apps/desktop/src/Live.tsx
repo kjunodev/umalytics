@@ -1,22 +1,41 @@
-import { phaseLabel } from './phase';
 import { useEffect, useState } from 'react';
-import { TeamSection, PlayerDrawer, getSelectedPlayerContext } from '@umalytics/ui';
+import { PlayerDrawer, getSelectedPlayerContext } from '@umalytics/ui';
+import { BadgeIcon } from '@umalytics/ui/lobby/BadgeChip';
+import { getCardProfile, getCardState, getPlayerDisplayRating, getTeamAverageRating, CaptainCrown } from '@umalytics/ui/lobby/TeamSection';
+import { BestUmaPortrait } from '@umalytics/ui/player/BestUmaPortrait';
+import { sortTopUmasForCard } from '@umalytics/ui/player/TopUmasList';
 import { getPlayerKey } from '@umalytics/ui/common/roster';
-import { getDisplayedProfileStats } from '@umalytics/ui/player/playerProfileDisplay';
+import { getNotableBadges } from '@umalytics/ui/common/badges';
+import { formatDecimal, formatNumber, formatPercent, formatRecord, formatRank } from '@umalytics/ui/common/format';
 import { getTeamGroups } from '@umalytics/core/room/rosterDisplay';
-import { getTeamAverageRating } from '@umalytics/ui/lobby/TeamSection';
 import { isDiscordSnowflake } from '@umalytics/core/room/rosterIdentity';
-import type { DraftSnapshot, PlayerProfileSummary, PlayerStatsScope, PrematchPlayer, PrematchRoster } from '@umalytics/shared';
+import type { PlayerProfileSummary, PlayerStatsScope, PrematchPlayer, PrematchRoster } from '@umalytics/shared';
 
-const teamIds = ['team1', 'team2'] as const;
-function statusFor(player: PrematchPlayer, profile?: PlayerProfileSummary) {
-  return !isDiscordSnowflake(player.discordId) ? 'No linked profile' : !profile ? 'Loading stats…' : profile.statsPrivate ? 'Stats are private' : profile.error ? 'Stats unavailable' : '';
+function Uma({ uma }: { uma: NonNullable<PlayerProfileSummary['topUmas']>[number] }) {
+  return <><BestUmaPortrait uma={uma}/><span className="uma-name" title={uma.name}>{uma.name}</span><small className="num">{uma.matches}g</small></>;
 }
-function Rank({ profile }: { profile?: PlayerProfileSummary }) {
-  return <span className="badge rank num">{!profile || profile.statsPrivate || profile.error || profile.rankUnavailable || (profile.isPartial && profile.rank == null) ? '—' : profile.rank ? `#${profile.rank}` : 'Unranked'}</span>;
-}
-function Uma({ name, matches }: { name: string; matches?: number }) {
-  return <span className="uma-row"><span className="monogram">{name.split(' ').slice(0, 2).map(part => part[0]).join('')}</span><span>{name}</span>{matches !== undefined && <small className="num">{matches}g</small>}</span>;
+function PlayerCard({ player, profile, scope, loading, onSelect, selected, onRetry }: {
+  player: PrematchPlayer; profile?: PlayerProfileSummary; scope: PlayerStatsScope; loading: boolean; onSelect: () => void; selected: boolean; onRetry: () => void;
+}) {
+  const p = getCardProfile(profile, scope);
+  const state = loading && p?.isPartial && p.matches == null && !p.statsPrivate && !p.error ? 'loading' : getCardState(profile, p, loading, isDiscordSnowflake(player.discordId) ? player.discordId : undefined);
+  const badges = state === 'loaded' ? getNotableBadges(p).filter(badge => badge.kind !== 'private') : [];
+  const shownBadges = badges.slice(0, badges.length > 3 ? 2 : 3);
+  const moreBadges = badges.slice(shownBadges.length);
+  const tier = badges.find(badge => badge.kind === 'top10' || badge.kind === 'top25')?.kind ?? '';
+  const rating = getPlayerDisplayRating(player, profile);
+  const umas = sortTopUmasForCard(p?.allUmas ?? p?.topUmas ?? []);
+  const name = profile?.displayName ?? player.displayName;
+  return <li className={`arena-card player-row ${tier} ${selected ? 'is-selected' : ''}`} data-state={state}>
+    <button type="button" className="card-hit arena-card-hit" onClick={onSelect} aria-label={`Open details for ${name}`}/>
+    <div className="arena-card-name"><strong title={name}>{name}</strong>{(player.isCaptain || player.role === 'captain') && <CaptainCrown/>}<span className="rank num">{state === 'loading' ? '…' : state === 'private' || state === 'unavailable' ? '—' : formatRank(p, false)}</span></div>
+    <div className="arena-card-meta"><span><b className="num">{formatNumber(rating)}</b> rating</span><div className="arena-badges">{shownBadges.map(badge => <span key={badge.kind} className={`arena-badge ${badge.tone === 'rank' ? 'gold' : ''}`} tabIndex={0} aria-label={`${badge.label}: ${badge.title}`}>
+      {badge.kind === 'top10' || badge.kind === 'top25' ? <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5 2h6v4a3 3 0 0 1-6 0V2ZM5 3H2v2a3 3 0 0 0 3 3m6-5h3v2a3 3 0 0 1-3 3M8 9v4m-3 1h6"/></svg> : <BadgeIcon kind={badge.kind}/>}
+      <span className="arena-tooltip" role="tooltip"><b>{badge.label}</b>{badge.title}</span></span>)}{moreBadges.length > 0 && <span className="arena-badge" tabIndex={0} aria-label={`${moreBadges.length} more badges: ${moreBadges.map(badge => badge.label).join(', ')}`}><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="3" cy="8" r="1"/><circle cx="8" cy="8" r="1"/><circle cx="13" cy="8" r="1"/></svg><span className="arena-tooltip" role="tooltip"><b>{moreBadges.length} more badges</b>{moreBadges.map(badge => badge.label).join(' · ')}. All badges are listed in details.</span></span>}</div></div>
+    {state === 'loaded' ? <><div className="arena-stats compact-scouting-grid" aria-label={`${name} scouting summary`}>{[
+      ['W–L', formatRecord(p)], ['Win', formatPercent(p?.winRate)], ['PPG', formatDecimal(p?.pointsPerGame)], ['MVP', formatNumber(p?.mvpMatches)]
+    ].map(([label, value]) => <div key={label}><b>{value}</b><span>{label}</span></div>)}</div><div className="arena-umas"><div className="label"><span>Most played</span><span>Games</span></div><ol className="top-umas-rows">{umas.map(uma => <li key={uma.umaId}><Uma uma={uma}/></li>)}</ol>{!umas.length && <p className="muted">No ranked Uma stats</p>}</div></> : state === 'loading' ? <div className="arena-loading" role="status" aria-label={`Loading stats for ${name}`}><span/><span/><span/><span/></div> : <div className="arena-card-message"><b>{state === 'private' ? 'Stats are private' : state === 'error' ? 'Couldn’t load stats' : 'No linked profile'}</b><span>{state === 'private' ? 'Open details for match history' : state === 'error' ? 'Available details remain accessible.' : 'No Discord account is linked.'}</span>{state === 'error' && <button type="button" disabled={loading} onClick={onRetry}>Retry stats</button>}</div>}
+  </li>;
 }
 export function Lobby({ roster, profiles, loading, compact, scope, emptyStatus, onOpenMatch, onRetry }: {
   roster?: PrematchRoster; profiles: Record<string, PlayerProfileSummary>; loading: boolean; compact: boolean; scope: PlayerStatsScope; emptyStatus: string;
@@ -26,38 +45,17 @@ export function Lobby({ roster, profiles, loading, compact, scope, emptyStatus, 
   useEffect(() => setSelected(undefined), [roster?.matchCode]);
   const teams = getTeamGroups(roster);
   const context = getSelectedPlayerContext(teams, selected);
-  if (!roster?.players.length) return <section className="empty-state"><h2>Waiting for your room</h2><p>Open a room on Uma Drafter with local sharing turned on</p><p role="status">{emptyStatus}</p></section>;
-  return <>{compact ? <div className="lobby compact-lobby"><div className="compact-caption"><span>{scope === 'currentSeason' ? 'Season' : 'All-time'} stats</span><span className="label">Rank · W–L · PPG</span></div>
-    {teamIds.map((team, index) => {
-      const players = roster.players.filter(player => player.team === team);
-      const teamGroup = teams.find(group => group.id === team);
-      const average = teamGroup && getTeamAverageRating(teamGroup, profiles);
-      return <section className={`team team-${index + 1}`} key={team}><div className="team-heading"><i/><h2>{roster.teams?.[team].name ?? `Team ${index + 1}`}</h2><div className="rule"/><span className="num">Avg <b>{average ?? '—'}</b></span></div>
-        <div className="player-grid">{players.map(player => {
-          const p = getDisplayedProfileStats(profiles[player.discordId], scope); const message = statusFor(player, p); const usable = p && !message;
-          const record = usable && p.wins != null && p.losses != null ? `${p.wins}–${p.losses}` : '—';
-          const ppg = usable && p.pointsPerGame != null ? p.pointsPerGame.toFixed(1) : '—';
-          const umas = usable ? p.topUmas?.slice(0, 3) ?? [] : [];
-          return <button className="compact-player-row" key={player.discordId} onClick={() => setSelected(getPlayerKey(player))} aria-label={`Open details for ${player.displayName}`}>
-            <span className="player-identity"><strong>{player.displayName}</strong>{message ? <small>{message}</small> : umas[0] ? <Uma name={umas[0].name}/> : <small>No ranked Uma stats</small>}</span><Rank profile={p}/><span className="num">{record}</span><span className="num">{ppg}</span>
-          </button>;
-        })}</div>{!players.length && <p className="muted">Waiting for players</p>}</section>;
-    })}</div> : <section className="team-list" aria-label="Live lobby teams">{teams.map(team => <TeamSection key={team.id} team={team} profiles={profiles} statsScope={scope}
-      loadingDiscordIds={loading ? roster.players.filter(player => !profiles[player.discordId]).map(player => player.discordId) : []}
-      selectedPlayerKey={selected} onSelectPlayer={setSelected} onRetryProfile={onRetry} canRetryProfile={!loading}/>)}</section>}
-    {context && <PlayerDrawer player={context.player} profile={profiles[context.player.discordId]} onClose={() => setSelected(undefined)}
-      context={{ team: context.team, statsScope: scope, isProfileLoading: loading && !profiles[context.player.discordId], now: Date.now(), inLobby: true, onOpenMatch }}/>}</>;
-}
-
-export function Draft({ draft }: { draft?: DraftSnapshot }) {
-  if (!draft) return <section className="empty-state"><h2>Waiting for the draft</h2><p>Picks, bans and races will appear when a room is shared.</p></section>;
-  const current = draft.currentTeam; const pickPhase = draft.phase === 'uma-pick'; const count = draft.rules?.picks;
-  const picked = current ? draft.teams[current].umas.filter(uma => uma.kind === 'pick').length : 0;
-  const races = teamIds.flatMap(team => draft.teams[team].maps.filter(map => map.status === 'selected')).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-  return <div className="draft-view compact-draft"><div className="turn-banner" role="status">{pickPhase && current ? `${draft.teams[current].name ?? current} is picking · Uma pick ${picked + 1}${count ? ` of ${count}` : ''}` : phaseLabel(draft.phase)}</div>
-    <section className="races"><h2 className="label">Races</h2>{races.map((race, i) => <div className={`race team-${race.team === 'team1' ? 1 : 2}`} key={`${race.team}-${i}`}><i/>{race.name}{race.details ? ` · ${race.details}` : ''}</div>)}{draft.tiebreakerMap && <div className="race">Tiebreaker · {draft.tiebreakerMap.name} {draft.tiebreakerMap.details}</div>}{!races.length && <p className="muted">No races selected yet</p>}</section>
-    <div className="draft-teams">{teamIds.map((team, i) => {
-      const side = draft.teams[team]; const picks = side.umas.filter(uma => uma.kind === 'pick'); const bans = side.umas.filter(uma => uma.kind !== 'pick');
-      return <section className={`team-${i + 1}`} key={team}><div className="team-heading"><i/><h2>{side.name ?? `Team ${i + 1}`}</h2></div><div className="pick-list">{Array.from({ length: Math.max(count ?? picks.length, picks.length) }, (_, slot) => <div key={slot} className={`slot ${picks[slot] ? '' : current === team && pickPhase && slot === picks.length ? 'now' : 'empty'}`}>{picks[slot] ? <Uma name={picks[slot].name}/> : current === team && pickPhase && slot === picks.length ? 'Picking…' : 'Open slot'}</div>)}</div><h3 className="label">Bans</h3><div className="pick-list">{bans.map((ban, n) => <div className="slot ban" key={`${ban.umaId}-${n}`}>{ban.name}</div>)}{!bans.length && <span className="muted">No bans</span>}</div></section>;
-    })}</div></div>;
+  if (!roster?.players.length) return <section className="empty-state"><h2>Waiting for your room</h2><p>Open a room on Uma Drafter with local sharing turned on.</p><p role="status">{emptyStatus}</p><div className="feed-steps"><span>1 · Open Uma Drafter</span><span>2 · Enable local sharing</span><span>3 · Join a room</span></div></section>;
+  return <>{compact && <div className="compact-caption"><span>{scope === 'currentSeason' ? 'Season' : 'All-time'} stats</span><span className="label">Rank · W–L · PPG</span></div>}
+    <div className={`arena-lobby ${compact ? 'compact-lobby' : ''}`} aria-label="Live lobby teams">{teams.map((team, index) => <section className={`team team-${index + 1}`} key={team.id}>
+      <div className="team-heading"><i/><h2>{team.name ?? `Team ${index + 1}`}</h2><span className="team-count">{team.players.length}/5 players</span><div className="rule"/><span className="num">Avg rating <b>{formatNumber(getTeamAverageRating(team, profiles))}</b></span></div>
+      <ol className={`player-list ${compact ? 'compact-players' : 'arena-player-grid'}`}>{team.players.map(player => {
+        const profile = profiles[player.discordId]; const p = getCardProfile(profile, scope);
+        if (!compact) return <PlayerCard key={getPlayerKey(player)} player={player} profile={profile} scope={scope} loading={loading} selected={selected === getPlayerKey(player)} onSelect={() => setSelected(getPlayerKey(player))} onRetry={onRetry}/>;
+        const state = getCardState(profile, p, loading, isDiscordSnowflake(player.discordId) ? player.discordId : undefined);
+        const usable = state === 'loaded'; const uma = sortTopUmasForCard(p?.allUmas ?? p?.topUmas ?? [])[0];
+        return <li key={getPlayerKey(player)}><button className="compact-player-row" onClick={() => setSelected(getPlayerKey(player))} aria-label={`Open details for ${player.displayName}`}><span className="player-identity"><strong>{player.displayName}</strong><small>{usable ? uma?.name ?? 'No ranked Uma stats' : state === 'private' ? 'Stats are private' : state === 'loading' ? 'Loading stats…' : 'Stats unavailable'}</small></span><span className="rank num">{usable ? formatRank(p, false) : '—'}</span><span className="num">{usable ? formatRecord(p) : '—'}</span><span className="num">{usable ? formatDecimal(p?.pointsPerGame) : '—'}</span></button></li>;
+      })}</ol></section>)}</div>
+    {context && <PlayerDrawer player={context.player} profile={profiles[context.player.discordId]} onClose={() => setSelected(undefined)} context={{ team: context.team, statsScope: scope, isProfileLoading: loading && !profiles[context.player.discordId], now: Date.now(), inLobby: true, onOpenMatch }}/>}
+  </>;
 }
