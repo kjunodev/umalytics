@@ -31,11 +31,14 @@ test('desktop replay envelopes drive the real core roster and left clears all ro
   }
   for (const player of room.state.roster.players) assert.equal(player.displayName, fixture.expected.names[player.discordId]);
   for (const id of fixture.expected.excluded) assert(!room.state.roster.players.some(player => player.discordId === id));
+  const lastState = room.state;
   room.apply(messages.at(-1));
   assert.equal(room.state.matchCode, undefined);
   assert.equal(room.state.roster, undefined);
   assert.equal(room.state.draft, undefined);
   assert.equal(room.state.version, -1);
+  assert.equal(room.lastState, lastState);
+  assert.equal(room.lastState.draft.phase, 'complete');
 });
 
 test('completed match history cannot enter the realtime replay path', () => {

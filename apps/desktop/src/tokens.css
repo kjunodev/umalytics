@@ -1,5 +1,29 @@
+@font-face { font-family: Barlow; src: url('./fonts/barlow/Barlow-Regular.ttf') format('truetype'); font-weight: 400; font-display: swap; }
+@font-face { font-family: Barlow; src: url('./fonts/barlow/Barlow-Medium.ttf') format('truetype'); font-weight: 500; font-display: swap; }
+@font-face { font-family: Barlow; src: url('./fonts/barlow/Barlow-SemiBold.ttf') format('truetype'); font-weight: 600; font-display: swap; }
+@font-face { font-family: Barlow; src: url('./fonts/barlow/Barlow-Bold.ttf') format('truetype'); font-weight: 700; font-display: swap; }
+@font-face { font-family: 'Saira Condensed'; src: url('./fonts/sairacondensed/SairaCondensed-Medium.ttf') format('truetype'); font-weight: 500; font-display: swap; }
+@font-face { font-family: 'Saira Condensed'; src: url('./fonts/sairacondensed/SairaCondensed-SemiBold.ttf') format('truetype'); font-weight: 600; font-display: swap; }
+@font-face { font-family: 'Saira Condensed'; src: url('./fonts/sairacondensed/SairaCondensed-Bold.ttf') format('truetype'); font-weight: 700; font-display: swap; }
+@font-face { font-family: 'Geist Mono'; src: url('./fonts/geistmono/GeistMono[wght].ttf') format('truetype'); font-weight: 100 900; font-display: swap; }
 :root {
-  /* Desktop shell additions; shared colors, type and dimensions come from @umalytics/ui. */
-  --sidebar-text: #aeb7c8;
-  --status-bg: #0f1420;
+  --bg: #080B11; --chrome: #06080D; --s1: #0F141E; --s2: #151C2A; --s3: #1D2638; --line: #222C3F;
+  --tx: #EEF3FA; --tx2: #A9B4C6; --tx3: #7E8A9F; --acc: #35D6E8; --acc-ink: #03161A;
+  --gold: #F6C453; --silver: #B8C7DD; --t1: #4D8DFF; --t2: #FF8A3D; --good: #3DDC97; --bad: #FF5F7E;
+  --font-display: 'Saira Condensed', sans-serif; --font-body: Barlow, system-ui, sans-serif; --font-mono: 'Geist Mono', ui-monospace, monospace;
+  --bg-page: var(--bg); --bg-surface-1: var(--s1); --bg-surface-2: var(--s2); --bg-raised: var(--s3); --bg-inset: #0A0F18;
+  --border-subtle: var(--line); --border-default: var(--line); --border-strong: #30405A; --border-emphasis: #3E536E;
+  --text-primary: var(--tx); --text-secondary: var(--tx2); --text-muted: var(--tx3); --text-link: var(--acc); --text-link-hover: #9FEAF2;
+  --accent-blue: var(--acc); --accent-blue-soft: #9FEAF2; --accent-orange: var(--t2); --accent-gold: var(--gold); --accent-silver: var(--silver);
+  --accent-green: var(--good); --accent-green-soft: var(--good); --sidebar-text: var(--tx3); --status-bg: var(--s1);
+  --tone-rank-bg: #2E2410; --tone-rank-fg: var(--gold); --tone-skill-bg: #0B1F22; --tone-skill-fg: #9FEAF2;
+  --tone-sample-bg: var(--s3); --tone-sample-fg: var(--tx2); --status-win-bg: #147553; --status-loss-bg: #24101A; --status-loss-fg: var(--bad);
+  --status-live-bg: #0B1F22; --status-live-fg: #9FEAF2; --status-live-dot: var(--acc); --status-live-code: var(--tx);
+  --radius-sm: 5px; --radius-md: 8px; --radius-lg: 10px; --radius-xl: 14px; --radius-pill: 999px;
+  --space-3xs: 2px; --space-2xs: 4px; --space-xs: 6px; --space-sm: 8px; --space-md: 10px; --space-lg: 14px; --space-xl: 18px; --space-2xl: 22px;
+  --space-section: 16px; --space-page-x: 18px; --space-page-y: 16px;
+  --font-step-xs: 10px; --font-step-sm: 12px; --font-step-md: 13px; --font-step-lg: 17px; --font-step-xl: 24px;
+  --shadow-card: inset 0 1px 0 #FFFFFF08, 0 10px 24px -14px #000; --shadow-overlay: 0 12px 28px -8px #000;
+  --glow-gold: 0 0 12px #F6C45388; --glow-silver: 0 0 10px #B8C7DD88; --glow-live: 0 0 8px var(--acc);
+  --rail-width: 64px; --header-height: 58px;
 }

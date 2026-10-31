@@ -187,7 +187,7 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; }
 }
 
 /* Desktop uses logical pixels at OS scaling; shared scene sizing has no root zoom. */
-.desktop-shell .player-list { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.desktop-shell .player-list:not(.arena-player-grid) { grid-template-columns: repeat(5, minmax(0, 1fr)); }
 .desktop-shell .content { container-name: desktop-content; }
 .desktop-shell .draft-columns { grid-template-columns: minmax(0, 1fr) minmax(220px, 1fr) minmax(0, 1fr); gap: 12px; }
 .desktop-shell .draft-team-panel { min-width: 0; padding: 12px; }
@@ -201,19 +201,19 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; }
 .history-tabs { width: max-content; margin-bottom: 14px; }
 .history-tabs button { text-transform: capitalize; }
 
-/* Five cards remain on one row down to the desktop's 760px full-mode floor. */
+/* Earlier shared scene sizing remains for the historical view. */
 @container desktop-content (max-width: 900px) {
-  .desktop-shell .player-list { gap: 6px; }
-  .desktop-shell .player-list .player-row { padding: 6px; }
-  .desktop-shell .player-list .compact-scouting-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .desktop-shell .player-list .card-name-row { height: auto; min-height: var(--row-md); flex-wrap: wrap; }
-  .desktop-shell .player-list .card-name { font-size: 13px; }
-  .desktop-shell .player-list .player-rank-line { flex-wrap: wrap; height: auto; min-height: 28px; }
-  .desktop-shell .player-list .card-badges { height: auto; min-height: var(--badge-row-height); }
-  .desktop-shell .player-list .top-umas-rows { grid-template-rows: repeat(3, minmax(50px, auto)); }
-  .desktop-shell .player-list .top-umas-rows li { column-gap: 4px; }
-  .desktop-shell .player-list .best-uma-portrait { width: 24px; height: 24px; }
-  .desktop-shell .player-list .uma-name { font-size: 11px; }
+  .desktop-shell .player-list:not(.arena-player-grid) { gap: 6px; }
+  .desktop-shell .player-list:not(.arena-player-grid) .player-row { padding: 6px; }
+  .desktop-shell .player-list:not(.arena-player-grid) .compact-scouting-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .desktop-shell .player-list:not(.arena-player-grid) .card-name-row { height: auto; min-height: var(--row-md); flex-wrap: wrap; }
+  .desktop-shell .player-list:not(.arena-player-grid) .card-name { font-size: 13px; }
+  .desktop-shell .player-list:not(.arena-player-grid) .player-rank-line { flex-wrap: wrap; height: auto; min-height: 28px; }
+  .desktop-shell .player-list:not(.arena-player-grid) .card-badges { height: auto; min-height: var(--badge-row-height); }
+  .desktop-shell .player-list:not(.arena-player-grid) .top-umas-rows { grid-template-rows: repeat(3, minmax(50px, auto)); }
+  .desktop-shell .player-list:not(.arena-player-grid) .top-umas-rows li { column-gap: 4px; }
+  .desktop-shell .player-list:not(.arena-player-grid) .best-uma-portrait { width: 24px; height: 24px; }
+  .desktop-shell .player-list:not(.arena-player-grid) .uma-name { font-size: 11px; }
 }
 @container desktop-content (max-width: 680px) {
   .desktop-shell .draft-columns { grid-template-columns: minmax(0, 1fr) minmax(160px, 1fr) minmax(0, 1fr); gap: 6px; }

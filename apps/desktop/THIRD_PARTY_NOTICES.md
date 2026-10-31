@@ -1,5 +1,12 @@
 # Third-party notices
 
+## Arena fonts
+
+Barlow, Saira Condensed and Geist Mono are distributed under the SIL Open Font
+License 1.1. The unmodified font files and their full copyright and licence
+notices are in `src/fonts/barlow/OFL.txt`, `src/fonts/sairacondensed/OFL.txt` and
+`src/fonts/geistmono/OFL.txt`. Source: https://github.com/google/fonts.
+
 ## uma-race-simulator
 
 Source: https://github.com/kachi-dev/uma-race-simulator

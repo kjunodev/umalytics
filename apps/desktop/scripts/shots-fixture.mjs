@@ -11,11 +11,12 @@ export const players = Array.from({ length: 10 }, (_, i) => ({
 const uma = id => ({ id, name: `Fixture Uma ${id}` });
 const side = (offset, picked) => ({ pickedUmas: Array.from({ length: picked }, (_, i) => uma(String(100101 + offset + i * 100))),
   preBannedUmas: [uma(String(101001 + offset))], bannedUmas: [],
-  pickedMaps: [{ id: `fixture-course-${offset}`, track: `Replay track ${offset + 1}`, distance: 2400 + offset * 100, surface: 'Turf' }], bannedMaps: [] });
+  pickedMaps: Array.from({ length: 3 }, (_, i) => ({ id: `fixture-course-${offset}-${i}`, track: `Replay track ${offset + i * 2 + 1}`, distance: 2400 + i * 100, surface: 'Turf', conditions: { ground: 'Good', weather: 'Sunny', season: 'Spring' } })), bannedMaps: [] });
 export const messages = [
   ...replayEnvelopes(fixture).slice(0, -1),
   { v: 1, roomCode: fixture.room, event: { type: 'match.snapshot', matchId: fixture.room, version: 999,
-    state: { phase: 'uma-pick', currentTeam: 'team2', rules: { picks: 5, maps: 2, bans: 1 },
+    state: { phase: 'uma-pick', currentTeam: 'team2', rules: { picks: 5, maps: 4, bans: 1, mapVetoes: 1 },
+      wildcardMap: { track: 'Replay tiebreaker', distance: 2000, surface: 'Dirt', conditions: { ground: 'Firm', weather: 'Cloudy', season: 'Winter' } },
       team1: side(0, 4), team2: side(1, 3), multiplayer: { team1Name: 'Replay Blue', team2Name: 'Replay Orange', rankedQueueRoster: players } } } }
 ];
 export const catalog = {
@@ -32,7 +33,11 @@ export const catalog = {
 export function apiResponse(url) {
   const parsed = new URL(url);
   if (parsed.pathname === '/api/seasons') return [{ id: 'replay-season', active: true, name: 'Replay Season' }];
-  if (parsed.pathname === '/api/leaderboard') return { entries: players.map((p, i) => ({ userId: p.discordId, displayName: p.displayName, rating: 1800 - i * 31, rd: 50, wins: 12, losses: 8 })) };
+  if (parsed.pathname === '/api/leaderboard') {
+    const entries = players.map((p, i) => ({ userId: p.discordId, displayName: p.displayName, rating: 1800 - i * 31, rd: 50, wins: i === 0 ? 212 : 12, losses: i === 0 ? 119 : 8 }));
+    entries.splice(5, 0, ...Array.from({ length: 13 }, (_, i) => ({ userId: String(100000000000001001n + BigInt(i)), displayName: `Leaderboard fixture ${i + 1}`, rating: 1675 - i, rd: 50, wins: 12, losses: 8 })));
+    return { entries };
+  }
   if (parsed.pathname === '/api/players/directory-search') return { players: players.map(p => ({ discordId: p.discordId, discordUsername: p.displayName })) };
   if (/^\/api\/stats\/players\/\d+\/profile$/.test(parsed.pathname)) return { title: 'Replay Champion' };
   if (/^\/api\/stats\/players\/\d+\/history$/.test(parsed.pathname)) return { total: 6, playerHistory: Array.from({ length: 6 }, (_, i) => ({

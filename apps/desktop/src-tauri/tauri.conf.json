@@ -12,7 +12,7 @@
   "app": {
     "windows": [{ "label": "main", "title": "UmaLytics", "width": 1000, "height": 740 }],
     "security": {
-      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src ipc: http://ipc.localhost; img-src 'self' data: asset: http://asset.localhost https://drafter.uma.guide",
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; connect-src ipc: http://ipc.localhost; img-src 'self' data: asset: http://asset.localhost https://drafter.uma.guide",
       "assetProtocol": { "enable": true, "scope": [] }
     }
   },
