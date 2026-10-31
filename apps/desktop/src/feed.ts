@@ -1,4 +1,4 @@
-import { RoomEventState } from '@umalytics/core/room/roomEvents';
+import { RoomEventState, decodeRoomEvent } from '@umalytics/core/room/roomEvents';
 import type { DraftSnapshot, DraftUmaAction } from '@umalytics/shared';
 import { normalizeUmaOutfitId } from '@umalytics/core/umas/umaPortraits';
 
@@ -31,14 +31,14 @@ export class DesktopRoom {
 // Per-team slot numbers are not global history. Only an explicit, complete
 // sequence in the received snapshot can establish the pick-order strip.
 export function snapshotPickOrder(event: unknown, draft?: DraftSnapshot): DraftUmaAction[] | undefined {
-  const history = (event as { state?: { draftActionHistory?: unknown } } | null)?.state?.draftActionHistory;
+  const history = decodeRoomEvent(event)?.state?.draftActionHistory;
   if (!draft || !Array.isArray(history)) return undefined;
   const available = Object.values(draft.teams).flatMap(team => team.umas.filter(uma => uma.kind === 'pick' || uma.kind === 'veto'));
   const picks: DraftUmaAction[] = [];
   for (const entry of history) {
-    if (entry?.action !== 'uma-pick') continue;
-    const id = normalizeUmaOutfitId(String(entry.uma?.id));
-    const found = available.find(uma => uma.team === entry.actorTeam && uma.umaId === id);
+    if (entry?.kind !== 'pick') continue;
+    const id = normalizeUmaOutfitId(String(entry.umaId));
+    const found = available.find(uma => uma.team === entry.team && uma.umaId === id);
     if (!found || picks.includes(found)) return undefined;
     picks.push(found);
   }

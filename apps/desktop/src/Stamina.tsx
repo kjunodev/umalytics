@@ -9,6 +9,9 @@ import { StaminaResults } from './StaminaResults';
 import { SkillPicker } from './SkillPicker';
 import { loadStaminaMemory, saveStaminaMemory } from './staminaState';
 import { courseLabel, defaultStaminaInput, groundNames, weatherNames, seasonNames, type Catalog, type StaminaBuild, type StaminaInput, type StaminaProgress, type StaminaResult, type StaminaRaceResult, roleNames, strategy, withStrategy } from './staminaTypes';
+import { preferences } from './preferences';
+
+export interface DraftRun { matchCode?: string; fingerprint: string; input: StaminaInput; slots: DraftRace[]; results: (StaminaResult | undefined)[] }
 
 const styles = roleNames.slice(0, 4);
 const moods = ['Awful', 'Bad', 'Normal', 'Good', 'Great'];
@@ -24,7 +27,7 @@ function Segments({ label, value, options, onChange }: { label: string; value: n
   return <div className="field"><span>{label}</span><div className="seg" role="group" aria-label={label}>{options.map((name, i) => <button type="button" key={name} aria-pressed={value === i + 1} onClick={() => onChange(i + 1)}>{name}</button>)}</div></div>;
 }
 
-export function Stamina({ draft }: { draft?: DraftSnapshot }) {
+export function Stamina({ draft, openDraft = 0, defaultTarget = preferences.staminaTarget, onDraftRunChange }: { draft?: DraftSnapshot; openDraft?: number; defaultTarget?: StaminaInput['target']; onDraftRunChange?: (run: DraftRun | undefined) => void }) {
   const [catalog, setCatalog] = useState<Catalog>();
   const [anyInput, setAnyInput] = useState<StaminaInput>(defaultStaminaInput);
   const [draftInput, setDraftInput] = useState<StaminaInput>(structuredClone(defaultStaminaInput));
@@ -34,7 +37,7 @@ export function Stamina({ draft }: { draft?: DraftSnapshot }) {
   const [presets, setPresets] = useState<PresetMemory>();
   const [presetError, setPresetError] = useState('');
   const [presetWritable, setPresetWritable] = useState(false);
-  const [storedDraftRun, setDraftRun] = useState<{ matchCode?: string; fingerprint: string; input: StaminaInput; slots: DraftRace[]; results: (StaminaResult | undefined)[] }>();
+  const [storedDraftRun, setDraftRun] = useState<DraftRun>();
   const draftRun = storedDraftRun?.matchCode === draft?.matchCode ? storedDraftRun : undefined;
   const [detail, setDetail] = useState<number>();
   const batchSlots = useRef<number[] | null>(null);
@@ -49,6 +52,15 @@ export function Stamina({ draft }: { draft?: DraftSnapshot }) {
   const [result, setResult] = useState<{ data: StaminaResult; course: string }>();
   const active = useRef<string | null>(null), toolbar = useRef<HTMLDivElement>(null), buildButton = useRef<HTMLButtonElement>(null), closeButton = useRef<HTMLButtonElement>(null);
   const popupTrigger = useRef<HTMLButtonElement | null>(null), drawer = useRef<HTMLElement>(null);
+  const previousDefaultTarget = useRef(defaultTarget);
+  useEffect(() => { onDraftRunChange?.(draftRun); }, [draftRun, onDraftRunChange]);
+  useEffect(() => { if (openDraft) { setMode('draft'); setDetail(undefined); setPopover(undefined); } }, [openDraft]);
+  useEffect(() => {
+    if (previousDefaultTarget.current === defaultTarget || running || !ready) return;
+    previousDefaultTarget.current = defaultTarget;
+    setAnyInput(previous => ({ ...previous, target: defaultTarget }));
+    setDraftInput(previous => ({ ...previous, target: defaultTarget }));
+  }, [defaultTarget, running, ready]);
 
   useEffect(() => {
     let disposed = false; const stops: UnlistenFn[] = [];
@@ -65,7 +77,7 @@ export function Stamina({ draft }: { draft?: DraftSnapshot }) {
       if (disposed) { stopResult(); return; } stops.push(stopResult);
       const data = await invoke<Catalog>('engine_catalog');
       let memory;
-      try { memory = await loadStaminaMemory(data); }
+      try { memory = await loadStaminaMemory(data, preferences.staminaTarget); }
       catch { if (!disposed) setSaveError('Remembered inputs could not be loaded. Using defaults.'); }
       if (!disposed) {
         setCatalog(data);

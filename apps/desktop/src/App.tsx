@@ -5,10 +5,15 @@ import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { getCurrentWindow, LogicalSize } from '@tauri-apps/api/window';
 import { isDiscordSnowflake } from '@umalytics/core/room/rosterIdentity';
 import { normalizeRosterForDisplay } from '@umalytics/core/room/rosterDisplay';
-import { PlayersView, HistoryView, HistoricalScene, UmasScene, useUiServices, type RequestedMatch, type AppScene } from '@umalytics/ui';
+import { useUiServices, type RequestedMatch } from '@umalytics/ui';
 import type { PlayerProfileSummary, PlayerStatsScope } from '@umalytics/shared';
 import { DesktopRoom, feedDiagnostics, type FeedEnvelope, type FeedStatus } from './feed';
-import { Stamina } from './Stamina';
+import { Stamina, type DraftRun } from './Stamina';
+import { CompactStamina } from './CompactStamina';
+import { Players } from './Players';
+import { History } from './History';
+import { Umas } from './Umas';
+import { Settings } from './Settings';
 import { Lobby } from './Live';
 import { Draft } from './Draft';
 import { RailIcon } from './RailIcon';
@@ -25,6 +30,9 @@ export function App() {
   const [narrow, setNarrow] = useState(window.innerWidth < preferences.compactThreshold);
   const [pinned, setPinned] = useState(preferences.pinned);
   const [windowBusy, setWindowBusy] = useState(false);
+  const [prefs, setPrefs] = useState({ ...preferences });
+  const [draftRun, setDraftRun] = useState<DraftRun>();
+  const [openStaminaDraft, setOpenStaminaDraft] = useState(0);
   const [shellError, setShellError] = useState('');
   const room = useRef(new DesktopRoom());
   const [revision, setRevision] = useState(0);
@@ -37,7 +45,6 @@ export function App() {
   const [scope, setScope] = useState<PlayerStatsScope>('currentSeason');
   const [profiles, setProfiles] = useState<Record<string, PlayerProfileSummary>>({});
   const [profilesLoading, setProfilesLoading] = useState(false);
-  const [historyScene, setHistoryScene] = useState<AppScene>('draft');
   const [requestedMatch, setRequestedMatch] = useState<RequestedMatch>();
   const [refresh, setRefresh] = useState(0);
   const viewState = status?.state === 'disconnected' && !room.current.state.matchCode ? room.current.lastState ?? room.current.state : room.current.state;
@@ -57,15 +64,24 @@ export function App() {
   const liveView = displayedPage === 'Lobby' || displayedPage === 'Draft';
 
   useEffect(() => {
-    const query = window.matchMedia(`(width < ${preferences.compactThreshold}px)`);
+    const query = window.matchMedia(`(width < ${prefs.compactThreshold}px)`);
     const changed = () => setNarrow(query.matches);
+    changed();
     query.addEventListener('change', changed);
+    return () => query.removeEventListener('change', changed);
+  }, [prefs.compactThreshold]);
+
+  useEffect(() => {
+    document.documentElement.style.zoom = String({ Small: .875, Default: 1, Large: 1.15 }[prefs.uiSize]);
+    document.documentElement.style.setProperty('--ui-zoom', String({ Small: .875, Default: 1, Large: 1.15 }[prefs.uiSize]));
+  }, [prefs.uiSize]);
+
+  useEffect(() => {
     const win = getCurrentWindow();
     void (async () => {
       await win.setAlwaysOnTop(preferences.pinned);
       if (preferences.compact) await win.setSize(new LogicalSize(440, 860));
     })().catch(() => setShellError('Unable to restore window preferences.'));
-    return () => query.removeEventListener('change', changed);
   }, []);
 
   useEffect(() => {
@@ -107,12 +123,12 @@ export function App() {
   }, [rosterKey, scope, refresh]);
 
   const persist = (patch: Parameters<typeof savePreferences>[0]) => {
+    setPrefs(previous => ({ ...previous, ...patch }));
     void savePreferences(patch).catch(() => setShellError('Unable to save preferences.'));
   };
   const navigate = (next: Page) => { setPage(next); persist({ page: next }); };
   const openMatch = (code: string) => {
     setRequestedMatch({ code, nonce: Date.now() });
-    setHistoryScene('draft');
     navigate('History');
     if (compact) void toggleMode();
   };
@@ -121,7 +137,7 @@ export function App() {
     try {
       const win = getCurrentWindow();
       if (compact) {
-        await win.setSize(new LogicalSize(preferences.fullSize.width, preferences.fullSize.height));
+        await win.setSize(new LogicalSize(Math.max(preferences.fullSize.width, preferences.compactThreshold), preferences.fullSize.height));
         setCompactMode(false); persist({ compact: false });
       } else {
         const size = (await win.innerSize()).toLogical(await win.scaleFactor());
@@ -149,6 +165,8 @@ export function App() {
   };
   const feedBox = <div className={`feed-status ${status?.state === 'connected' ? 'connected' : ''}`} role="status"><i className={status?.state === 'connected' ? 'live-dot' : 'idle-dot'}/><span>{feedLabel}{code && <> · Room <b className="num">{code}</b></>}</span></div>;
   const navItem = (name: Page) => <button key={name} className="nav-item" aria-label={name} title={name} aria-current={page === name ? 'page' : undefined} onClick={() => navigate(name)}><RailIcon page={name}/><span>{name}</span><span className="rail-tooltip" role="tooltip">{name}</span></button>;
+  const currentRun = draftRun?.matchCode === draft?.matchCode ? draftRun : undefined;
+  const openStamina = async () => { setOpenStaminaDraft(v => v + 1); navigate('Stamina'); if (compact) await toggleMode(); };
 
   return <div className={`app-shell desktop-shell ${compact ? 'compact' : ''}`} data-revision={revision}>
     {!compact && <nav className="sidebar" aria-label="Sections"><div className="brand" title="UmaLytics"><Logo/></div>
@@ -162,7 +180,7 @@ export function App() {
         <button className="icon-button" aria-label="Pin on top" aria-pressed={pinned} disabled={windowBusy} onClick={() => { void togglePin(); }}><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 2h4l-.5 4 2.5 2v1H4V8l2.5-2L6 2zM8 9v5"/></svg></button>
         <button className="icon-button" aria-label="Expand to full mode" disabled={windowBusy} onClick={() => { void toggleMode(); }}><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M9.5 2.5h4v4M6.5 13.5h-4v-4M13.5 2.5 9 7M2.5 13.5 7 9"/></svg></button>
       </header> : <header className="page-header"><h1>{page === 'Stamina' ? 'Stamina check' : page}</h1><span className="subtitle">{page === 'Stamina' ? 'Full spurt and survival' : page === 'Lobby' ? code ? `${roster?.players.length ?? 0} players · ${phaseLabel(draft?.phase)}` : 'Waiting for a live room' : page === 'Draft' ? phaseLabel(draft?.phase) : ''}</span>
-        <div className="page-actions">{feedBox}{['Lobby', 'Draft', 'Players', 'History', 'Umas'].includes(page) && <div className="seg" role="group" aria-label="Stats scope">{(['currentSeason', 'allTime'] as const).map(value => <button key={value} aria-pressed={scope === value} onClick={() => setScope(value)}>{value === 'currentSeason' ? 'Season' : 'All-time'}</button>)}</div>}
+        <div className="page-actions">{feedBox}{['Lobby', 'Draft', 'History', 'Umas'].includes(page) && <div className="seg" role="group" aria-label="Stats scope">{(['currentSeason', 'allTime'] as const).map(value => <button key={value} aria-pressed={scope === value} onClick={() => setScope(value)}>{value === 'currentSeason' ? 'Season' : 'All-time'}</button>)}</div>}
         <button disabled={windowBusy} onClick={() => { void toggleMode(); }}>Compact</button></div></header>}
       <main className="content">
         {shellError && <div className="feed-banner error" role="alert">{shellError}</div>}
@@ -175,16 +193,13 @@ export function App() {
             {displayedPage === 'Draft' && <Draft draft={draft?.phase === 'lobby' ? undefined : draft} pickOrder={pickOrder} loading={status?.state === 'connected' && !draft}/>}
           </div>
         </>}
-        <div className="desktop-tool" hidden={displayedPage !== 'Stamina'}><Stamina draft={draft}/></div>
-        <div hidden={displayedPage !== 'Players'}><PlayersView roster={roster} statsScope={scope} active={displayedPage === 'Players'} onOpenMatch={openMatch}/></div>
-        {displayedPage === 'History' && <>
-          <div className="history-tabs seg" role="group" aria-label="History view">{(['lobby', 'draft', 'umas'] as const).map(scene => <button key={scene} aria-pressed={historyScene === scene} onClick={() => setHistoryScene(scene)}>{scene === 'lobby' ? 'Lobby' : scene === 'draft' ? 'Draft' : 'Umas'}</button>)}</div>
-          <HistoryView Scene={HistoricalScene} scene={historyScene} scope={scope} navigation={0} onMatchCodeChange={() => {}} requestedMatch={requestedMatch}/>
-        </>}
-        {displayedPage === 'Umas' && <UmasScene roster={roster ?? { players: [] }} profiles={profiles} statsScope={scope}/>}
-        {displayedPage === 'Settings' && <section className="panel desktop-tool"><h2>Settings</h2><button aria-pressed={pinned} disabled={windowBusy} onClick={() => { void togglePin(); }}>Pin on top: {pinned ? 'On' : 'Off'}</button>
-          {import.meta.env.DEV && <details><summary>Debug feed</summary>{feedBox}<p>Accepted {status?.accepted ?? 0} · rejected {status?.rejected ?? 0}</p><pre>{JSON.stringify({ room: code, draft }, null, 2)}</pre></details>}</section>}
+        <div className="desktop-tool" hidden={displayedPage !== 'Stamina'}><Stamina draft={draft} openDraft={openStaminaDraft} defaultTarget={prefs.staminaTarget} onDraftRunChange={setDraftRun}/></div>
+        {displayedPage === 'Players' && <Players onOpenMatch={openMatch}/>}
+        <div hidden={displayedPage !== 'History'}><History scope={scope} requestedMatch={requestedMatch} onOpenMatch={openMatch}/></div>
+        {displayedPage === 'Umas' && <Umas roster={roster ?? { players: [] }} profiles={profiles} scope={scope}/>}
+        {displayedPage === 'Settings' && <Settings prefs={prefs} update={persist} pinned={pinned} busy={windowBusy} togglePin={() => { void togglePin(); }} copyDiagnostics={() => { void copyDiagnostics(); }} copyStatus={copyStatus}/>}
       </main>
+      {compact && livePage === 'Draft' && <CompactStamina run={currentRun} onOpen={() => { void openStamina(); }}/>}
     </div>
   </div>;
 }

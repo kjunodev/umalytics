@@ -19,6 +19,7 @@ const failures = [];
 const staminaOnly = process.env.DESKTOP_SHOTS_SCENES === 'stamina';
 const arenaOnly = process.env.DESKTOP_SHOTS_SCENES === 'arena';
 const statesOnly = process.env.DESKTOP_SHOTS_SCENES === 'states';
+const dataOnly = process.env.DESKTOP_SHOTS_SCENES === 'data';
 const localIcons = process.env.UMALYTICS_GAMEDATA_DIR ?? path.join(os.homedir(), 'Documents/Coding Projects/UmaLytics-GameData/gametora');
 const fixtureIcon = await fs.readFile(path.join(localIcons, 'icons/20051.webp')).catch(() => null);
 const portraitDir = process.env.DESKTOP_SHOTS_PORTRAITS;
@@ -54,7 +55,7 @@ try {
     const errors = await page.evaluate(() => {
       const errors = [];
       for (const grid of document.querySelectorAll('.player-list')) {
-        if (!document.querySelector('.compact') && innerWidth >= 1000) {
+        if (!document.querySelector('.compact') && innerWidth / (Number(getComputedStyle(document.documentElement).zoom) || 1) >= 1000) {
           const tops = [...grid.children].map(card => Math.round(card.getBoundingClientRect().top));
           if (new Set(tops).size > 1) errors.push('team cards wrap to a second row');
         }
@@ -114,40 +115,96 @@ try {
     check(await page.locator('.player-drawer .iconbtn').evaluate(button => button.getBoundingClientRect().width === 40), 'Drawer close button uses shared styling');
     await page.locator('.drawer-history .recent-match-code').first().waitFor();
     check(await page.locator('.drawer-history .recent-match-code').count() === 5, 'Drawer loads core history pages');
+    check(await page.locator('.drawer-badges').getByText('Podium regular', { exact: true }).isVisible(), 'Drawer badges use full labels');
     await shot(page, `drawer-${width}x${height}`);
+    check(await page.locator('.arena-player-drawer').evaluate(el => el.getBoundingClientRect().width === 600), 'Drawer is 600 CSS pixels');
+    const pagerTop = await page.locator('.data-pager').evaluate(el => el.getBoundingClientRect().top);
+    await page.getByRole('button', { name: 'Page 2', exact: true }).click();
+    check(await page.locator('.drawer-history .recent-match-code').count() === 1, 'History page 2 has the remaining match');
+    check(await page.locator('.data-pager').evaluate(el => el.getBoundingClientRect().top) === pagerTop, 'Pager stays fixed on a short history page');
+    await shot(page, `drawer-page2-${width}x${height}`);
+    await page.getByRole('button', { name: 'Page 1', exact: true }).click();
+    await page.getByRole('button', { name: 'Show all', exact: true }).click();
+    check(await page.locator('[aria-label="Player Uma stats"] tbody tr').count() === 4, 'Low-game Uma toggle reveals the fourth Uma');
+    await shot(page, `drawer-low-games-${width}x${height}`);
+    await page.getByRole('button', { name: 'Hide <3 games', exact: true }).click();
     await page.keyboard.press('Escape');
     await page.getByRole('button', { name: 'Draft', exact: true }).click();
     check(await page.locator('.draft-columns > *').count() === 3, 'Full draft has team / races / team panels');
     await shot(page, `draft-mid-${width}x${height}`);
     await page.getByRole('button', { name: 'Players', exact: true }).click();
-    await page.locator('.players-row').first().waitFor();
-    check(await page.locator('.players-row').count() === 23, 'Players displays the full leaderboard fixture');
+    await page.locator('.table-player').first().waitFor();
+    check(await page.locator('.table-player').count() === 20, 'Players paginates the leaderboard');
     await shot(page, `players-${width}x${height}`);
+    await page.getByRole('searchbox', { name: 'Search players' }).fill('Replay Player');
+    check(await page.locator('.table-player').count() === 10, 'Search filters leaderboard rows');
+    await shot(page, `players-search-${width}x${height}`);
     await page.getByRole('searchbox', { name: 'Search players' }).fill('Directory fixture');
     await page.getByRole('button', { name: 'Search all players', exact: true }).click();
-    await page.locator('.players-search-list li').first().waitFor();
-    check(await page.locator('.players-search-list li').count() === 10, 'Players displays core directory search results');
-    await shot(page, `players-search-${width}x${height}`);
-    await page.locator('.players-search-list button').first().click();
+    await page.locator('.data-empty').getByRole('button', { name: 'Replay Player 1', exact: true }).click();
     await page.getByText('Replay Champion', { exact: true }).waitFor();
-    await page.waitForFunction(() => document.querySelector('.player-drawer .drawer-stat-row')?.textContent.includes('30-24'));
-    check((await page.locator('.player-drawer .drawer-stat-row').innerText()).includes('30-24'), 'Players drawer uses the header All-time scope');
+    await page.waitForFunction(() => document.querySelector('.player-drawer .drawer-stat-strip')?.textContent.includes('212-119'));
+    check((await page.locator('.player-drawer .drawer-stat-strip').innerText()).includes('212-119'), 'Season leaderboard drawer uses season stats');
     await page.keyboard.press('Escape');
-    check(await page.getByRole('button', { name: 'Replay Player 1', exact: true }).isVisible(), 'Viewed player is stored as a recent chip');
     await page.getByRole('button', { name: 'History', exact: true }).click();
-    await page.getByRole('textbox', { name: 'Match code' }).fill('ABC123');
+    await shot(page, `history-list-${width}x${height}`);
+    await page.getByRole('textbox', { name: 'Match code or URL' }).fill('ABC123');
     await page.getByRole('button', { name: 'Load', exact: true }).click();
-    await page.locator('.history-scene .draft-scene').waitFor();
-    check(await page.locator('.history-scene .draft-race-card:not(.placeholder)').count() === 2, 'History displays the saved races');
+    await page.locator('[aria-label="History"] .draft-scene').waitFor();
+    check(await page.locator('[aria-label="History"] .arena-race:not(.pending)').count() === 2, 'History displays the saved races');
     await shot(page, `history-match-${width}x${height}`);
-    await page.getByRole('group', { name: 'History view' }).getByRole('button', { name: 'Lobby', exact: true }).click();
-    await page.waitForFunction(() => document.querySelectorAll('.history-scene .top-umas-rows li').length === 30);
+    await page.getByRole('group', { name: 'Match view' }).getByRole('button', { name: 'Lobby', exact: true }).click();
+    await page.waitForFunction(() => document.querySelectorAll('[aria-label="History"] .top-umas-rows li').length === 30);
+    check(await page.locator('[aria-label="History"] .arena-card').evaluateAll(cards => new Set(cards.map(c => Math.round(c.getBoundingClientRect().height))).size) === 1, 'Historical Arena player cards have equal heights');
     await shot(page, `history-lobby-${width}x${height}`);
+    await page.getByRole('group', { name: 'Match view' }).getByRole('button', { name: 'Umas', exact: true }).click();
+    await shot(page, `history-umas-${width}x${height}`);
+    await page.getByRole('button', { name: '← Matches', exact: true }).click();
+    check(await page.locator('[aria-label="Recently opened matches"] tbody tr').count() === 1, 'Successful lookup remembers a display-only local label');
+    await shot(page, `history-recent-${width}x${height}`);
+    await page.reload();
+    await page.getByRole('button', { name: 'ABC123', exact: true }).waitFor();
+    check(await page.locator('[aria-label="Recently opened matches"] tbody tr').count() === 1, 'Recently opened persists across reload');
+    await page.getByRole('button', { name: 'Clear recently opened', exact: true }).click();
+    check(await page.locator('[aria-label="Recently opened matches"] tbody tr').count() === 0, 'Recently opened is clearable');
     await page.locator('.sidebar').getByRole('button', { name: 'Umas', exact: true }).click();
-    await page.locator('.uma-catalog-button').first().waitFor();
+    await page.locator('.arena-uma-catalog button').first().waitFor();
     await shot(page, `umas-${width}x${height}`);
+    await page.locator('.sidebar').getByRole('button', { name: 'Settings', exact: true }).click();
+    await page.getByText('Found', { exact: true }).waitFor();
+    await shot(page, `settings-${width}x${height}`);
+    await page.locator('.content').evaluate(el => { el.scrollTop = el.scrollHeight; });
+    check(await page.getByText('Update checks arrive with the first desktop release', { exact: true }).isVisible(), 'About uses a local version notice');
+    await shot(page, `settings-about-${width}x${height}`);
+    await page.locator('.content').evaluate(el => { el.scrollTop = 0; });
+    await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+    await page.getByRole('button', { name: 'Copy diagnostics', exact: true }).click();
+    await page.getByText('Diagnostics copied', { exact: true }).waitFor();
+    check(!/100000000000000|CAS7R1|token|discord/i.test(await page.evaluate(() => navigator.clipboard.readText())), 'Settings diagnostics use the counts-only port screen payload');
+    await page.getByRole('group', { name: 'Default stamina target' }).getByRole('button', { name: '99%', exact: true }).click();
+    await page.getByRole('spinbutton', { name: 'Compact switch width' }).fill('610');
+    await page.getByRole('spinbutton', { name: 'Compact switch width' }).press('Enter');
+    for (const size of ['Small', 'Large', 'Default']) {
+      await page.getByRole('group', { name: 'UI size' }).getByRole('button', { name: size, exact: true }).click();
+      await shot(page, `settings-${size.toLowerCase()}-${width}x${height}`);
+      if (size === 'Large') {
+        await page.locator('.sidebar').getByRole('button', { name: 'Lobby', exact: true }).click();
+        await shot(page, `lobby-large-${width}x${height}`);
+        await page.getByRole('button', { name: 'Open details for Replay Player 1', exact: true }).click();
+        await page.locator('.drawer-history .recent-match-code').first().waitFor();
+        await shot(page, `drawer-large-${width}x${height}`);
+        await page.keyboard.press('Escape');
+        await page.locator('.sidebar').getByRole('button', { name: 'Settings', exact: true }).click();
+      }
     }
-    if (!arenaOnly) {
+    await page.reload();
+    check(await page.getByRole('spinbutton', { name: 'Compact switch width' }).inputValue() === '610', 'Compact threshold persists');
+    check(await page.getByRole('group', { name: 'Default stamina target' }).getByRole('button', { name: '99%', exact: true }).getAttribute('aria-pressed') === 'true', 'Stamina default persists');
+    await page.getByRole('spinbutton', { name: 'Compact switch width' }).fill('600');
+    await page.getByRole('spinbutton', { name: 'Compact switch width' }).press('Enter');
+    await page.getByRole('group', { name: 'Default stamina target' }).getByRole('button', { name: '90%', exact: true }).click();
+    }
+    if (!arenaOnly && !dataOnly) {
     await page.getByRole('button', { name: 'Stamina', exact: true }).click();
     await shot(page, `stamina-empty-${width}x${height}`);
     await page.getByRole('button', { name: 'Race', exact: true }).click();
@@ -433,7 +490,7 @@ try {
     }
     await page.close();
   }
-  if (!arenaOnly && !statesOnly) {
+  if (!arenaOnly && !statesOnly && !dataOnly) {
   for (const [width, height] of [[1000, 700], [1280, 800]]) {
   const empty = await open('empty', width, height);
   await empty.getByRole('button', { name: 'Stamina', exact: true }).click();
@@ -468,6 +525,33 @@ try {
   }
   }
   if (!staminaOnly && !statesOnly) {
+  for (const [width, height] of [[1000, 700], [1280, 800]]) {
+    const privatePlayer = await open('private', width, height);
+    await privatePlayer.locator('.arena-card[data-state="private"]').waitFor();
+    await privatePlayer.getByRole('button', { name: 'Open details for Replay Player 2', exact: true }).click();
+    await privatePlayer.locator('.drawer-history .recent-match-code').first().waitFor();
+    check((await privatePlayer.locator('.drawer-stat-strip b').allTextContents()).every(value => value === '-'), 'Private drawer never derives stats from visible history');
+    check(await privatePlayer.locator('[aria-label="Player Uma stats"] tbody tr').count() === 0 && await privatePlayer.locator('.drawer-badges > span').count() === 0, 'Private history never creates Uma stats or badges');
+    await privatePlayer.locator('.drawer-close').focus();
+    await privatePlayer.keyboard.press('Shift+Tab');
+    check(await privatePlayer.getByRole('button', { name: 'Next page', exact: true }).evaluate(el => el === document.activeElement), 'Drawer traps reverse keyboard focus');
+    await privatePlayer.keyboard.press('Tab');
+    check(await privatePlayer.locator('.drawer-close').evaluate(el => el === document.activeElement && getComputedStyle(el).outlineStyle !== 'none'), 'Drawer close focus is visible and trapped');
+    await shot(privatePlayer, `drawer-private-${width}x${height}`);
+    await privatePlayer.locator('.recent-match-code').first().click();
+    await privatePlayer.locator('.match-code').waitFor();
+    check(await privatePlayer.locator('.arena-player-drawer').count() === 0, 'A drawer match code opens History and closes the drawer');
+    await privatePlayer.getByRole('button', { name: '← Matches', exact: true }).click();
+    const stored = await privatePlayer.evaluate(() => JSON.parse(localStorage.getItem('shots:history.json:recent-matches-v1')));
+    check(stored.length === 1 && Object.keys(stored[0]).sort().join(',') === 'code,label', 'Recently opened stores only codes and labels');
+    await privatePlayer.close();
+    const noData = await open('stamina-no-data', width, height);
+    await noData.locator('.sidebar').getByRole('button', { name: 'Settings', exact: true }).click();
+    await noData.getByText('Not found', { exact: true }).waitFor();
+    check((await noData.locator('#settings-data').innerText()).includes('0 skills · 0 icons'), 'Settings reports missing local files without fabricated counts');
+    await shot(noData, `settings-no-data-${width}x${height}`);
+    await noData.close();
+  }
   const compact = await open('lobby', 440, 860);
   check((await compact.locator('.team-heading .num').first().innerText()).replaceAll(',', '').includes('1688'), 'Compact and shared cards use the same conservative team rating');
   await shot(compact, 'compact-lobby-440x860');
@@ -482,6 +566,45 @@ try {
   await shot(compact, 'compact-draft-440x860');
   check((await compact.locator('.turn-banner').innerText()).includes('Uma pick 4 of 5'), 'Turn derived from state');
   check(await compact.locator('.slot.now').count() === 1, 'Current slot highlighted');
+  check(await compact.locator('.compact-stamina-strip').count() === 0, 'No compact stamina strip before a run');
+  await compact.evaluate(async () => {
+    const c = window.__SHOT_CONTROL__, message = structuredClone(c.messages.at(-1));
+    message.event.version = 1000;
+    const s = message.event.state;
+    s.draftActionHistory = [...s.team2.pickedUmas.map(uma => ({ action: 'uma-pick', actorTeam: 'team2', uma })), ...s.team1.pickedUmas.map(uma => ({ action: 'uma-pick', actorTeam: 'team1', uma }))];
+    await c.emit('feed-message', message);
+  });
+  await compact.locator('.arena-pick-order').waitFor();
+  await shot(compact, 'compact-pick-order-440x860');
+  await compact.getByRole('button', { name: 'Expand to full mode' }).click();
+  await compact.locator('.sidebar').getByRole('button', { name: 'Stamina', exact: true }).click();
+  await compact.evaluate(async () => { const c = window.__SHOT_CONTROL__; await c.emit('feed-message', c.draftMessage(true)); });
+  await compact.getByRole('group', { name: 'Course mode' }).getByRole('button', { name: 'Draft', exact: true }).click();
+  await compact.getByRole('button', { name: /^Run \d+ races$/ }).click();
+  await compact.waitForFunction(() => document.querySelectorAll('.draft-races > div > button:enabled').length === 1);
+  await compact.locator('.sidebar').getByRole('button', { name: 'Draft', exact: true }).click();
+  await compact.getByRole('button', { name: 'Compact', exact: true }).click();
+  await compact.getByRole('button', { name: 'Open stamina for draft races' }).waitFor();
+  check(await compact.locator('.stamina-pips > span').count() === 7 && await compact.locator('.stamina-pips .pending').count() === 6, 'Partial runs keep seven compact slots with pending races');
+  await shot(compact, 'compact-stamina-partial-440x860');
+  await compact.getByRole('button', { name: 'Open stamina for draft races' }).click();
+  await compact.evaluate(async () => { const c = window.__SHOT_CONTROL__; await c.emit('feed-message', c.draftMessage(false, 1002)); });
+  await compact.getByText('7 of 7 races known', { exact: true }).waitFor();
+  await compact.getByRole('button', { name: 'Run 7 races', exact: true }).click();
+  await compact.waitForFunction(() => document.querySelectorAll('.draft-races > div > button:enabled').length === 7);
+  const runCalls = await compact.evaluate(() => window.__SHOT_CONTROL__.calls.filter(c => c.command === 'stamina_check_races').length);
+  await compact.locator('.sidebar').getByRole('button', { name: 'Draft', exact: true }).click();
+  await compact.getByRole('button', { name: 'Compact', exact: true }).click();
+  await compact.getByRole('button', { name: 'Open stamina for draft races' }).waitFor();
+  check(await compact.locator('.stamina-pips > span').count() === 7, 'Compact stamina strip shares seven race results');
+  await shot(compact, 'compact-stamina-strip-440x860');
+  await compact.getByRole('button', { name: 'Open stamina for draft races' }).click();
+  check(await compact.getByRole('group', { name: 'Course mode' }).getByRole('button', { name: 'Draft', exact: true }).getAttribute('aria-pressed') === 'true', 'Strip expands directly to draft stamina');
+  check(await compact.evaluate(() => window.__SHOT_CONTROL__.calls.filter(c => c.command === 'stamina_check_races').length) === runCalls, 'Switching modes never reruns stamina');
+  await compact.locator('.sidebar').getByRole('button', { name: 'Draft', exact: true }).click();
+  await compact.getByRole('button', { name: 'Compact', exact: true }).click();
+  await compact.evaluate(async () => { const c = window.__SHOT_CONTROL__, m = c.draftMessage(false, 1002); m.roomCode = 'XYZ789'; m.event.matchId = 'XYZ789'; await c.emit('feed-message', m); });
+  check(await compact.locator('.compact-stamina-strip').count() === 0, 'Draft runs never leak to another match');
   await compact.getByRole('button', { name: 'Pin on top', exact: true }).click();
   check(await compact.getByRole('button', { name: 'Pin on top', exact: true }).getAttribute('aria-pressed') === 'true', 'Pin toggled');
   await compact.getByRole('button', { name: 'Expand to full mode' }).click();
@@ -503,7 +626,7 @@ try {
   await shot(empty, 'empty-lobby-1280x800');
   await empty.close();
   }
-  if (!staminaOnly) {
+  if (!staminaOnly && !dataOnly) {
     for (const [width, height] of [[1000, 700], [1280, 800]]) {
       const page = await open('lobby', width, height);
       for (const name of ['Stamina', 'Settings']) {

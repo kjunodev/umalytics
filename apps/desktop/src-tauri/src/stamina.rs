@@ -68,6 +68,9 @@ pub struct Catalog {
     courses: Vec<Course>,
     skills: Vec<Skill>,
     local_skill_data: bool,
+    local_skill_path: String,
+    local_skill_count: usize,
+    local_icon_count: usize,
 }
 struct Engine {
     data: GameData,
@@ -235,6 +238,7 @@ fn load_engine() -> Result<Engine, String> {
         }
     }
     let local_skill_data = skill_data::enrich(&mut skills);
+    let (local_skill_path, local_skill_count, local_icon_count) = skill_data::status();
     skills.sort_by_key(|s| (s.name.clone(), s.id));
     Ok(Engine {
         data,
@@ -242,6 +246,9 @@ fn load_engine() -> Result<Engine, String> {
             courses,
             skills,
             local_skill_data,
+            local_skill_path,
+            local_skill_count,
+            local_icon_count,
         },
     })
 }

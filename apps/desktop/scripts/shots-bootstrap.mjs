@@ -38,7 +38,7 @@ mockIPC(async (command, args) => {
     if (!['empty', 'port-in-use', 'draft-loading', 'feed-error'].includes(scene)) setTimeout(async () => { for (const message of messages) await emit('feed-message', message); }, 0);
     return { state: scene === 'empty' ? 'listening' : scene === 'port-in-use' ? 'port-in-use' : scene === 'feed-error' ? 'error' : 'connected', accepted: scene === 'empty' ? 0 : messages.length, rejected: 0 };
   }
-  if (command === 'engine_catalog') return scene === 'stamina-no-data' ? { ...catalog, local_skill_data: false, skills: catalog.skills.map(s => ({ ...s, icon_path: null })) } : catalog;
+  if (command === 'engine_catalog') return scene === 'stamina-no-data' ? { ...catalog, local_skill_data: false, local_skill_count: 0, local_icon_count: 0, skills: catalog.skills.map(s => ({ ...s, icon_path: null })) } : catalog;
   if (command === 'stamina_check') {
     if (window.__SHOT_CONTROL__.failNext) { window.__SHOT_CONTROL__.failNext = false; throw new Error('Engine could not complete this check.'); }
     if (window.__SHOT_CONTROL__.slow) return new Promise((resolve, reject) => { pending = { resolve, reject }; void emit('stamina-progress', { request_id: args.input.request_id, completed: 100, total: 544, stage: 'mapping', percent: 15 }); });
