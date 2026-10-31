@@ -35,8 +35,8 @@ export function StaminaResults({ result, course, skills }: { result: StaminaResu
   return <>
     <div className={`kpi stamina-headline ${pass ? 'sufficient' : 'insufficient'}`}>
       <span className="label">{result.input.target}% full spurt + survival · same races</span>
-      <div className="headline-answer"><b className="num">{needed === null ? 'Not reached' : threshold(needed)}</b><span>effective stamina needed</span><strong className="answer-state">{pass ? 'Pass' : 'Short'}</strong></div>
-      <p>{needed === null ? `No joint ${result.input.target}% threshold found through 2,000 raw stamina` : `You need ${threshold(needed)} effective stamina`}; you have <strong>{number(result.effective_stamina)}</strong>.</p>
+      <div className="headline-answer"><b className="num">{needed === null ? 'Not reached' : threshold(needed)}</b><span>effective stamina needed</span></div>
+      <div className="headline-verdict"><strong className="answer-state">{pass ? 'Pass' : 'Short'}{needed !== null && (pass || result.effective_stamina < needed) ? ` · ${number(Math.abs(result.effective_stamina - needed))}${pass ? ' to spare' : ' needed'}` : ''}</strong><p>{needed === null ? `No joint ${result.input.target}% threshold found through 2,000 raw stamina` : <>You need <strong>{threshold(needed)}</strong> effective stamina</>}; you have <strong>{number(result.effective_stamina)}</strong>.</p></div>
       <small>{result.current.joint_percent.toFixed(1)}% both at your build · {result.current.seeds} samples · raw threshold {threshold(result.thresholds.joint)} / yours {number(result.current.stamina)}</small>
     </div>
     <div className="kpis">

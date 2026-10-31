@@ -1,0 +1,188 @@
+/* Stamina uses the Arena surfaces and a dock that shares the results width. */
+.stamina-layout { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.stamina-layout :is(button, input, select) { min-width: 0; }
+.stamina-layout :is(button, input, select, .panel, .kpi) { box-shadow: none; text-shadow: none; }
+.stamina-layout button { min-height: 32px; }
+.stamina-layout button:disabled { cursor: default; }
+.stamina-layout .panel, .stamina-layout .kpi { border-radius: var(--radius-lg); }
+.stamina-layout .stamina-toolbar { display: flex; flex-direction: row; flex-wrap: wrap; gap: 8px; padding: 8px; background: var(--s1); }
+.stamina-toolbar .mode-switch { flex: 0 0 auto; }
+.stamina-toolbar .mode-switch button { min-height: 28px; }
+.stamina-toolbar .toolbar-race { flex: 0 1 auto; max-width: 100%; }
+.stamina-toolbar .toolbar-race button { padding: 6px 10px; min-height: 36px; font-size: 13px; }
+.stamina-toolbar .condition-chips button { border-radius: var(--radius-md); padding: 0 9px; min-height: 36px; }
+.stamina-toolbar .toolbar-build { order: 1; flex: 1 0 100%; min-height: 28px; padding: 4px 8px; border: 0; background: transparent; color: var(--tx2); }
+.stamina-toolbar .toolbar-target { margin-left: auto; color: var(--tx3); font-size: 12px; white-space: nowrap; }
+.toolbar-target b { color: var(--tx); }
+.stamina-toolbar :is(.run, .cancel-run) { flex: 0 0 auto; min-height: 36px; padding: 0 16px; font-size: 13px; }
+.stamina-toolbar .run { background: var(--acc); color: var(--acc-ink); border: 0; }
+.stamina-toolbar .run:hover { filter: none; background: var(--text-link-hover); }
+.stamina-toolbar > button[aria-label="Advanced settings"] { width: 36px; height: 36px; padding: 0; font-size: 19px; }
+.stamina-toolbar .draft-toolbar-label { line-height: 1.3; }
+.draft-toolbar-label small { font-size: 11.5px; color: var(--tx3); }
+.stamina-workspace { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; align-items: start; min-width: 0; }
+.stamina-workspace.has-build { grid-template-columns: minmax(0, 1fr) 300px; }
+@container desktop-content (min-width: 1130px) {
+  .stamina-workspace.has-build { grid-template-columns: minmax(0, 1fr) 340px; }
+}
+.stamina-layout .stamina-results { gap: 12px; container: stamina-results / inline-size; }
+.stamina-layout .build-drawer { position: sticky; top: 0; right: auto; bottom: auto; width: auto; max-height: calc(100dvh - 194px); display: flex; flex-direction: column; min-width: 0; border: 1px solid var(--line); padding: 0; gap: 0; animation: none; background: var(--s1); overflow: hidden; }
+.stamina-layout .drawer-heading { padding: 12px 14px 10px; border: 0; }
+.stamina-layout .drawer-heading h2 { font: 600 16px/1.3 var(--font-body); }
+.build-fields { min-width: 0; min-height: 0; display: flex; flex: 1; flex-direction: column; }
+.build-controls { border: 0; padding: 0; margin: 0; min-width: 0; display: flex; flex-direction: column; gap: 14px; }
+.stamina-layout .drawer-tabs { display: flex; margin: 0 14px; padding: 0; border-bottom: 1px solid var(--line); }
+.stamina-layout .drawer-tabs button { flex: 1; border: 0; border-radius: 0; background: transparent; color: var(--tx3); border-bottom: 2px solid transparent; margin-bottom: -1px; min-height: 34px; }
+.stamina-layout .drawer-tabs button[aria-selected=true] { color: var(--tx); border-bottom-color: var(--acc); }
+.stamina-layout .build-body { padding: 14px; gap: 14px; overflow-y: auto; overscroll-behavior-y: contain; }
+.stamina-layout .drawer-footer { padding: 10px 14px; gap: 6px; font-size: 11.5px; }
+.stamina-layout .drawer-footer button { padding: 0 8px; min-height: 26px; }
+.stamina-layout .build-body .seg button { font-size: 11.5px; padding: 0 3px; min-height: 28px; }
+.stamina-layout .build-body label { gap: 3px; font-size: 11px; }
+.stamina-layout .build-body :is(input, select) { width: 100%; min-height: 32px; padding: 0 6px; }
+.stamina-layout .raw-stats { gap: 4px; }
+.stamina-layout .raw-stats label { font-size: 9.5px; letter-spacing: .04em; text-transform: uppercase; }
+.stamina-layout .raw-stats input { font: 500 12px var(--font-mono); text-align: center; padding: 0 2px; appearance: textfield; }
+.stamina-layout input::-webkit-inner-spin-button { appearance: none; margin: 0; }
+.stamina-layout .stamina-input { border-color: var(--acc); }
+.stamina-layout .build-body .aptitude-grid { gap: 4px; }
+.stamina-layout .build-body .aptitude-grid label { font-size: 10px; }
+.stamina-layout .aptitude-grid select { font: 500 12px var(--font-mono); }
+.stamina-layout .build-body .aptitude-grid label { flex-direction: row; align-items: center; justify-content: space-between; gap: 2px; padding: 0 4px; border: 1px solid var(--line); border-radius: 5px; background: var(--s2); }
+.stamina-layout .build-body .aptitude-grid select { appearance: none; width: 18px; min-height: 26px; padding: 0; border: 0; background: transparent; color: var(--acc); text-align: center; }
+.stamina-layout .build-body .aptitude-ground { grid-template-columns: repeat(2, minmax(0, 1fr)) minmax(0, 1.5fr); }
+.stamina-layout .build-body .aptitude-ground select[aria-label="Mood"] { width: 44px; font: 500 11px var(--font-body); }
+.stamina-layout .build-body .field > span { color: var(--tx3); font-size: 10px; text-transform: uppercase; font-weight: 600; letter-spacing: .08em; }
+.stamina-layout .skill-chips { gap: 5px; }
+.stamina-layout .skill-chip { gap: 5px; padding: 2px 3px; min-height: 28px; border-radius: 7px; font-size: 12px; color: var(--tx); }
+.stamina-layout .skill-chip.rarity-gold { border-color: color-mix(in srgb, var(--gold) 35%, var(--line)); background: color-mix(in srgb, var(--gold) 5%, var(--s1)); }
+.stamina-layout .skill-chip.rarity-unique { border-color: var(--silver); }
+.stamina-layout .skill-chip > span:not(.skill-icon) { min-width: 0; }
+.stamina-layout .skill-icon { width: 20px; height: 20px; }
+.stamina-layout .rarity-gold .skill-icon { color: var(--gold); }
+.stamina-layout .skill-chip button { width: 20px; height: 22px; min-height: 22px; color: var(--tx3); }
+.stamina-layout .skill-chip .skill-level { flex-direction: row; align-items: center; white-space: nowrap; }
+.stamina-layout .skill-level select { width: 36px; padding: 0 1px; min-height: 24px; }
+.stamina-layout .add-skill { min-height: 28px; padding: 0 10px; border: 1px dashed var(--line); border-radius: 7px; background: transparent; color: var(--acc); font-size: 12px; }
+.stamina-layout .skill-typeahead { border: 1px solid var(--acc); border-radius: 8px; overflow: hidden; background: var(--bg); }
+.stamina-layout .skill-typeahead > input { border: 0; border-bottom: 1px solid var(--line); border-radius: 0; min-height: 36px; }
+.stamina-layout .skill-typeahead > input:focus-visible { outline-offset: -2px; }
+.stamina-layout .skill-options { border: 0; border-radius: 0; margin: 0; }
+.stamina-layout .skill-options button { font-size: 12px; padding: 6px 8px; min-height: 34px; }
+.stamina-layout .skill-options button[aria-selected=true] { background: var(--s2); border-left: 2px solid var(--acc); }
+.stamina-layout .skill-options button > small { font-size: 9px; }
+.stamina-layout .presets-content h3 { font: 600 10px var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--tx3); }
+.stamina-layout .ballpark-actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; }
+.stamina-layout .ballpark-actions button { padding: 5px; font-size: 11.5px; }
+.stamina-layout .preset-actions button { font-size: 11px; min-height: 26px; padding: 4px 8px; }
+.stamina-layout .saved-build { border: 1px solid var(--line); border-radius: 8px; background: var(--s2); padding: 9px 10px; gap: 6px; }
+.stamina-layout .preset-save { gap: 6px; }
+.stamina-layout .preset-save > button { white-space: normal; padding: 5px 8px; min-height: 32px; }
+.stamina-layout .delete-confirm { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px; border-radius: 6px; background: var(--status-loss-bg); border: 1px solid var(--bad); color: var(--tx); }
+.stamina-layout .delete-confirm p { width: 100%; font-size: 12px; }
+.stamina-layout .delete-confirm button { font-size: 11px; padding: 4px 8px; }
+.stamina-layout .kit-editor { border-color: var(--acc); background: var(--tone-skill-bg); }
+.stamina-layout .kit-editor > button { white-space: normal; padding: 5px 8px; }
+.stamina-layout .simulation-progress { flex-direction: row; padding: 10px 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--tone-skill-bg); }
+.stamina-layout .simulation-progress > span { font-size: 13px; flex-shrink: 1; }
+.stamina-layout progress { appearance: none; border: 0; height: 6px; flex: 1; min-width: 40px; border-radius: 3px; background: var(--s3); overflow: hidden; }
+.stamina-layout progress::-webkit-progress-bar { background: var(--s3); }
+.stamina-layout progress::-webkit-progress-value { background: var(--acc); }
+.stamina-layout .progress-percent { font: 500 12px var(--font-mono); }
+.stamina-layout .build-lock { padding: 8px 14px; color: var(--acc); background: var(--tone-skill-bg); font-size: 12px; }
+.stamina-layout .stamina-headline { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 18px; padding: 16px 18px; background: linear-gradient(120deg, var(--tone-skill-bg), var(--s1) 65%); border-color: color-mix(in srgb, var(--acc) 30%, var(--line)); }
+.stamina-layout .stamina-headline.insufficient { background: linear-gradient(120deg, var(--status-loss-bg), var(--s1) 65%); border-color: color-mix(in srgb, var(--bad) 35%, var(--line)); }
+.stamina-layout .stamina-headline > :is(.label, small) { grid-column: 1 / -1; }
+.stamina-layout .headline-answer { flex-direction: column; gap: 4px; align-items: start; }
+.stamina-layout .headline-answer b { font: 700 58px/1 var(--font-display); color: var(--tx); }
+.stamina-layout .headline-answer > span { font-size: 12px; }
+.stamina-layout .headline-verdict { align-self: center; }
+.stamina-layout .headline-verdict p { font-size: 15px; line-height: 1.4; margin-top: 6px; }
+.stamina-layout .answer-state { display: inline-flex; align-items: center; gap: 5px; margin: 0; padding: 3px 10px; border: 0; border-radius: 999px; font-size: 12px; color: var(--bad); background: color-mix(in srgb, var(--bad) 14%, transparent); }
+.stamina-layout .sufficient .answer-state { color: var(--good); background: color-mix(in srgb, var(--good) 14%, transparent); }
+.stamina-layout .answer-state::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.stamina-layout .stamina-headline small { font-size: 11.5px; color: var(--tx3); }
+.stamina-layout .kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.stamina-layout .kpi { padding: 12px 14px; }
+.stamina-layout .threshold-value { font-size: 26px; color: var(--tx); }
+.stamina-layout .kpi small { font-size: 11.5px; }
+.stamina-layout .heal-contributions { gap: 6px; grid-column: auto; font-size: 12px; }
+.stamina-layout .heal-contributions .num { font-size: 14px; color: var(--good); }
+.stamina-layout :is(.simulation-mode, .heal-note) { font-size: 11.5px; color: var(--tx3); line-height: 1.45; }
+.stamina-layout .simulation-mode:has(+ .heal-note) { margin-bottom: -8px; }
+.stamina-layout .chart-panel { padding: 12px 14px 8px; }
+.stamina-layout .chart-heading { flex-wrap: wrap; gap: 6px 12px; }
+.stamina-layout .chart-heading h2 { font-size: 10px; flex-basis: auto; }
+.stamina-layout .chart-legend { gap: 10px; font-size: 11.5px; }
+.stamina-layout .curve-line { stroke: var(--t1); }
+.stamina-layout .survival-curve { stroke: var(--t2); stroke-dasharray: none; }
+.stamina-layout .joint-curve { stroke: var(--acc); stroke-dasharray: none; }
+.stamina-layout .chart-legend span:first-child i { background: var(--t1); }
+.stamina-layout .chart-legend span:nth-child(3) i { background: var(--acc); }
+.stamina-layout .current-line { stroke: var(--tx2); stroke-dasharray: 2 3; stroke-width: 1; }
+.stamina-layout .current-dot { fill: var(--acc); stroke: var(--bg); stroke-width: 2; }
+.stamina-layout .target-line { stroke: var(--tx2); }
+.stamina-layout :is(.result-table, .run-details) { padding: 0 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--s1); }
+.stamina-layout :is(.result-table, .run-details) summary { min-height: 40px; font-size: 12px; font-weight: 600; }
+.stamina-layout .run-details p { margin: 0 0 8px; color: var(--tx2); }
+.stamina-layout .result-table table { margin-bottom: 12px; }
+.stamina-layout .result-table :is(td, tbody th) { font: 400 11.5px var(--font-mono); padding: 8px 4px; text-align: right; }
+.stamina-layout .result-table thead th { padding: 8px 4px; font-size: 9px; text-align: right; letter-spacing: .04em; }
+.stamina-layout .result-table th:first-child { text-align: left; }
+.stamina-layout .current-row { color: var(--acc); background: transparent; }
+.stamina-layout .draft-summary { padding: 0; border: 0; background: transparent; }
+.stamina-layout .draft-summary h2 { font-size: 20px; line-height: 1.2; }
+.stamina-layout .draft-summary p { line-height: 1.45; color: var(--tx3); }
+.stamina-layout .draft-race-table { padding: 12px 14px; border-radius: 10px; border: 1px solid var(--line); background: var(--s1); }
+.stamina-layout .draft-races { display: flex; flex-direction: column; gap: 0; }
+.draft-race-columns, .stamina-layout .draft-races > div > button { display: grid; grid-template-columns: 26px minmax(0, 1fr) 64px 64px 92px; gap: 8px; align-items: center; }
+.draft-race-columns { padding: 0 0 8px; border-bottom: 1px solid var(--line); color: var(--tx3); font-size: 10px; letter-spacing: .06em; text-transform: uppercase; text-align: right; }
+.draft-race-columns > span:nth-child(2) { grid-column: 2; text-align: left; }
+.stamina-layout .draft-races > div { border-bottom: 1px solid var(--line); }
+.stamina-layout .draft-races > div > button { width: 100%; min-height: 50px; padding: 6px 0; border: 0; border-radius: 0; background: transparent; height: auto; color: var(--tx); }
+.stamina-layout .draft-races > div > button:disabled { opacity: 1; }
+.stamina-layout .draft-races > div > button:enabled:hover { background: var(--s2); }
+.stamina-layout .draft-races .race-number { display: grid; place-items: center; border-radius: 6px; background: var(--s3); width: 26px; height: 26px; font: 700 14px var(--font-display); }
+.stamina-layout .draft-race-name { min-width: 0; text-align: left; }
+.stamina-layout .draft-race-name strong { display: block; font-size: 13px; font-weight: 600; }
+.stamina-layout .draft-race-name small { display: block; font-size: 11.5px; color: var(--tx3); }
+.stamina-layout .draft-races .race-value { font: 400 11.5px var(--font-mono); text-align: right; color: var(--tx2); }
+.stamina-layout .draft-races .race-outcome { justify-self: end; border-radius: 999px; padding: 2px 8px; font-size: 11.5px; background: var(--s2); white-space: nowrap; }
+.stamina-layout .race-pass :is(.race-number, .race-outcome) { color: var(--good); background: color-mix(in srgb, var(--good) 12%, transparent); }
+.stamina-layout .race-short :is(.race-number, .race-outcome) { color: var(--bad); background: color-mix(in srgb, var(--bad) 12%, transparent); }
+.stamina-layout .race-unknown .race-number { color: var(--gold); }
+.stamina-layout :is(.stamina-notice, .stale-notice) { border: 1px solid var(--line); border-radius: 8px; background: var(--s1); padding: 10px 14px; font-size: 12px; }
+.stamina-layout .stale-notice { color: var(--gold); }
+.stamina-layout .engine-error { color: var(--bad); background: var(--status-loss-bg); }
+.stamina-layout .cancelled { color: var(--tx2); }
+.stamina-layout .result-empty { padding: 40px 20px; text-align: center; border-style: dashed; gap: 10px; }
+.stamina-layout .result-empty h2 { font-size: 26px; text-transform: uppercase; }
+.stamina-layout .result-empty p { font-size: 13px; color: var(--tx2); }
+.stamina-layout .previous-result > :is(.kpi, .kpis, .chart-panel, details) { opacity: .45; }
+.stamina-layout .course-choice-action { padding: 0 0 10px 34px; }
+.stamina-layout .course-choice-action button { padding: 0 10px; font-size: 12px; color: var(--acc); }
+.stamina-layout .course-choice-action small { display: block; color: var(--tx3); }
+.stamina-layout .popover-draft-course { padding: 14px; gap: 10px; }
+.stamina-layout .draft-course-query { min-height: 36px; padding: 0 10px; width: 100%; }
+.pool-course-options { display: flex; flex-direction: column; max-height: 250px; overflow-y: auto; overscroll-behavior: contain; }
+.stamina-layout .pool-course-options button { width: 100%; border: 0; border-radius: 0; border-bottom: 1px solid var(--line); background: transparent; text-align: left; padding: 8px; white-space: normal; }
+.stamina-layout .course-source { font-size: 11.5px; color: var(--tx3); overflow-wrap: anywhere; }
+@container stamina-results (max-width: 570px) {
+  .stamina-layout .kpi { padding: 10px; }
+  .stamina-layout .headline-answer b { font-size: 50px; }
+  .stamina-layout .stamina-headline { padding: 14px; gap: 6px 14px; }
+  .stamina-layout .headline-verdict p { font-size: 14px; }
+  .draft-race-columns, .stamina-layout .draft-races > div > button { grid-template-columns: 22px minmax(0, 1fr) 54px 54px 84px; gap: 6px; }
+  .stamina-layout .draft-race-table { padding: 10px; }
+  .stamina-layout .draft-races .race-number { width: 22px; height: 24px; }
+}
+@container stamina-results (max-width: 440px) {
+  .stamina-layout .stamina-headline { grid-template-columns: minmax(0, 1fr); }
+  .stamina-layout .headline-verdict { grid-column: 1; }
+  .stamina-layout .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .stamina-layout .heal-contributions { grid-column: 1 / -1; }
+}
+@container desktop-content (max-width: 750px) {
+  .stamina-workspace.has-build { grid-template-columns: minmax(0, 1fr); }
+  .stamina-layout .build-drawer { position: static; max-height: none; }
+}
