@@ -25,13 +25,16 @@ export const catalog = {
     variant: map.variant, course_set_id: 10000 + i, race_instance_id: 9001 + i, race_id: 1000 + i,
     grade: 100, time: 2, month: 4, instance_reason: 'Screenshot fixture on exact course', unavailable_reason: null })),
   local_skill_data: true,
+  local_skill_path: 'C:\\Users\\Player\\Documents\\UmaLytics-GameData\\gametora', local_skill_count: 1204, local_icon_count: 312,
   skills: [{ id: 1, name: 'Replay Recovery', hp_recovery: true, rarity: 'gold', icon_path: 'fixture-heal.webp' },
     { id: 2, name: 'Replay Recovery II', hp_recovery: true, rarity: 'white', icon_path: 'fixture-heal.webp' },
     { id: 3, name: 'Replay Unique', hp_recovery: false, rarity: 'unique', icon_path: 'fixture-heal.webp' },
     { id: 201241, name: 'Front Runner Straightaways ◎', hp_recovery: false, rarity: 'white', icon_path: 'fixture-heal.webp' }, ...[...new Set([...Object.values(kits).filter(Array.isArray).flat(), 202051, 210052])].map(id => ({ id, name: id === 202051 ? 'Runaway' : id === 210052 ? 'Ignited Spirit WIT' : `Fixture kit skill ${id}`, hp_recovery: false, rarity: 'white', icon_path: null }))]
 };
-export function apiResponse(url) {
+export function apiResponse(url, scene) {
   const parsed = new URL(url);
+  if (parsed.pathname === '/api/esports/league') return { standings: [{ teamId: 'fixture-team' }] };
+  if (parsed.pathname === '/api/esports/teams/fixture-team') return { team: { id: 'fixture-team', name: 'Replay Racing League', logoUrl: 'https://drafter.uma.guide/fixture-team.png', roster: players.map(p => ({ discordId: p.discordId })) } };
   if (parsed.pathname === '/api/seasons') return [{ id: 'replay-season', active: true, name: 'Replay Season' }];
   if (parsed.pathname === '/api/leaderboard') {
     const entries = players.map((p, i) => ({ userId: p.discordId, displayName: p.displayName, rating: 1800 - i * 31, rd: 50, wins: i === 0 ? 212 : 12, losses: i === 0 ? 119 : 8 }));
@@ -48,7 +51,7 @@ export function apiResponse(url) {
   if (parsed.pathname === '/api/matches/ABC123') {
     const savedSide = (offset) => ({ ...side(offset, 5), bannedMaps: [],
       pickedMaps: [{ id: `fixture-course-${offset}`, name: `Replay track ${offset + 1}`, track: `Replay track ${offset + 1}`, distance: 2400, surface: 'Turf' }] });
-    return { id: 'ABC123', status: 'completed', report: { participants: players,
+    return { id: 'ABC123', status: 'completed', report: { reportedAt: '2026-10-20T12:00:00Z', participants: players,
       draftSnapshot: { phase: 'complete', team1: savedSide(0), team2: savedSide(1),
         draftActionHistory: [0, 1].map(offset => ({ action: 'map-pick', actorTeam: `team${offset + 1}`, map: { id: `fixture-course-${offset}` } })),
         multiplayer: { team1Name: 'Replay Blue', team2Name: 'Replay Orange' },
@@ -56,10 +59,15 @@ export function apiResponse(url) {
   }
   const player = parsed.pathname.match(/^\/api\/stats\/players\/(\d+)\/stats$/)?.[1];
   if (player) {
+    if (scene === 'usability') {
+      const entries = Array.from({ length: 12 }, (_, i) => ({ umaId: String(100101 + i * 100), matches: i === 11 ? 2 : 20 - i, wins: i === 11 ? 1 : 10, losses: i === 11 ? 1 : 10 - i, pointsScored: (i === 11 ? 2 : 20 - i) * 7, podiumPlacements: 5, mvpMatches: 1 }));
+      const games = entries.reduce((sum, entry) => sum + entry.matches, 0);
+      return { summary: { matchesIncluded: games, totalPointsScored: games * 7, totalPodiumPlacements: games * 3, totalMvpMatches: 12 }, umaEntries: entries };
+    }
     const i = players.findIndex(p => p.discordId === player);
     const multiplier = parsed.searchParams.has('season') ? 1 : 2;
-    return { summary: { matchesIncluded: 27 * multiplier, totalPointsScored: (180 + i * 3) * multiplier, totalPodiumPlacements: 12, totalMvpMatches: 3 }, umaEntries: [100101, 100201, 100301].map((id, j) => ({ umaId: String(id), matches: (10 - j) * multiplier,
-      wins: (6 - j) * multiplier, losses: 4 * multiplier, pointsScored: (70 - j * 10 + i) * multiplier, podiumPlacements: 4, mvpMatches: 1 })) };
+    return { summary: { matchesIncluded: 27 * multiplier, totalPointsScored: (180 + i * 3) * multiplier, totalPodiumPlacements: 81 * multiplier, totalMvpMatches: 3 }, umaEntries: [...[100101, 100201, 100301].map((id, j) => ({ umaId: String(id), matches: (10 - j) * multiplier,
+      wins: (6 - j) * multiplier - (j === 2 ? 1 : 0), losses: 4 * multiplier - (j === 2 ? 1 : 0), pointsScored: (70 - j * 10 + i) * multiplier, podiumPlacements: 4, mvpMatches: 1 })), { umaId: '100401', matches: 2, wins: 1, losses: 1, pointsScored: 10, podiumPlacements: 2, mvpMatches: 0 }] };
   }
   throw new Error(`Unexpected API path: ${parsed.pathname}`);
 }

@@ -20,6 +20,7 @@ futures-util = { version = "0.3", default-features = false, features = ["sink", 
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 uma_race_sim = { git = "https://github.com/skimuic/uma-race-simulator", rev = "09aa4e03575075fe0d2772b81fb2f5219c8df6c2" }
+tauri-plugin-opener = "2"
 
 # Keep interactive simulations and native tests usable in development too.
 [profile.dev.package.uma_race_sim]

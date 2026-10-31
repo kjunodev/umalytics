@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import { registerHooks } from 'node:module';
 import { replayEnvelopes } from '../apps/desktop/scripts/replay-fixture.mjs';
 import { apiHarness } from './support/helpers.mjs';
+import { livePickEvent } from './fixtures/live-pick-history.mjs';
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
@@ -17,8 +18,19 @@ const hooks = registerHooks({
   }
 });
 const { DesktopRoom } = await import('../apps/desktop/src/feed.ts');
+const { decodeRoomEvent } = await import('../packages/core/src/room/roomEvents.ts');
 hooks.deregister();
 const fixture = JSON.parse(fs.readFileSync(new URL('./fixtures/casual-room-replay.json', import.meta.url)));
+
+test('desktop live order uses the sanitized feed and ignores stale history', () => {
+  const room = new DesktopRoom();
+  room.apply({ v: 1, roomCode: 'ABC123', event: decodeRoomEvent(livePickEvent) });
+  assert.deepEqual(room.pickOrder.map(p => p.umaId), ['100201', '100101', '100301']);
+  room.apply({ v: 1, roomCode: 'ABC123', event: { ...livePickEvent, version: 9, state: { ...livePickEvent.state, draftActionHistory: [] } } });
+  assert.equal(room.pickOrder.length, 3);
+  room.apply({ v: 1, roomCode: 'ABC123', event: { ...livePickEvent, version: 11, state: { ...livePickEvent.state, draftActionHistory: [] } } });
+  assert.equal(room.pickOrder, undefined);
+});
 
 test('desktop replay envelopes drive the real core roster and left clears all room state', () => {
   const room = new DesktopRoom();
@@ -44,6 +56,18 @@ test('desktop replay envelopes drive the real core roster and left clears all ro
 test('completed match history cannot enter the realtime replay path', () => {
   const completed = JSON.parse(fs.readFileSync(new URL('./fixtures/completed-match.json', import.meta.url)));
   assert.throws(() => replayEnvelopes(completed), /history report/);
+});
+
+test('recorded draft actions keep their actual non-alternating order including vetoed picks', () => {
+  const completed = JSON.parse(fs.readFileSync(new URL('./fixtures/completed-match.json', import.meta.url)));
+  const saved = completed.report.draftSnapshot;
+  const event = decodeRoomEvent({ type: 'match.snapshot', matchId: 'ABC123', version: 1, state: saved });
+  const room = new DesktopRoom();
+  room.apply({ v: 1, roomCode: 'ABC123', event });
+  const expected = saved.draftActionHistory.filter(action => action.action === 'uma-pick');
+  assert.deepEqual(room.pickOrder.map(p => [p.team, p.umaId]), expected.map(p => [p.actorTeam, p.uma.id]));
+  assert.equal(room.pickOrder.length, 14);
+  assert.equal(room.pickOrder[0].kind, 'veto');
 });
 
 test('core fetch adapter receives cancellation and preserves 429 cooldown handling', async () => {

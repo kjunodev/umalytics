@@ -7,14 +7,16 @@ import { loadPresets, savePresets, restorePresets, type PresetMemory } from './s
 import { draftRaces, draftFingerprint, passes, type DraftRace, type CourseChoices } from './staminaDraft';
 import { StaminaResults } from './StaminaResults';
 import { SkillPicker } from './SkillPicker';
-import { loadStaminaMemory, saveStaminaMemory } from './staminaState';
+import { loadStaminaMemory, saveStaminaMemory, type BuildTab } from './staminaState';
+import { RaceSettings } from './RaceSettings';
 import { courseLabel, defaultStaminaInput, groundNames, weatherNames, seasonNames, type Catalog, type StaminaBuild, type StaminaInput, type StaminaProgress, type StaminaResult, type StaminaRaceResult, roleNames, strategy, withStrategy } from './staminaTypes';
+import { preferences } from './preferences';
+
+export interface DraftRun { matchCode?: string; fingerprint: string; input: StaminaInput; slots: DraftRace[]; results: (StaminaResult | undefined)[] }
 
 const styles = roleNames.slice(0, 4);
-const moods = ['Awful', 'Bad', 'Normal', 'Good', 'Great'];
 const grades = ['G', 'F', 'E', 'D', 'C', 'B', 'A', 'S'];
-const toggles = [['assume_skills_activate', 'Assume skills activate'], ['rushed', 'Rushed'], ['spot_struggle', 'Spot Struggle'], ['dueling', 'Dueling'], ['lane_movement', 'Lane movement']] as const;
-type Popover = 'draft-course' | 'race' | 'ground' | 'weather' | 'season' | 'advanced';
+type Popover = 'draft-course' | 'race' | 'ground' | 'weather' | 'season';
 let missingDataNoticeShown = false;
 
 function Picker({ label, value, options, onChange }: { label: string; value: number; options: string[]; onChange: (value: number) => void }) {
@@ -24,17 +26,18 @@ function Segments({ label, value, options, onChange }: { label: string; value: n
   return <div className="field"><span>{label}</span><div className="seg" role="group" aria-label={label}>{options.map((name, i) => <button type="button" key={name} aria-pressed={value === i + 1} onClick={() => onChange(i + 1)}>{name}</button>)}</div></div>;
 }
 
-export function Stamina({ draft }: { draft?: DraftSnapshot }) {
+export function Stamina({ draft, openDraft = 0, defaultTarget = preferences.staminaTarget, onDraftRunChange }: { draft?: DraftSnapshot; openDraft?: number; defaultTarget?: StaminaInput['target']; onDraftRunChange?: (run: DraftRun | undefined) => void }) {
   const [catalog, setCatalog] = useState<Catalog>();
   const [anyInput, setAnyInput] = useState<StaminaInput>(defaultStaminaInput);
   const [draftInput, setDraftInput] = useState<StaminaInput>(structuredClone(defaultStaminaInput));
   const [mode, setMode] = useState<'draft' | 'any'>('any');
   const input = mode === 'draft' ? draftInput : anyInput, setInput = mode === 'draft' ? setDraftInput : setAnyInput;
-  const [buildTab, setBuildTab] = useState<'build' | 'presets'>('build');
+  const [buildTab, setBuildTab] = useState<BuildTab>('build');
+  const [buildCustomized, setBuildCustomized] = useState(false);
   const [presets, setPresets] = useState<PresetMemory>();
   const [presetError, setPresetError] = useState('');
   const [presetWritable, setPresetWritable] = useState(false);
-  const [storedDraftRun, setDraftRun] = useState<{ matchCode?: string; fingerprint: string; input: StaminaInput; slots: DraftRace[]; results: (StaminaResult | undefined)[] }>();
+  const [storedDraftRun, setDraftRun] = useState<DraftRun>();
   const draftRun = storedDraftRun?.matchCode === draft?.matchCode ? storedDraftRun : undefined;
   const [detail, setDetail] = useState<number>();
   const batchSlots = useRef<number[] | null>(null);
@@ -49,6 +52,16 @@ export function Stamina({ draft }: { draft?: DraftSnapshot }) {
   const [result, setResult] = useState<{ data: StaminaResult; course: string }>();
   const active = useRef<string | null>(null), toolbar = useRef<HTMLDivElement>(null), buildButton = useRef<HTMLButtonElement>(null), closeButton = useRef<HTMLButtonElement>(null);
   const popupTrigger = useRef<HTMLButtonElement | null>(null), drawer = useRef<HTMLElement>(null);
+  const buildTrigger = useRef<HTMLElement | null>(null);
+  const previousDefaultTarget = useRef(defaultTarget);
+  useEffect(() => { onDraftRunChange?.(draftRun); }, [draftRun, onDraftRunChange]);
+  useEffect(() => { if (openDraft) { setMode('draft'); setDetail(undefined); setPopover(undefined); } }, [openDraft]);
+  useEffect(() => {
+    if (previousDefaultTarget.current === defaultTarget || running || !ready) return;
+    previousDefaultTarget.current = defaultTarget;
+    setAnyInput(previous => ({ ...previous, target: defaultTarget }));
+    setDraftInput(previous => ({ ...previous, target: defaultTarget }));
+  }, [defaultTarget, running, ready]);
 
   useEffect(() => {
     let disposed = false; const stops: UnlistenFn[] = [];
@@ -65,11 +78,11 @@ export function Stamina({ draft }: { draft?: DraftSnapshot }) {
       if (disposed) { stopResult(); return; } stops.push(stopResult);
       const data = await invoke<Catalog>('engine_catalog');
       let memory;
-      try { memory = await loadStaminaMemory(data); }
+      try { memory = await loadStaminaMemory(data, preferences.staminaTarget); }
       catch { if (!disposed) setSaveError('Remembered inputs could not be loaded. Using defaults.'); }
       if (!disposed) {
         setCatalog(data);
-        if (memory) { setAnyInput(memory.input); setDraftInput(memory.draftInput ?? structuredClone(memory.input)); setRecent(memory.recent); setBuildOpen(memory.buildOpen ?? false); setCourseChoices(memory.courseChoices ?? {}); }
+        if (memory) { setAnyInput(memory.input); setDraftInput(memory.draftInput ?? structuredClone(memory.input)); setRecent(memory.recent); setBuildOpen(memory.buildOpen ?? false); setBuildTab(memory.buildTab ?? 'build'); setBuildCustomized(memory.buildCustomized ?? false); setCourseChoices(memory.courseChoices ?? {}); }
         if (!data.local_skill_data && !missingDataNoticeShown) { missingDataNoticeShown = true; setNotice(true); }
         setReady(true);
       }
@@ -80,13 +93,13 @@ export function Stamina({ draft }: { draft?: DraftSnapshot }) {
   }, []);
 
   useEffect(() => {
-    if (ready) void saveStaminaMemory({ input: anyInput, draftInput, recent, buildOpen, courseChoices }).then(() => setSaveError('')).catch(() => setSaveError('Inputs could not be saved. Your current build is still available.'));
-  }, [ready, anyInput, draftInput, recent, buildOpen, courseChoices]);
+    if (ready) void saveStaminaMemory({ input: anyInput, draftInput, recent, buildOpen, buildTab, buildCustomized, courseChoices }).then(() => setSaveError('')).catch(() => setSaveError('Inputs could not be saved. Your current build is still available.'));
+  }, [ready, anyInput, draftInput, recent, buildOpen, buildTab, buildCustomized, courseChoices]);
   useEffect(() => {
     const escape = (e: KeyboardEvent) => {
       if (e.key !== 'Escape' || e.defaultPrevented) return;
       if (popover) { setPopover(undefined); popupTrigger.current?.focus(); }
-      else if (buildOpen) { setBuildOpen(false); buildButton.current?.focus(); }
+      else if (buildOpen) { setBuildOpen(false); (buildTrigger.current?.isConnected ? buildTrigger.current : buildButton.current)?.focus(); }
     };
     const outside = (e: PointerEvent) => { if (popover && !toolbar.current?.contains(e.target as Node)) setPopover(undefined); };
     document.addEventListener('keydown', escape); document.addEventListener('pointerdown', outside);
@@ -97,7 +110,8 @@ export function Stamina({ draft }: { draft?: DraftSnapshot }) {
   useEffect(() => { setPopover(current => current === 'draft-course' ? undefined : current); }, [draft?.matchCode]);
 
   const patch = (next: Partial<StaminaInput>) => setInput(previous => ({ ...previous, ...next }));
-  const patchBuild = (next: Partial<StaminaBuild>) => setInput(previous => ({ ...previous, build: { ...previous.build, ...next } }));
+  const patchBuild = (next: Partial<StaminaBuild>) => { setBuildCustomized(true); setInput(previous => ({ ...previous, build: { ...previous.build, ...next } })); };
+  const openBuild = (tab: BuildTab, trigger: HTMLElement) => { buildTrigger.current = trigger; setBuildOpen(true); setBuildTab(tab); setPopover(undefined); };
   const patchRace = (next: Partial<StaminaInput['race']>) => setInput(previous => ({ ...previous, race: { ...previous.race, ...next } }));
   const races = catalog ? draftRaces(draft, catalog, courseChoices) : [];
   const fingerprint = draftFingerprint(draft, races);
@@ -140,12 +154,12 @@ export function Stamina({ draft }: { draft?: DraftSnapshot }) {
       <div className="mode-switch"><div className="seg" role="group" aria-label="Course mode"><button type="button" aria-pressed={mode === 'draft'} disabled={running} onClick={() => { setMode('draft'); setPopover(undefined); }}>Draft</button><button type="button" disabled={running} aria-pressed={mode === 'any'} onClick={() => { setMode('any'); setPopover(undefined); }}>Any course</button></div></div>
       {mode === 'any' ? <><div className="toolbar-race">{trigger('race', 'Race', compactRace)}</div>
       <div className="condition-chips">{trigger('ground', 'Ground condition', groundNames[input.race.ground_condition - 1])}{trigger('weather', 'Weather', weatherNames[input.race.weather - 1])}{trigger('season', 'Season', seasonNames[input.race.season - 1])}</div></> : <div className="draft-toolbar-label"><span>{races.length} of 7 races known</span><small>{draft ? `Room ${draft.matchCode ?? "—"} · ${draft.phase === "complete" ? "draft complete" : "draft in progress"}` : "No live draft available"}</small></div>}
-      <button ref={buildButton} className="toolbar-build" type="button" aria-label="Build" aria-expanded={buildOpen} disabled={!ready} onClick={() => { setBuildOpen(true); setPopover(undefined); }}><span className="label">Build</span><span>{roleNames[strategy(input.build) - 1]} · {Object.values(input.build.stats).join('/')} · {input.build.skills.length} {input.build.skills.length === 1 ? 'skill' : 'skills'}</span></button>
+      <button ref={buildButton} className="toolbar-build" type="button" aria-label="Edit build" aria-expanded={buildOpen && buildTab === 'build'} disabled={!ready} onClick={event => openBuild('build', event.currentTarget)}><span>{roleNames[strategy(input.build) - 1]} · {input.build.skills.length} {input.build.skills.length === 1 ? 'skill' : 'skills'}</span><span className="edit-build-label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m3 11 8-8 2 2-8 8-3 1 1-3ZM10 4l2 2"/></svg>Edit build</span></button>
       <span className="toolbar-target">Target <b>{input.target}%</b></span>
       {running ? <button className="cancel-run" type="button" disabled={cancelling} onClick={() => { void cancel(); }}>{cancelling ? 'Cancelling…' : 'Cancel'}</button> : <button className="run" type="button" disabled={!ready || (mode === 'draft' ? !draft || !races.some(r => r.race) : !selectedCourse || !!selectedCourse.unavailable_reason)} onClick={() => { void run(); }}>{mode === 'draft' ? `Run ${races.filter(r => r.race).length} races` : 'Run check'}</button>}
-      {trigger('advanced', 'Advanced settings', <span aria-hidden="true">⚙</span>)}
-      {popover && <div className={`stamina-popover panel popover-${popover}`} role="dialog" aria-label={popover === 'draft-course' ? 'Choose the course' : popover === 'race' ? 'Choose race' : popover === 'advanced' ? 'Advanced settings' : `Choose ${popover}`} id="stamina-popover">
-        <div className="popover-heading"><h2>{popover === 'draft-course' ? 'Choose the course' : popover === 'race' ? 'Race' : popover === 'advanced' ? 'Advanced settings' : `Choose ${popover}`}</h2><button type="button" aria-label="Close picker" onClick={() => { setPopover(undefined); popupTrigger.current?.focus(); }}>×</button></div>
+      <button type="button" aria-label="Race settings" aria-expanded={buildOpen && buildTab === 'race-settings'} disabled={!ready || running} onClick={event => openBuild('race-settings', event.currentTarget)}>⚙</button>
+      {popover && <div className={`stamina-popover panel popover-${popover}`} role="dialog" aria-label={popover === 'draft-course' ? 'Choose the course' : popover === 'race' ? 'Choose race' : `Choose ${popover}`} id="stamina-popover">
+        <div className="popover-heading"><h2>{popover === 'draft-course' ? 'Choose the course' : popover === 'race' ? 'Race' : `Choose ${popover}`}</h2><button type="button" aria-label="Close picker" onClick={() => { setPopover(undefined); popupTrigger.current?.focus(); }}>×</button></div>
         {popover === 'draft-course' ? <>
           <p className="muted">Choose the exact course for this race. Its draft conditions are kept. Saved for room {courseChoice?.code} only.</p>
           <p className="course-source">{courseChoice?.raw}</p>
@@ -158,12 +172,6 @@ export function Stamina({ draft }: { draft?: DraftSnapshot }) {
         </> : popover === 'race' ? <>
           <div className="field"><span>Track</span><div className="course-chips" role="group" aria-label="Track">{[...new Set(catalog?.courses.map(c => c.track_name))].map(track => <button type="button" key={track} aria-pressed={selectedCourse?.track_name === track} onClick={() => patchRace({ map_id: catalog!.courses.find(c => c.track_name === track)!.id })}>{track}</button>)}</div></div>
           <div className="field"><span>Distance · surface · variant</span><div className="course-chips" role="group" aria-label="Race">{catalog?.courses.filter(c => c.track_name === selectedCourse?.track_name).map(c => <button type="button" key={c.id} title={c.unavailable_reason ?? undefined} aria-pressed={c.id === input.race.map_id} onClick={() => { patchRace({ map_id: c.id }); setPopover(undefined); popupTrigger.current?.focus(); }}>{c.distance} · {c.surface === 1 ? 'Turf' : 'Dirt'}{c.variant ? ` · ${c.variant}` : ''}{c.unavailable_reason ? ' · Unavailable' : ''}</button>)}</div></div>
-        </> : popover === 'advanced' ? <>
-          <div className="field"><span>Target</span><div className="seg" role="group" aria-label="Target">{([90, 95, 99] as const).map(target => <button type="button" key={target} aria-pressed={input.target === target} onClick={() => patch({ target })}>{target}%</button>)}</div><small className="muted">Higher targets use more samples and take longer.</small></div>
-          <div className="field"><span>Field</span><div className="seg field-options" role="group" aria-label="Field">{(['average_lobby', 'mirror', 'pacemaker'] as const).map(field => <button type="button" key={field} aria-pressed={input.field === field} onClick={() => patch({ field })}>{field === 'average_lobby' ? 'Average lobby' : field === 'mirror' ? 'Mirror' : '2-runner (skill position conditions see 2 runners)'}</button>)}</div><small className="muted">{input.field === 'mirror' ? '8 opponents with your submitted stats · A aptitudes · Great · no skills · 2 Front / 3 Pace / 2 Late / 1 End.' : input.field === 'average_lobby' ? '8 opponents · 1600/1200/1200/600/1200 · A aptitudes · Great · no skills.' : 'One Front runner; position conditions see 2 runners.'}</small></div>
-          {toggles.map(([key, label]) => <label className="toggle-row" key={key}><span>{label}</span><input type="checkbox" checked={input[key]} onChange={e => patch({ [key]: e.target.checked })}/></label>)}
-          <small className="muted">Assume skills activate passes Wit checks. Timing and position conditions still apply.</small>
-          <Picker label="Mood" value={input.build.motivation} options={moods} onChange={motivation => patchBuild({ motivation })}/>
         </> : <Segments label={popover === 'ground' ? 'Ground' : popover === 'weather' ? 'Weather' : 'Season'} value={popover === 'ground' ? input.race.ground_condition : popover === 'weather' ? input.race.weather : input.race.season} options={popover === 'ground' ? groundNames : popover === 'weather' ? weatherNames : seasonNames} onChange={value => { patchRace({ [popover === 'ground' ? 'ground_condition' : popover]: value }); setPopover(undefined); popupTrigger.current?.focus(); }}/>}</div>}
     </div>
     {!ready && !error && <p role="status">Loading engine data…</p>}
@@ -172,6 +180,7 @@ export function Stamina({ draft }: { draft?: DraftSnapshot }) {
     {error && <div role="alert" className={`stamina-notice ${/cancelled/i.test(error) ? "cancelled" : "engine-error"}`}><b>{/cancelled/i.test(error) ? "Check cancelled" : "Engine error"}</b><p>{error}</p>{mode === "draft" && finished.length > 0 && <p>Finished races are kept below.</p>}</div>}{saveError && <p role="status" className="muted">{saveError}</p>}
     <div className={`stamina-workspace${buildOpen && catalog ? " has-build" : ""}`}>
     <section className={`stamina-results${running && mode === "any" && result ? " previous-result" : ""}`} aria-label="Result">
+      {ready && !buildCustomized && <p className="default-build-prompt">Using the default Pace build — <button type="button" aria-label="Edit default build" onClick={event => openBuild('build', event.currentTarget)}>Edit build</button></p>}
       {mode === 'draft' ? !draft && !draftRun ? <div className="panel result-empty"><h2>No draft available</h2><p>Share a live room from Uma Drafter to check its races, or choose Any course.</p></div> : <>
         {draftRun && fingerprint !== draftRun.fingerprint && <p className="stale-notice" role="status">Draft changed since this run</p>}
         {draftRun && JSON.stringify({ ...input, request_id: '' }) !== JSON.stringify({ ...draftRun.input, request_id: '' }) && <p className="stale-notice" role="status">Inputs changed since this run; press Run check to update</p>}
@@ -196,21 +205,21 @@ export function Stamina({ draft }: { draft?: DraftSnapshot }) {
       <footer>Simulated with uma-race-simulator (MIT). Game data © Cygames.</footer>
     </section>
     {buildOpen && catalog && <aside ref={drawer} className="build-drawer desktop-tool panel" aria-label="Build editor">
-      <div className="drawer-heading"><div><span className="label">Your uma</span><h2>Build editor</h2></div><button ref={closeButton} type="button" aria-label="Close build editor" onClick={() => { setBuildOpen(false); buildButton.current?.focus(); }}>×</button></div>
+      <div className="drawer-heading"><div><span className="label">Your uma</span><h2>Build editor</h2></div><button ref={closeButton} type="button" aria-label="Close build editor" onClick={() => { setBuildOpen(false); (buildTrigger.current?.isConnected ? buildTrigger.current : buildButton.current)?.focus(); }}>×</button></div>
       {running && <p className="build-lock" role="status">Build locked while the check runs</p>}
       <div className="build-fields">
-      <div className="drawer-tabs" role="tablist" aria-label="Build panel"><button type="button" role="tab" disabled={running} aria-selected={buildTab === 'build'} onClick={() => setBuildTab('build')}>Build</button><button type="button" role="tab" disabled={running} aria-selected={buildTab === 'presets'} onClick={() => setBuildTab('presets')}>Presets</button></div>
-      <div className="build-body" role="tabpanel" aria-label={buildTab === "build" ? "Build" : "Presets"}><fieldset disabled={running} className="build-controls">
-        {buildTab === 'presets' ? <>{presetError && <p role="status">{presetError}</p>}{presets ? <StaminaPresets catalog={catalog} memory={presets} onChange={changePresets} build={input.build} onLoad={build => { patchBuild(build); setBuildTab('build'); }} recent={recent} onRecent={setRecent}/> : <p>Loading presets…</p>}</> : <>
+      <div className="drawer-tabs" role="tablist" aria-label="Build panel"><button type="button" role="tab" disabled={running} aria-selected={buildTab === 'build'} onClick={() => setBuildTab('build')}>Build</button><button type="button" role="tab" disabled={running} aria-selected={buildTab === 'presets'} onClick={() => setBuildTab('presets')}>Presets</button><button type="button" role="tab" disabled={running} aria-selected={buildTab === 'race-settings'} onClick={() => setBuildTab('race-settings')}>Race settings</button></div>
+      <div className="build-body" role="tabpanel" aria-label={buildTab === 'build' ? 'Build' : buildTab === 'presets' ? 'Presets' : 'Race settings'}><fieldset disabled={running} className="build-controls">
+        {buildTab === 'race-settings' ? <RaceSettings input={input} onChange={patch} onMood={motivation => patchBuild({ motivation })}/> : buildTab === 'presets' ? <>{presetError && <p role="status">{presetError}</p>}{presets ? <StaminaPresets catalog={catalog} memory={presets} onChange={changePresets} build={input.build} onLoad={build => { patchBuild(build); setBuildTab('build'); }} recent={recent} onRecent={setRecent}/> : <p>Loading presets…</p>}</> : <>
         <Segments label="Strategy" value={strategy(input.build)} options={roleNames} onChange={value => patchBuild(withStrategy(input.build, value))}/>
         <div className="raw-stats">{(['speed', 'stamina', 'pow', 'guts', 'wiz'] as const).map(stat => <label key={stat}>{({ speed: 'Speed', stamina: 'Stamina', pow: 'Power', guts: 'Guts', wiz: 'Wit' })[stat]}<input className={`num ${stat === 'stamina' ? 'stamina-input' : ''}`} aria-label={stat === 'pow' ? 'Power' : stat === 'wiz' ? 'Wit' : stat[0]!.toUpperCase() + stat.slice(1)} type="number" required min={1} max={2000} value={input.build.stats[stat]} onChange={e => patchBuild({ stats: { ...input.build.stats, [stat]: Number(e.target.value) } })}/></label>)}</div>
-        <div className="field"><span>Aptitudes · mood</span>{(['distance', 'style', 'ground'] as const).map(group => <div className={`aptitude-grid aptitude-${group}`} key={group}>{({ distance: ['Sprint', 'Mile', 'Medium', 'Long'], style: styles, ground: ['Turf', 'Dirt'] })[group].map((name, i) => aptitude(group, i, `${name} aptitude`))}{group === "ground" && <Picker label="Mood" value={input.build.motivation} options={moods} onChange={motivation => patchBuild({ motivation })}/>}</div>)}</div>
+        <div className="field"><span>Aptitudes</span>{(['distance', 'style', 'ground'] as const).map(group => <div className={`aptitude-grid aptitude-${group}`} key={group}>{({ distance: ['Sprint', 'Mile', 'Medium', 'Long'], style: styles, ground: ['Turf', 'Dirt'] })[group].map((name, i) => aptitude(group, i, `${name} aptitude`))}</div>)}</div>
         <div className="field"><span>Skills · your uma only</span>{notice && <small className="muted" role="status">Local skill data unavailable. Using engine names without icons.</small>}<SkillPicker catalog={catalog} skills={input.build.skills.filter(s => catalog.skills.find(meta => meta.id === s.id)?.rarity !== 'unique')} onChange={skills => patchBuild({ skills: [...input.build.skills.filter(s => catalog.skills.find(meta => meta.id === s.id)?.rarity === 'unique'), ...skills] })} recent={recent} onRecent={setRecent} kind="ordinary" limit={100 - input.build.skills.filter(s => catalog.skills.find(meta => meta.id === s.id)?.rarity === 'unique').length}/></div>
         <div className="field"><span>Your unique · empty by default</span><SkillPicker catalog={catalog} kind="unique" limit={Math.min(1, 100 - input.build.skills.filter(s => catalog.skills.find(meta => meta.id === s.id)?.rarity !== 'unique').length)} skills={input.build.skills.filter(s => catalog.skills.find(meta => meta.id === s.id)?.rarity === 'unique')} onChange={skills => patchBuild({ skills: [...input.build.skills.filter(s => catalog.skills.find(meta => meta.id === s.id)?.rarity !== 'unique'), ...skills] })} recent={recent} onRecent={setRecent}/></div>
         </>}
       </fieldset></div>
       </div>
-      <div className="drawer-footer"><span className="muted">Inputs remembered automatically</span><button type="button" onClick={() => { setBuildOpen(false); buildButton.current?.focus(); }}>Done</button></div>
+      <div className="drawer-footer"><span className="muted">Inputs remembered automatically</span><button type="button" onClick={() => { setBuildOpen(false); (buildTrigger.current?.isConnected ? buildTrigger.current : buildButton.current)?.focus(); }}>Done</button></div>
     </aside>}
     </div>
   </section>;

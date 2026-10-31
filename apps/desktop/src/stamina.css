@@ -186,3 +186,21 @@
   .stamina-workspace.has-build { grid-template-columns: minmax(0, 1fr); }
   .stamina-layout .build-drawer { position: static; max-height: none; }
 }
+
+.stamina-toolbar { z-index: var(--layer-popover); }
+.stamina-layout .build-drawer { z-index: var(--layer-panel); }
+.stamina-layout .stamina-results { position: relative; z-index: var(--layer-base); }
+.stamina-toolbar .toolbar-build { flex: 0 1 auto; border: 1px solid var(--line); background: var(--s2); padding: 6px 10px; min-height: 36px; gap: 12px; justify-content: space-between; }
+.stamina-toolbar .toolbar-build:hover { background: var(--s3); border-color: var(--border-emphasis); }
+.edit-build-label { display: inline-flex; align-items: center; gap: 5px; color: var(--acc); white-space: nowrap; }
+.edit-build-label svg { width: 14px; height: 14px; stroke: currentColor; stroke-width: 1.5; fill: none; }
+.stamina-toolbar > button[aria-label="Race settings"] { width: 36px; height: 36px; padding: 0; font-size: 19px; }
+.default-build-prompt { color: var(--tx2); font-size: 12px; }
+.default-build-prompt button { padding: 0; border: 0; background: transparent; color: var(--acc); min-height: 28px; text-decoration: underline; }
+.stamina-layout .drawer-tabs { margin-inline: 10px; }
+.stamina-layout .drawer-tabs button { padding: 4px 6px; font-size: 12px; white-space: normal; }
+.stamina-layout .build-body .field-options { display: flex; flex-direction: column; }
+.stamina-layout .build-body .field-options button { padding: 5px 8px; white-space: normal; }
+.stamina-layout .build-body .toggle-row { flex-direction: row; align-items: center; }
+.stamina-layout .build-body .toggle-row input { width: 16px; min-height: 16px; height: 16px; }
+.stamina-layout .build-body .aptitude-ground { grid-template-columns: repeat(2,minmax(0,1fr)); }

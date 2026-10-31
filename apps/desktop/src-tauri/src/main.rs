@@ -17,6 +17,7 @@ async fn start_feed(
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_http::init())
+        .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_store::Builder::default().build())
         .manage(Feed::default())
         .manage(stamina::Checks::default())

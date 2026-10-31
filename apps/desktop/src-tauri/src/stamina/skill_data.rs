@@ -22,6 +22,38 @@ fn data_dir() -> PathBuf {
         })
 }
 
+pub(super) fn status() -> (String, usize, usize) {
+    status_from(&data_dir())
+}
+
+fn status_from(dir: &Path) -> (String, usize, usize) {
+    let skills = std::fs::read_to_string(dir.join("skills.json"))
+        .ok()
+        .and_then(|json| serde_json::from_str::<Vec<Value>>(&json).ok())
+        .map_or(0, |rows| rows.len());
+    let icon_root = dir.join("icons").canonicalize().ok();
+    let icons = std::fs::read_dir(dir.join("icons"))
+        .into_iter()
+        .flatten()
+        .filter_map(Result::ok)
+        .filter(|entry| {
+            let path = entry.path();
+            let id = path
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .and_then(|s| s.parse::<i64>().ok());
+            matches!(
+                path.extension().and_then(|s| s.to_str()),
+                Some("webp" | "png")
+            ) && id.is_some_and(|id| id > 0)
+                && path.canonicalize().ok().is_some_and(|p| {
+                    p.is_file() && icon_root.as_ref().is_some_and(|root| p.starts_with(root))
+                })
+        })
+        .count();
+    (dir.to_string_lossy().into_owned(), skills, icons)
+}
+
 // Only numbered image files whose canonical path stays inside icons/ are
 // returned to the asset protocol. Symlinks escaping that directory are rejected.
 fn icon_path(dir: &Path, icon: i64) -> Option<String> {
@@ -136,6 +168,10 @@ mod tests {
             icon_path: None,
         }];
         assert!(!enrich_from(&mut skills, &root));
+        assert_eq!(
+            status_from(&root),
+            (root.to_string_lossy().into_owned(), 0, 0)
+        );
         assert_eq!(skills[0].name, "Engine fallback");
         assert!(skills[0].icon_path.is_none());
         std::fs::write(root.join("icons/123.png"), b"synthetic").unwrap();
@@ -148,10 +184,14 @@ mod tests {
         assert!(icon_path(&root, 456).is_none());
         assert!(icon_path(&root, 789).is_none());
         assert!(icon_path(&root, -123).is_none());
+        assert_eq!(status_from(&root).2, 1);
         std::fs::write(root.join("icons/123.webp"), b"synthetic").unwrap();
         assert!(icon_path(&root, 123).unwrap().ends_with("123.webp"));
         std::fs::write(root.join("skills.json"), b"broken").unwrap();
         assert!(!enrich_from(&mut skills, &root));
+        assert_eq!(status_from(&root).1, 0);
+        std::fs::write(root.join("skills.json"), b"[{\"id\":123}]").unwrap();
+        assert_eq!(status_from(&root).1, 1);
         std::fs::remove_dir_all(root).unwrap();
     }
 }

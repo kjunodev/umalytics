@@ -2,13 +2,15 @@ import { load } from '@tauri-apps/plugin-store';
 import { defaultStaminaInput, type Catalog, type StaminaInput } from './staminaTypes';
 import type { CourseChoices } from './staminaDraft';
 
-export interface StaminaMemory { input: StaminaInput; draftInput?: StaminaInput; recent: number[]; buildOpen?: boolean; courseChoices?: CourseChoices }
+export type BuildTab = 'build' | 'presets' | 'race-settings';
+export interface StaminaMemory { input: StaminaInput; draftInput?: StaminaInput; recent: number[]; buildOpen?: boolean; buildTab?: BuildTab; buildCustomized?: boolean; courseChoices?: CourseChoices }
 const object = (value: unknown): Record<string, unknown> => value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 const integer = (value: unknown, low: number, high: number): value is number => typeof value === 'number' && Number.isInteger(value) && value >= low && value <= high;
 
-export function restoreStaminaMemory(value: unknown, catalog: Catalog): StaminaMemory {
+export function restoreStaminaMemory(value: unknown, catalog: Catalog, defaultTarget: StaminaInput['target'] = 90): StaminaMemory {
   const saved = object(value), raw = object(saved.input), race = object(raw.race), build = object(raw.build);
   const input = structuredClone(defaultStaminaInput);
+  input.target = defaultTarget;
   if (catalog.courses.some(c => c.id === race.map_id)) input.race.map_id = race.map_id as string;
   for (const key of ['ground_condition', 'weather', 'season'] as const) if (integer(race[key], 1, 4)) input.race[key] = race[key];
   if (integer(build.running_style, 1, 4)) input.build.running_style = build.running_style;
@@ -36,13 +38,13 @@ export function restoreStaminaMemory(value: unknown, catalog: Catalog): StaminaM
     const valid = Object.entries(object(entries)).filter((entry): entry is [string, string] => entry[0].length <= 2048 && typeof entry[1] === 'string' && catalog.courses.some(c => c.id === entry[1])).slice(-7);
     return valid.length ? [[code, Object.fromEntries(valid)]] : [];
   }));
-  return { input, ...(Object.keys(courseChoices).length ? { courseChoices } : {}), ...(typeof saved.buildOpen === 'boolean' ? { buildOpen: saved.buildOpen } : {}), ...(saved.draftInput ? { draftInput: restoreStaminaMemory({ input: saved.draftInput }, catalog).input } : {}), recent: Array.isArray(saved.recent) ? [...new Set(saved.recent.filter((id): id is number => typeof id === 'number' && catalog.skills.some(s => s.id === id)))].slice(0, 30) : [] };
+  return { input, buildTab: saved.buildTab === 'presets' || saved.buildTab === 'race-settings' ? saved.buildTab : 'build', buildCustomized: typeof saved.buildCustomized === 'boolean' ? saved.buildCustomized : JSON.stringify(input.build) !== JSON.stringify(defaultStaminaInput.build), ...(Object.keys(courseChoices).length ? { courseChoices } : {}), ...(typeof saved.buildOpen === 'boolean' ? { buildOpen: saved.buildOpen } : {}), ...(saved.draftInput ? { draftInput: restoreStaminaMemory({ input: saved.draftInput }, catalog, defaultTarget).input } : {}), recent: Array.isArray(saved.recent) ? [...new Set(saved.recent.filter((id): id is number => typeof id === 'number' && catalog.skills.some(s => s.id === id)))].slice(0, 30) : [] };
 }
 
 let store: ReturnType<typeof load> | undefined;
 export const getStaminaStore = () => store ??= load('stamina.json', { autoSave: false, defaults: {} });
 let saving = Promise.resolve();
-export async function loadStaminaMemory(catalog: Catalog) { return restoreStaminaMemory(await (await getStaminaStore()).get('last-inputs-v1'), catalog); }
+export async function loadStaminaMemory(catalog: Catalog, defaultTarget: StaminaInput['target'] = 90) { return restoreStaminaMemory(await (await getStaminaStore()).get('last-inputs-v1'), catalog, defaultTarget); }
 export function saveStaminaMemory(memory: StaminaMemory) {
   const snapshot = structuredClone(memory);
   snapshot.input.request_id = '';

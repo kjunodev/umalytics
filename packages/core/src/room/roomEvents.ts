@@ -34,7 +34,8 @@ export function decodeRoomEvent(payload: unknown): RoomRecord | null {
       phase: state.phase.slice(0,40), currentTeam: isRoomTeam(state.currentTeam) ? state.currentTeam : undefined,
       team1: cleanDraftTeam(state.team1), team2: cleanDraftTeam(state.team2),
       wildcardMap: cleanItem(state.wildcardMap), rules: cleanRules(state.rules),
-      multiplayer: cleanMultiplayer(state.multiplayer)
+      multiplayer: cleanMultiplayer(state.multiplayer),
+      ...(Array.isArray(state.draftActionHistory) ? { draftActionHistory: cleanActionHistory(state.draftActionHistory) } : {})
     }};
   }
   if (event.type === 'participant.uma-assignments.snapshot') {
@@ -59,6 +60,22 @@ function cleanPlayers(values: unknown[]): RoomRecord[] {
     }
     if (typeof value.isCaptain === 'boolean') player.isCaptain = value.isCaptain;
     return player;
+  });
+}
+// History is presentation only. Never forward actors or arbitrary nested Uma fields.
+function cleanActionHistory(values: unknown[]): RoomRecord[] {
+  return values.slice(0,256).flatMap((value, index) => {
+    if (!roomRecord(value)) return [];
+    const action = typeof value.action === 'string' ? value.action : '';
+    const kind = ({ 'uma-pick': 'pick', 'uma-ban': 'ban', 'uma-pre-ban': 'ban', 'uma-veto': 'veto' } as Record<string,string>)[action] ?? value.kind;
+    const team = value.actorTeam ?? value.team;
+    const rawId = value.uma?.id ?? value.umaId;
+    if (!['pick','ban','veto'].includes(kind) || !isRoomTeam(team) || typeof rawId !== 'string' || !/^\d{4,6}$/.test(rawId)) return [];
+    const umaId = normalizeUmaOutfitId(rawId);
+    const rawImage = value.uma?.imageUrl ?? value.imageUrl;
+    const imageUrl = resolveDrafterImageUrl(typeof rawImage === 'string' && rawImage.length <= 160 ? rawImage : undefined);
+    return [{ kind, team, umaId, name: getUmaDisplayName(rawId),
+      ...(imageUrl ? { imageUrl } : {}), order: value.kind && Number.isSafeInteger(value.order) && value.order > 0 && value.order <= 256 ? value.order : index + 1 }];
   });
 }
 function cleanItem(value: unknown): RoomRecord | undefined {

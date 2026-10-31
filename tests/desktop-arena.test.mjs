@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import ts from 'typescript';
+import { roomHarness } from './support/helpers.mjs';
 
 function moduleWithMocks(file, imports) {
   const source = fs.readFileSync(new URL(file, import.meta.url), 'utf8');
@@ -15,7 +16,7 @@ function feed() {
   class RoomEventState {
     apply(event, code) { this.matchCode = code; this.draft = event.draft; this.roster = event.roster; return { reason: 'match-snapshot' }; }
   }
-  return moduleWithMocks('../apps/desktop/src/feed.ts', { '@umalytics/core/room/roomEvents': { RoomEventState }, '@umalytics/core/umas/umaPortraits': { normalizeUmaOutfitId: id => id } });
+  return moduleWithMocks('../apps/desktop/src/feed.ts', { '@umalytics/core/room/roomEvents': { RoomEventState, decodeRoomEvent: roomHarness().c.decodeRoomEvent }, '@umalytics/core/umas/umaPortraits': { normalizeUmaOutfitId: id => id } });
 }
 const draft = { teams: {
   team1: { umas: [{ kind: 'pick', team: 'team1', umaId: '100101', name: 'First', order: 1 }] },
@@ -39,7 +40,7 @@ test('pick strip never infers global order from per-team order numbers', () => {
   assert.equal(snapshotPickOrder({}, draft), undefined);
   const first = { action: 'uma-pick', actorTeam: 'team1', uma: { id: '100101' } };
   const second = { action: 'uma-pick', actorTeam: 'team2', uma: { id: '100201' } };
-  const read = history => snapshotPickOrder({ state: { draftActionHistory: history } }, draft);
+  const read = history => snapshotPickOrder({ type: 'match.snapshot', matchId: 'ABC123', version: 1, state: { phase: 'uma-pick', team1: {}, team2: {}, draftActionHistory: history } }, draft);
   assert.deepEqual(Array.from(read([second, first])), [draft.teams.team2.umas[0], draft.teams.team1.umas[0]]);
   assert.equal(read([first]), undefined);
   assert.equal(read([first, first]), undefined);
@@ -52,12 +53,12 @@ test('copy diagnostics excludes all source identifiers and accepts only known st
   assert(!/secret|PRIVATE|123456789012345678/.test(diagnostic));
   assert.equal(JSON.parse(feedDiagnostics({ state: 'secret', accepted: 'secret', rejected: -1 })).state, 'starting');
 });
-test('retired page migrates to Lobby and compact threshold defaults to 600 and persists', async () => {
+test('retired page migrates to Live and compact threshold defaults to 600 and persists', async () => {
   let saved = { page: 'Skills by map', compactThreshold: 760, fullSize: { width: 640, height: 700 } };
   const store = { get: async () => saved, set: async (_, value) => { saved = value; }, save: async () => {} };
   const p = moduleWithMocks('../apps/desktop/src/preferences.ts', { '@tauri-apps/plugin-store': { load: async () => store } });
   await p.loadPreferences();
-  assert.equal(p.preferences.page, 'Lobby');
+  assert.equal(p.preferences.page, 'Live');
   assert.equal(p.preferences.compactThreshold, 760);
   await p.savePreferences({ compactThreshold: 600 });
   assert.equal(saved.compactThreshold, 600);
