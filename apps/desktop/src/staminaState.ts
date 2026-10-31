@@ -1,7 +1,8 @@
 import { load } from '@tauri-apps/plugin-store';
 import { defaultStaminaInput, type Catalog, type StaminaInput } from './staminaTypes';
+import type { CourseChoices } from './staminaDraft';
 
-export interface StaminaMemory { input: StaminaInput; draftInput?: StaminaInput; recent: number[] }
+export interface StaminaMemory { input: StaminaInput; draftInput?: StaminaInput; recent: number[]; buildOpen?: boolean; courseChoices?: CourseChoices }
 const object = (value: unknown): Record<string, unknown> => value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 const integer = (value: unknown, low: number, high: number): value is number => typeof value === 'number' && Number.isInteger(value) && value >= low && value <= high;
 
@@ -30,7 +31,12 @@ export function restoreStaminaMemory(value: unknown, catalog: Catalog): StaminaM
   if (raw.target === 90 || raw.target === 95 || raw.target === 99) input.target = raw.target;
   if (integer(raw.seeds, 1, 1000)) input.seeds = raw.seeds;
   for (const key of ['assume_skills_activate', 'rushed', 'spot_struggle', 'dueling', 'lane_movement'] as const) if (typeof raw[key] === 'boolean') input[key] = raw[key];
-  return { input, ...(saved.draftInput ? { draftInput: restoreStaminaMemory({ input: saved.draftInput }, catalog).input } : {}), recent: Array.isArray(saved.recent) ? [...new Set(saved.recent.filter((id): id is number => typeof id === 'number' && catalog.skills.some(s => s.id === id)))].slice(0, 30) : [] };
+  const courseChoices: CourseChoices = Object.fromEntries(Object.entries(object(saved.courseChoices)).slice(-100).flatMap(([code, entries]) => {
+    if (!code.trim() || code.length > 80) return [];
+    const valid = Object.entries(object(entries)).filter((entry): entry is [string, string] => entry[0].length <= 2048 && typeof entry[1] === 'string' && catalog.courses.some(c => c.id === entry[1])).slice(-7);
+    return valid.length ? [[code, Object.fromEntries(valid)]] : [];
+  }));
+  return { input, ...(Object.keys(courseChoices).length ? { courseChoices } : {}), ...(typeof saved.buildOpen === 'boolean' ? { buildOpen: saved.buildOpen } : {}), ...(saved.draftInput ? { draftInput: restoreStaminaMemory({ input: saved.draftInput }, catalog).input } : {}), recent: Array.isArray(saved.recent) ? [...new Set(saved.recent.filter((id): id is number => typeof id === 'number' && catalog.skills.some(s => s.id === id)))].slice(0, 30) : [] };
 }
 
 let store: ReturnType<typeof load> | undefined;

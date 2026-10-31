@@ -21,6 +21,15 @@ const { fuzzyScore, restoreStaminaMemory, loadStaminaMemory, saveStaminaMemory }
 const catalog = { courses: [{ id: 'hanshin' }], skills: [{ id: 1, rarity: 'unique' }, { id: 2, rarity: 'gold' }] };
 const plain = value => JSON.parse(JSON.stringify(value));
 
+test('dock state and valid match-scoped course choices survive storage', () => {
+  const choices = { ABC123: { race: 'hanshin', removed: 'missing' }, XYZ789: { race: 42 }, empty: null };
+  const restored = restoreStaminaMemory({ buildOpen: true, courseChoices: choices }, catalog);
+  assert.equal(restored.buildOpen, true);
+  assert.deepEqual(plain(restored.courseChoices), { ABC123: { race: 'hanshin' } });
+  assert.equal(restoreStaminaMemory({ buildOpen: false }, catalog).buildOpen, false);
+  assert.equal(restoreStaminaMemory({ buildOpen: 'false', courseChoices: [] }, catalog).buildOpen, undefined);
+});
+
 test('stamina memory restores race, conditions, every build field and advanced option', () => {
   const input = structuredClone(types.defaultStaminaInput);
   input.race = { map_id: 'hanshin', ground_condition: 4, weather: 3, season: 2 };

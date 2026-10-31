@@ -54,6 +54,25 @@ test('draft fingerprint ignores unrelated feed updates and detects conditions, r
   const changed = fingerprint(); s.matchCode = 'ABC123'; assert.notEqual(fingerprint(), changed);
 });
 
+test('manual course choice is explicit, scoped to the match and keeps live draft conditions', () => {
+  const unknown = { ...map(), mapId: 'unknown', track: 'Fuchu' };
+  const snap = { ...snapshot([unknown]), matchCode: 'ABC123' };
+  const unresolved = draft.draftRaces(snap, catalog)[0];
+  assert.equal(unresolved.race, undefined);
+  const choices = { ABC123: { [unresolved.choiceKey]: pool.maps[1].id } };
+  assert.equal(draft.draftRaces(snap, catalog, choices)[0].race.map_id, pool.maps[1].id);
+  unknown.ground = 'Heavy'; unknown.weather = 'Rainy'; unknown.season = 'Summer';
+  unknown.details = 'Heavy · Rainy · Summer';
+  assert.deepEqual(plain(draft.draftRaces(snap, catalog, choices)[0].race), { map_id: pool.maps[1].id, ground_condition: 4, weather: 3, season: 2 });
+  assert.equal(draft.draftRaces({ ...snap, matchCode: 'XYZ789' }, catalog, choices)[0].race, undefined);
+  assert.equal(draft.draftRaces({ ...snap, matchCode: undefined }, catalog, choices)[0].race, undefined);
+  assert.equal(draft.draftRaces(snap, catalog, { ABC123: { [unresolved.choiceKey]: 'not-in-pool' } })[0].race, undefined);
+  unknown.weather = 'Fog';
+  assert.equal(draft.draftRaces(snap, catalog, choices)[0].reason, 'Unknown or missing conditions');
+  const known = { ...snapshot([map()]), matchCode: 'ABC123' };
+  assert.equal(draft.draftRaces(known, catalog, choices)[0].race.map_id, pool.maps[0].id);
+});
+
 test('ballpark uses each kit, keeps stamina and clears user uniques; Runaway is Front plus 202051', () => {
   const memory = presets.restorePresets(undefined, catalog), current = structuredClone(types.defaultStaminaInput.build);
   current.stats.stamina = 1190; current.skills = [{ id: 1, level: 6 }];

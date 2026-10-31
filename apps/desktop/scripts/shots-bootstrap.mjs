@@ -40,6 +40,7 @@ mockIPC(async (command, args) => {
   }
   if (command === 'engine_catalog') return scene === 'stamina-no-data' ? { ...catalog, local_skill_data: false, skills: catalog.skills.map(s => ({ ...s, icon_path: null })) } : catalog;
   if (command === 'stamina_check') {
+    if (window.__SHOT_CONTROL__.failNext) { window.__SHOT_CONTROL__.failNext = false; throw new Error('Engine could not complete this check.'); }
     if (window.__SHOT_CONTROL__.slow) return new Promise((resolve, reject) => { pending = { resolve, reject }; void emit('stamina-progress', { request_id: args.input.request_id, completed: 100, total: 544, stage: 'mapping', percent: 15 }); });
     return staminaResult(args.input);
   }
