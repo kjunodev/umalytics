@@ -1,4 +1,3 @@
-import { phaseLabel } from './phase';
 import { useEffect, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
@@ -6,7 +5,7 @@ import { getCurrentWindow, LogicalSize } from '@tauri-apps/api/window';
 import { isDiscordSnowflake } from '@umalytics/core/room/rosterIdentity';
 import { normalizeRosterForDisplay } from '@umalytics/core/room/rosterDisplay';
 import { useUiServices, type RequestedMatch } from '@umalytics/ui';
-import type { PlayerProfileSummary, PlayerStatsScope } from '@umalytics/shared';
+import type { EsportsTeamIconMap, PlayerProfileSummary, PlayerStatsScope } from '@umalytics/shared';
 import { DesktopRoom, feedDiagnostics, type FeedEnvelope, type FeedStatus } from './feed';
 import { Stamina, type DraftRun } from './Stamina';
 import { CompactStamina } from './CompactStamina';
@@ -17,7 +16,8 @@ import { Settings } from './Settings';
 import { Lobby } from './Live';
 import { Draft } from './Draft';
 import { RailIcon } from './RailIcon';
-import { preferences, savePreferences, type Page } from './preferences';
+import { preferences, savePreferences, liveTabs, phaseLiveTab, type LiveTab, type Page } from './preferences';
+import { loadDesktopTeamIcons } from './sessionData';
 
 function Logo() {
   return <svg width="24" height="24" viewBox="0 0 26 26" fill="none" aria-hidden="true"><rect x="1" y="1" width="24" height="24" rx="7" stroke="var(--accent-blue)" strokeWidth="2"/><path d="M8 17V9m5 8v-5m5 5v-8" stroke="var(--accent-orange)" strokeWidth="2.2" strokeLinecap="round"/></svg>;
@@ -26,6 +26,9 @@ function Logo() {
 export function App() {
   const { loadExplorerProfiles } = useUiServices();
   const [page, setPage] = useState<Page>(preferences.page);
+  const [liveTab, setLiveTab] = useState<LiveTab>(preferences.liveTab);
+  const [teamIcons, setTeamIcons] = useState<EsportsTeamIconMap>({});
+  const previousPhase = useRef<string | undefined>(undefined);
   const [compactMode, setCompactMode] = useState(preferences.compact);
   const [narrow, setNarrow] = useState(window.innerWidth < preferences.compactThreshold);
   const [pinned, setPinned] = useState(preferences.pinned);
@@ -53,15 +56,22 @@ export function App() {
   const code = viewState.matchCode;
   const pickOrder = viewState === room.current.lastState ? room.current.lastPickOrder : room.current.pickOrder;
   const compact = compactMode || narrow;
-  const livePage = page === 'Draft' ? 'Draft' : 'Lobby';
-  const displayedPage = compact ? livePage : page;
+  const displayedPage = compact ? 'Live' : page;
   const profileRoster = room.current.state.roster ?? room.current.lastState?.roster;
   const rosterKey = JSON.stringify([room.current.state.matchCode ?? room.current.lastState?.matchCode, profileRoster?.players]);
   const feedLabel = status?.state === 'port-in-use' ? 'Port 38917 in use' : status?.state === 'error' ? 'Feed unavailable' :
     status?.state === 'connected' ? 'Live' : status?.state === 'disconnected' ? 'Disconnected' : 'Waiting for Uma Drafter';
   const feedBlocked = status?.state === 'port-in-use';
   const disconnected = status?.state === 'disconnected' && !!(roster?.players.length || draft);
-  const liveView = displayedPage === 'Lobby' || displayedPage === 'Draft';
+  const liveView = displayedPage === 'Live';
+
+  useEffect(() => { let disposed = false; void loadDesktopTeamIcons().then(map => { if (!disposed) setTeamIcons(map); }); return () => { disposed = true; }; }, []);
+  useEffect(() => {
+    if (!draft?.phase) return;
+    const next = phaseLiveTab(liveTab, previousPhase.current, draft.phase);
+    previousPhase.current = draft.phase;
+    if (next !== liveTab) { setLiveTab(next); persist({ liveTab: next }); }
+  }, [draft?.phase]);
 
   useEffect(() => {
     const query = window.matchMedia(`(width < ${prefs.compactThreshold}px)`);
@@ -127,6 +137,7 @@ export function App() {
     void savePreferences(patch).catch(() => setShellError('Unable to save preferences.'));
   };
   const navigate = (next: Page) => { setPage(next); persist({ page: next }); };
+  const selectLiveTab = (tab: LiveTab) => { setLiveTab(tab); if (compact) setPage('Live'); persist({ liveTab: tab, ...(compact ? { page: 'Live' } : {}) }); };
   const openMatch = (code: string) => {
     setRequestedMatch({ code, nonce: Date.now() });
     navigate('History');
@@ -164,42 +175,43 @@ export function App() {
     catch { setCopyStatus('Unable to copy diagnostics.'); }
   };
   const feedBox = <div className={`feed-status ${status?.state === 'connected' ? 'connected' : ''}`} role="status"><i className={status?.state === 'connected' ? 'live-dot' : 'idle-dot'}/><span>{feedLabel}{code && <> · Room <b className="num">{code}</b></>}</span></div>;
-  const navItem = (name: Page) => <button key={name} className="nav-item" aria-label={name} title={name} aria-current={page === name ? 'page' : undefined} onClick={() => navigate(name)}><RailIcon page={name}/><span>{name}</span><span className="rail-tooltip" role="tooltip">{name}</span></button>;
+  const navItem = (name: Page) => <button key={name} className="nav-item" aria-label={name} title={name} aria-current={page === name ? 'page' : undefined} onClick={() => navigate(name)}><RailIcon page={name}/><span>{name}</span>{name === 'Live' && <span className="rail-live-status" role="status" aria-label={feedLabel}><i className={status?.state === 'connected' ? 'live-dot' : 'idle-dot'}/></span>}<span className="rail-tooltip" role="tooltip">{name}</span></button>;
+  const tabs = <div className="seg live-tabs" role="group" aria-label="Live view">{liveTabs.map(tab => <button key={tab} aria-pressed={liveTab === tab} onClick={() => selectLiveTab(tab)}>{tab}</button>)}</div>;
   const currentRun = draftRun?.matchCode === draft?.matchCode ? draftRun : undefined;
   const openStamina = async () => { setOpenStaminaDraft(v => v + 1); navigate('Stamina'); if (compact) await toggleMode(); };
 
   return <div className={`app-shell desktop-shell ${compact ? 'compact' : ''}`} data-revision={revision}>
     {!compact && <nav className="sidebar" aria-label="Sections"><div className="brand" title="UmaLytics"><Logo/></div>
-      <div className="rail-group" role="group" aria-label="Live">{(['Lobby', 'Draft'] as const).map(navItem)}</div>
+      <div className="rail-group" role="group" aria-label="Live">{navItem('Live')}</div>
       <div className="rail-group" role="group" aria-label="Tools">{navItem('Stamina')}</div>
-      <div className="rail-group" role="group" aria-label="Data">{(['Players', 'History', 'Umas'] as const).map(navItem)}</div>
-      <div className="sidebar-bottom"><span className="rail-feed" role="status" aria-label={feedLabel} title={feedLabel}><i className={status?.state === 'connected' ? 'live-dot' : 'idle-dot'}/></span>{navItem('Settings')}</div></nav>}
+      <div className="rail-group" role="group" aria-label="Data">{(['Players', 'History'] as const).map(navItem)}</div>
+      <div className="sidebar-bottom">{navItem('Settings')}</div></nav>}
     <div className="workspace">
-      {compact ? <header className="compact-header"><Logo/><div className="seg" role="group" aria-label="View">{(['Lobby', 'Draft'] as const).map(name => <button key={name} aria-pressed={livePage === name} onClick={() => navigate(name)}>{name}</button>)}</div>
+      {compact ? <header className="compact-header"><Logo/>{tabs}
         <span className="compact-room num" title={feedLabel}><i className={status?.state === 'connected' ? 'live-dot' : 'idle-dot'}/>{code ?? 'No room'}</span>
         <button className="icon-button" aria-label="Pin on top" aria-pressed={pinned} disabled={windowBusy} onClick={() => { void togglePin(); }}><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 2h4l-.5 4 2.5 2v1H4V8l2.5-2L6 2zM8 9v5"/></svg></button>
         <button className="icon-button" aria-label="Expand to full mode" disabled={windowBusy} onClick={() => { void toggleMode(); }}><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M9.5 2.5h4v4M6.5 13.5h-4v-4M13.5 2.5 9 7M2.5 13.5 7 9"/></svg></button>
-      </header> : <header className="page-header"><h1>{page === 'Stamina' ? 'Stamina check' : page}</h1><span className="subtitle">{page === 'Stamina' ? 'Full spurt and survival' : page === 'Lobby' ? code ? `${roster?.players.length ?? 0} players · ${phaseLabel(draft?.phase)}` : 'Waiting for a live room' : page === 'Draft' ? phaseLabel(draft?.phase) : ''}</span>
-        <div className="page-actions">{feedBox}{['Lobby', 'Draft', 'History', 'Umas'].includes(page) && <div className="seg" role="group" aria-label="Stats scope">{(['currentSeason', 'allTime'] as const).map(value => <button key={value} aria-pressed={scope === value} onClick={() => setScope(value)}>{value === 'currentSeason' ? 'Season' : 'All-time'}</button>)}</div>}
+      </header> : <header className="page-header"><h1>{page === 'Stamina' ? 'Stamina check' : page}</h1>{page === 'Live' ? tabs : <span className="subtitle">{page === 'Stamina' ? 'Full spurt and survival' : ''}</span>}
+        <div className="page-actions">{feedBox}{['Live', 'History'].includes(page) && <div className="seg" role="group" aria-label="Stats scope">{(['currentSeason', 'allTime'] as const).map(value => <button key={value} aria-pressed={scope === value} onClick={() => setScope(value)}>{value === 'currentSeason' ? 'Season' : 'All-time'}</button>)}</div>}
         <button disabled={windowBusy} onClick={() => { void toggleMode(); }}>Compact</button></div></header>}
-      <main className="content">
+      <main className={`content ${liveView && liveTab === 'Umas' ? 'live-umas-content' : ''}`}>
         {shellError && <div className="feed-banner error" role="alert">{shellError}</div>}
         {liveView && !feedBlocked && (feedError || status?.state === 'error') && <div className="feed-banner error" role="alert"><b>{feedError || 'Feed unavailable. Available data remains visible.'}</b><button disabled={feedBusy} onClick={() => { void retryFeed(); }}>Retry feed</button></div>}
         {liveView && !feedBlocked && profileError && <div className="feed-banner error" role="alert"><span>{profileError}</span><button disabled={profilesLoading} onClick={() => setRefresh(value => value + 1)}>Retry stats</button></div>}
         {liveView && feedBlocked ? <section className="empty-state port-error" role="alert"><h2>Local feed port is in use</h2><p>UmaLytics could not listen on 127.0.0.1:38917. Close another running UmaLytics window or the app using this port, then retry.</p><div><button disabled={feedBusy} onClick={() => { void retryFeed(); }}>Retry</button><button onClick={() => { void copyDiagnostics(); }}>Copy diagnostics</button></div><p role="status">{copyStatus}</p></section> : liveView && <>
-          {disconnected && <div className="feed-banner reconnect" role="status"><b>Uma Drafter disconnected.</b><span>Showing the last {displayedPage === 'Lobby' ? 'roster' : 'draft'}{lastUpdate ? ` received at ${new Date(lastUpdate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : ''}. Reconnecting automatically.</span></div>}
+          {disconnected && <div className="feed-banner reconnect" role="status"><b>Uma Drafter disconnected.</b><span>Showing the last {liveTab === 'Lobby' ? 'roster' : 'draft'}{lastUpdate ? ` received at ${new Date(lastUpdate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : ''}. Reconnecting automatically.</span></div>}
           <div className={disconnected ? 'live-content dimmed' : 'live-content'}>
-            {displayedPage === 'Lobby' && <Lobby roster={roster} profiles={profiles} loading={profilesLoading} compact={compact} scope={scope} emptyStatus={feedLabel} onOpenMatch={openMatch} onRetry={() => setRefresh(value => value + 1)}/>}
-            {displayedPage === 'Draft' && <Draft draft={draft?.phase === 'lobby' ? undefined : draft} pickOrder={pickOrder} loading={status?.state === 'connected' && !draft}/>}
+            {liveTab === 'Lobby' && <Lobby roster={roster} profiles={profiles} loading={profilesLoading} compact={compact} scope={scope} emptyStatus={feedLabel} teamIcons={teamIcons} onOpenMatch={openMatch} onRetry={() => setRefresh(value => value + 1)}/>}
+            {liveTab === 'Draft' && <Draft draft={draft?.phase === 'lobby' ? undefined : draft} pickOrder={pickOrder} loading={status?.state === 'connected' && !draft}/>}
+            {liveTab === 'Umas' && <Umas roster={roster ?? { players: [] }} profiles={profiles} scope={scope} compact={compact}/>}
           </div>
         </>}
         <div className="desktop-tool" hidden={displayedPage !== 'Stamina'}><Stamina draft={draft} openDraft={openStaminaDraft} defaultTarget={prefs.staminaTarget} onDraftRunChange={setDraftRun}/></div>
-        {displayedPage === 'Players' && <Players onOpenMatch={openMatch}/>}
-        <div hidden={displayedPage !== 'History'}><History scope={scope} requestedMatch={requestedMatch} onOpenMatch={openMatch}/></div>
-        {displayedPage === 'Umas' && <Umas roster={roster ?? { players: [] }} profiles={profiles} scope={scope}/>}
+        {displayedPage === 'Players' && <Players teamIcons={teamIcons} onOpenMatch={openMatch}/>}
+        <div hidden={displayedPage !== 'History'}><History scope={scope} requestedMatch={requestedMatch} teamIcons={teamIcons} onOpenMatch={openMatch}/></div>
         {displayedPage === 'Settings' && <Settings prefs={prefs} update={persist} pinned={pinned} busy={windowBusy} togglePin={() => { void togglePin(); }} copyDiagnostics={() => { void copyDiagnostics(); }} copyStatus={copyStatus}/>}
       </main>
-      {compact && livePage === 'Draft' && <CompactStamina run={currentRun} onOpen={() => { void openStamina(); }}/>}
+      {compact && liveTab === 'Draft' && <CompactStamina run={currentRun} onOpen={() => { void openStamina(); }}/>}
     </div>
   </div>;
 }

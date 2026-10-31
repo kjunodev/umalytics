@@ -7,6 +7,7 @@
 @font-face { font-family: 'Saira Condensed'; src: url('./fonts/sairacondensed/SairaCondensed-Bold.ttf') format('truetype'); font-weight: 700; font-display: swap; }
 @font-face { font-family: 'Geist Mono'; src: url('./fonts/geistmono/GeistMono[wght].ttf') format('truetype'); font-weight: 100 900; font-display: swap; }
 :root {
+  --layer-base: 0; --layer-hit: 1; --layer-control: 2; --layer-card: 3; --layer-panel: 10; --layer-rail: 20; --layer-popover: 30; --layer-dialog: 40; --layer-tooltip: 50;
   --bg: #080B11; --chrome: #06080D; --s1: #0F141E; --s2: #151C2A; --s3: #1D2638; --line: #222C3F;
   --tx: #EEF3FA; --tx2: #A9B4C6; --tx3: #7E8A9F; --acc: #35D6E8; --acc-ink: #03161A;
   --gold: #F6C453; --silver: #B8C7DD; --t1: #4D8DFF; --t2: #FF8A3D; --good: #3DDC97; --bad: #FF5F7E;

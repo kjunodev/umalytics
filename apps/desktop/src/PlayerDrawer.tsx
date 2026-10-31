@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useUiServices, type PlayerHistoryPage } from '@umalytics/ui';
-import type { PlayerProfileSummary, PlayerStatsScope, PlayerTopUmaSummary, PrematchPlayer } from '@umalytics/shared';
+import type { EsportsTeamIcon, PlayerProfileSummary, PlayerStatsScope, PlayerTopUmaSummary, PrematchPlayer } from '@umalytics/shared';
+import { DesktopTeamIcon } from './TeamIcon';
 import { getDisplayedProfileStats, getLookupDiscordId } from '@umalytics/ui/player/playerProfileDisplay';
 import { BestUmaPortrait } from '@umalytics/ui/player/BestUmaPortrait';
 import { getNotableBadges } from '@umalytics/ui/common/badges';
@@ -29,8 +30,8 @@ export function StatStrip({ profile }: { profile?: PlayerProfileSummary }) {
   return <div className="arena-stats drawer-stat-strip">{[['W–L', formatRecord(profile)], ['Win rate', formatPercent(profile?.winRate)], ['Pts / game', formatDecimal(profile?.pointsPerGame)], ['MVP', formatNumber(profile?.mvpMatches)]].map(([label, value]) => <div key={label}><b>{value}</b><span>{label}</span></div>)}</div>;
 }
 
-export function PlayerDrawer({ player, profile, scope, loading, onClose, onOpenMatch }: {
-  player: PrematchPlayer; profile?: PlayerProfileSummary; scope: PlayerStatsScope; loading: boolean; onClose: () => void; onOpenMatch: (code: string) => void;
+export function PlayerDrawer({ player, profile, scope, loading, onClose, onOpenMatch, teamIcon }: {
+  player: PrematchPlayer; profile?: PlayerProfileSummary; scope: PlayerStatsScope; loading: boolean; onClose: () => void; onOpenMatch: (code: string) => void; teamIcon?: EsportsTeamIcon;
 }) {
   const services = useUiServices();
   const drawer = useRef<HTMLElement>(null);
@@ -38,6 +39,7 @@ export function PlayerDrawer({ player, profile, scope, loading, onClose, onOpenM
   const [sort, setSort] = useState<keyof Pick<PlayerTopUmaSummary, 'matches' | 'winRate' | 'pointsPerGame' | 'performanceScore'>>('matches');
   const [ascending, setAscending] = useState(false);
   const [showAll, setShowAll] = useState(false);
+  const [umaPage, setUmaPage] = useState(1);
   const [page, setPage] = useState(1);
   const [pages, setPages] = useState<Record<number, PlayerHistoryPage>>({});
   const [historyError, setHistoryError] = useState('');
@@ -52,10 +54,13 @@ export function PlayerDrawer({ player, profile, scope, loading, onClose, onOpenM
   const all = p?.allUmas ?? p?.topUmas ?? [];
   const banner = [...all].sort((a, b) => b.matches - a.matches)[0];
   const umas = all.filter(u => showAll || u.matches >= 3).sort((a, b) => ((a[sort] ?? -1) - (b[sort] ?? -1)) * (ascending ? 1 : -1) || a.name.localeCompare(b.name));
+  const umaPages = Math.max(1, Math.ceil(umas.length / 5));
+  const currentUmaPage = Math.min(umaPage, umaPages);
+  const umaRows = umas.slice((currentUmaPage - 1) * 5, currentUmaPage * 5);
   const total = pages[1]?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / 5));
   const rows = pages[apiPage]?.matches.slice(((page - 1) % 4) * 5, ((page - 1) % 4) * 5 + 5) ?? [];
-  useEffect(() => { setPage(1); setPages({}); setShowAll(false); setTitle(undefined); }, [key]);
+  useEffect(() => { setPage(1); setUmaPage(1); setPages({}); setShowAll(false); setTitle(undefined); }, [key]);
   useEffect(() => {
     if (!id || pages[apiPage]) return;
     let disposed = false;
@@ -79,7 +84,7 @@ export function PlayerDrawer({ player, profile, scope, loading, onClose, onOpenM
     const keyboard = (event: KeyboardEvent) => {
       if (event.key === 'Escape') { event.preventDefault(); onClose(); }
       if (event.key === 'Tab') {
-        const elements = [...drawer.current!.querySelectorAll<HTMLElement>('button:not(:disabled), a[href], input')];
+        const elements = [...drawer.current!.querySelectorAll<HTMLElement>('button:not(:disabled), a[href], input, [tabindex="0"]')];
         const first = elements[0], last = elements.at(-1);
         if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
         else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
@@ -89,22 +94,22 @@ export function PlayerDrawer({ player, profile, scope, loading, onClose, onOpenM
     return () => { document.removeEventListener('keydown', keyboard); previous?.focus(); };
   }, []);
   return <div className="arena-drawer-layer">
-    <button className="arena-backdrop" aria-label="Close player details" onClick={onClose}/>
+    <button className="arena-backdrop" aria-label="Close player details" tabIndex={-1} onClick={onClose}/>
     <aside className="arena-player-drawer player-drawer" role="dialog" aria-modal="true" aria-label="Player details" ref={drawer}>
       <header className="arena-drawer-banner">
         {banner && <div className="drawer-banner-art"><BestUmaPortrait uma={banner}/></div>}
-        <div className="drawer-identity"><h2>{profile?.displayName ?? player.displayName}</h2><p className="muted">{profile?.title ?? title}</p><div className="drawer-rank"><span className={`rank num ${rankTier}`}>{formatRank(p, loading)}</span><span><b className="num">{formatNumber(profile?.conservativeRating ?? profile?.rating ?? player.displayRatingSnapshot ?? player.ratingSnapshot)}</b> rating</span><span>{scope === 'currentSeason' ? 'Season' : 'All-time'}</span></div>
+        <div className="drawer-identity"><h2>{profile?.displayName ?? player.displayName}</h2><div className="drawer-subtitle"><span className="muted">{profile?.title ?? title}</span>{teamIcon && <span className="drawer-esports-team"><DesktopTeamIcon icon={teamIcon}/><span>{teamIcon.teamName}</span></span>}</div><div className="drawer-rank"><span className={`rank num ${rankTier}`}>{formatRank(p, loading)}</span><span><b className="num">{formatNumber(profile?.conservativeRating ?? profile?.rating ?? player.displayRatingSnapshot ?? player.ratingSnapshot)}</b> rating</span><span>{scope === 'currentSeason' ? 'Season' : 'All-time'}</span></div>
         <div className="drawer-badges">{getNotableBadges(p).filter(b => allowedBadges.has(b.kind)).map(b => <span key={b.kind} title={b.title}>{b.label}</span>)}</div></div>
         <button className="iconbtn drawer-close" aria-label="Close details" ref={close} onClick={onClose}>×</button>
       </header>
       <div className="arena-drawer-body">
         {loading && <p role="status">Loading profile…</p>}{profile?.statsPrivate && <p>Stats are private</p>}{profile?.error && <p role="status">{profile.error}</p>}
         <StatStrip profile={p}/>
-        <section className="drawer-umas"><div className="data-heading"><h3>Umas</h3><small>{umas.length} Umas · ranked stats</small></div>
-          <table className="quiet-table" aria-label="Player Uma stats"><thead><tr><th>Uma</th>{([['matches', 'GP'], ['winRate', 'Win'], ['pointsPerGame', 'PPG'], ['performanceScore', 'Score']] as const).map(([column, label]) => <th key={column} aria-sort={sort === column ? ascending ? 'ascending' : 'descending' : 'none'}><button onClick={() => { setAscending(sort === column ? !ascending : false); setSort(column); }}>{label}{sort === column ? ascending ? ' ↑' : ' ↓' : ''}</button></th>)}</tr></thead>
-          <tbody>{umas.map(u => <tr key={u.umaId}><th scope="row"><span className="table-identity"><BestUmaPortrait uma={u}/><span>{u.name}</span></span></th><td>{u.matches}</td><td>{formatPercent(u.winRate)}</td><td>{formatDecimal(u.pointsPerGame)}</td><td>{formatNumber(u.performanceScore)}</td></tr>)}</tbody></table>
+        <section className="drawer-umas"><div className="data-heading"><h3>Umas</h3><small>{umas.length} Umas</small><nav className="uma-section-pager" aria-label="Uma pages"><button aria-label="Previous Umas" disabled={currentUmaPage <= 1} onClick={() => setUmaPage(currentUmaPage - 1)}>‹</button><span>{currentUmaPage}/{umaPages}</span><button aria-label="Next Umas" disabled={currentUmaPage >= umaPages} onClick={() => setUmaPage(currentUmaPage + 1)}>›</button></nav></div>
+          <div className="drawer-umas-table"><table className="quiet-table" aria-label="Player Uma stats"><thead><tr><th>Uma</th>{([['matches', 'GP'], ['winRate', 'Win'], ['pointsPerGame', 'PPG'], ['performanceScore', 'Score']] as const).map(([column, label]) => <th key={column} aria-sort={sort === column ? ascending ? 'ascending' : 'descending' : 'none'}><button onClick={() => { setAscending(sort === column ? !ascending : false); setSort(column); setUmaPage(1); }}>{label}{sort === column ? ascending ? ' ↑' : ' ↓' : ''}</button></th>)}</tr></thead>
+            <tbody>{umaRows.map(u => <tr key={u.umaId}><th scope="row"><span className="table-identity"><BestUmaPortrait uma={u}/><span>{u.name}</span></span></th><td>{u.matches}</td><td>{formatPercent(u.winRate)}</td><td>{formatDecimal(u.pointsPerGame)}</td><td>{formatNumber(u.performanceScore)}</td></tr>)}</tbody></table></div>
           {!umas.length && <p className="muted">No ranked Uma stats.</p>}
-          {all.some(u => u.matches < 3) && <div className="data-heading low-games"><small>{all.filter(u => u.matches < 3).length} Umas with fewer than 3 games {showAll ? 'shown' : 'hidden'}</small><button aria-pressed={showAll} onClick={() => setShowAll(!showAll)}>{showAll ? 'Hide <3 games' : 'Show all'}</button></div>}
+          {all.some(u => u.matches < 3) && <div className="data-heading low-games"><small>{all.filter(u => u.matches < 3).length} Umas with fewer than 3 games {showAll ? 'shown' : 'hidden'}</small><button aria-pressed={showAll} onClick={() => { setShowAll(!showAll); setUmaPage(1); }}>{showAll ? 'Hide <3 games' : 'Show all'}</button></div>}
         </section>
         <section className="drawer-history"><div className="data-heading"><h3>Match history</h3><small>{total} matches · display only</small></div>
           <div className="drawer-history-fixed" aria-busy={historyLoading}><table className="quiet-table" aria-label="Player match history"><thead><tr><th>Match</th><th>Uma</th><th>Result</th><th>Pts</th><th>Rating</th></tr></thead><tbody>{rows.map((m, i) => <tr key={`${m.matchId}-${i}`}><th scope="row"><button className="text-link recent-match-code" title={m.reportedAt} onClick={() => { onOpenMatch(m.matchId); onClose(); }}>{m.matchId}</button></th><td className="table-text">{m.umaName}</td><td className={getRecentResultTone(m)}>{formatRecentResult(m)}{m.isMvp ? ' ★' : ''}</td><td>{m.pointsScored}</td><td>{m.eloDelta == null ? m.eloPlacement ? 'placement' : '—' : `${m.eloDelta >= 0 ? '+' : ''}${m.eloDelta}`}</td></tr>)}</tbody></table>

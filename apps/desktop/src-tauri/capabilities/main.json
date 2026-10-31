@@ -16,6 +16,7 @@
     "store:allow-set",
     "store:allow-delete",
     "store:allow-save",
-    { "identifier": "http:default", "allow": [{ "url": "https://drafter-api.uma.guide/*" }] }
+    { "identifier": "http:default", "allow": [{ "url": "https://drafter-api.uma.guide/*" }] },
+    { "identifier": "opener:allow-open-url", "allow": [{ "url": "https://drafter.uma.guide/*" }] }
   ]
 }

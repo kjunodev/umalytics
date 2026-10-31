@@ -15,7 +15,7 @@ const draftMessage = (partial, version = 1001) => {
   const side = team => ({ pickedMaps: snapshot.teams[team].maps.map(raw), bannedMaps: [], pickedUmas: [], bannedUmas: [], preBannedUmas: [] });
   return { v: 1, roomCode: 'ABC123', event: { type: 'match.snapshot', matchId: 'ABC123', version, state: { phase: snapshot.phase, team1: side('team1'), team2: side('team2'), wildcardMap: snapshot.tiebreakerMap ? raw(snapshot.tiebreakerMap) : undefined } } };
 };
-window.__SHOT_CONTROL__ = { calls, emit, draftMessage, messages, slow: false };
+window.__SHOT_CONTROL__ = { calls, emit, draftMessage, messages, slow: false, feedReady: false };
 mockWindows('main');
 mockConvertFileSrc('windows');
 mockIPC(async (command, args) => {
@@ -35,7 +35,8 @@ mockIPC(async (command, args) => {
   if (command === 'plugin:window|scale_factor') return 1.25;
   if (command === 'plugin:window|set_size') { await window.__resizeShot__(args.value.toJSON().Logical); return; }
   if (command === 'start_feed') {
-    if (!['empty', 'port-in-use', 'draft-loading', 'feed-error'].includes(scene)) setTimeout(async () => { for (const message of messages) await emit('feed-message', message); }, 0);
+    if (!['empty', 'port-in-use', 'draft-loading', 'feed-error'].includes(scene)) setTimeout(async () => { for (const message of messages) await emit('feed-message', message); window.__SHOT_CONTROL__.feedReady = true; }, 0);
+    else window.__SHOT_CONTROL__.feedReady = true;
     return { state: scene === 'empty' ? 'listening' : scene === 'port-in-use' ? 'port-in-use' : scene === 'feed-error' ? 'error' : 'connected', accepted: scene === 'empty' ? 0 : messages.length, rejected: 0 };
   }
   if (command === 'engine_catalog') return scene === 'stamina-no-data' ? { ...catalog, local_skill_data: false, local_skill_count: 0, local_icon_count: 0, skills: catalog.skills.map(s => ({ ...s, icon_path: null })) } : catalog;
@@ -57,7 +58,8 @@ mockIPC(async (command, args) => {
     return results;
   }
   if (command === 'cancel_stamina_check') { pending?.reject('Simulation cancelled.'); pending = undefined; return; }
-  if (command === 'plugin:http|fetch') { const rid = ++id; requests.set(rid, { url: args.clientConfig.url, body: apiResponse(args.clientConfig.url) }); return rid; }
+  if (command === 'plugin:opener|open_url') return;
+  if (command === 'plugin:http|fetch') { const rid = ++id; requests.set(rid, { url: args.clientConfig.url, body: apiResponse(args.clientConfig.url, scene) }); return rid; }
   if (command === 'plugin:http|fetch_send') {
     if (scene === 'loading' && /\/stats\?/.test(requests.get(args.rid).url)) return new Promise(() => {});
     const fail = scene === 'profile-error' && /\/100000000000000301\/stats\?/.test(requests.get(args.rid).url);

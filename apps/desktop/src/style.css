@@ -238,7 +238,7 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; }
 .field-options { flex-direction: column; }
 .stamina-form .field-options button { min-height: 40px; padding: 6px 8px; white-space: normal; line-height: 1.35; }
 
-.stamina-toolbar { position: relative; display: grid; grid-template-columns: minmax(220px, 1fr) auto minmax(330px, 1.25fr) auto 36px; align-items: center; gap: 8px; padding: 10px; z-index: 5; }
+.stamina-toolbar { position: relative; display: grid; grid-template-columns: minmax(220px, 1fr) auto minmax(330px, 1.25fr) auto 36px; align-items: center; gap: 8px; padding: 10px; z-index: var(--layer-popover); }
 .toolbar-race { min-width: 0; }
 .toolbar-race button { width: 100%; text-align: left; white-space: normal; padding: 8px 10px; }
 .condition-chips { display: flex; gap: 4px; }
@@ -273,7 +273,7 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; }
 .joint-curve { stroke: var(--accent-green-soft); stroke-width: 3; stroke-dasharray: 2 4; }
 .chart-legend span:nth-child(3) i { background: var(--accent-green-soft); }
 .result-table summary { font-size: 12px; }
-.build-drawer { position: fixed; z-index: 20; top: 60px; right: 0; bottom: 0; width: min(440px, calc(100vw - 260px)); border-radius: var(--radius-xl) 0 0 var(--radius-xl); border-color: var(--border-emphasis); padding: 0; gap: 0; box-shadow: -12px 0 40px var(--bg-page); animation: build-enter 160ms ease-out; }
+.build-drawer { position: fixed; z-index: var(--layer-panel); top: 60px; right: 0; bottom: 0; width: min(440px, calc(100vw - 260px)); border-radius: var(--radius-xl) 0 0 var(--radius-xl); border-color: var(--border-emphasis); padding: 0; gap: 0; box-shadow: -12px 0 40px var(--bg-page); animation: build-enter 160ms ease-out; }
 @keyframes build-enter { from { transform: translateX(100%); } to { transform: translateX(0); } }
 @media (prefers-reduced-motion: reduce) { .build-drawer { animation: none; } }
 .drawer-heading { padding: 14px 18px; border-bottom: 1px solid var(--border-subtle); flex-shrink: 0; }

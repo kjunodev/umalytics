@@ -31,8 +31,10 @@ export const catalog = {
     { id: 3, name: 'Replay Unique', hp_recovery: false, rarity: 'unique', icon_path: 'fixture-heal.webp' },
     { id: 201241, name: 'Front Runner Straightaways ◎', hp_recovery: false, rarity: 'white', icon_path: 'fixture-heal.webp' }, ...[...new Set([...Object.values(kits).filter(Array.isArray).flat(), 202051, 210052])].map(id => ({ id, name: id === 202051 ? 'Runaway' : id === 210052 ? 'Ignited Spirit WIT' : `Fixture kit skill ${id}`, hp_recovery: false, rarity: 'white', icon_path: null }))]
 };
-export function apiResponse(url) {
+export function apiResponse(url, scene) {
   const parsed = new URL(url);
+  if (parsed.pathname === '/api/esports/league') return { standings: [{ teamId: 'fixture-team' }] };
+  if (parsed.pathname === '/api/esports/teams/fixture-team') return { team: { id: 'fixture-team', name: 'Replay Racing League', logoUrl: 'https://drafter.uma.guide/fixture-team.png', roster: players.map(p => ({ discordId: p.discordId })) } };
   if (parsed.pathname === '/api/seasons') return [{ id: 'replay-season', active: true, name: 'Replay Season' }];
   if (parsed.pathname === '/api/leaderboard') {
     const entries = players.map((p, i) => ({ userId: p.discordId, displayName: p.displayName, rating: 1800 - i * 31, rd: 50, wins: i === 0 ? 212 : 12, losses: i === 0 ? 119 : 8 }));
@@ -57,6 +59,11 @@ export function apiResponse(url) {
   }
   const player = parsed.pathname.match(/^\/api\/stats\/players\/(\d+)\/stats$/)?.[1];
   if (player) {
+    if (scene === 'usability') {
+      const entries = Array.from({ length: 12 }, (_, i) => ({ umaId: String(100101 + i * 100), matches: i === 11 ? 2 : 20 - i, wins: i === 11 ? 1 : 10, losses: i === 11 ? 1 : 10 - i, pointsScored: (i === 11 ? 2 : 20 - i) * 7, podiumPlacements: 5, mvpMatches: 1 }));
+      const games = entries.reduce((sum, entry) => sum + entry.matches, 0);
+      return { summary: { matchesIncluded: games, totalPointsScored: games * 7, totalPodiumPlacements: games * 3, totalMvpMatches: 12 }, umaEntries: entries };
+    }
     const i = players.findIndex(p => p.discordId === player);
     const multiplier = parsed.searchParams.has('season') ? 1 : 2;
     return { summary: { matchesIncluded: 27 * multiplier, totalPointsScored: (180 + i * 3) * multiplier, totalPodiumPlacements: 81 * multiplier, totalMvpMatches: 3 }, umaEntries: [...[100101, 100201, 100301].map((id, j) => ({ umaId: String(id), matches: (10 - j) * multiplier,
