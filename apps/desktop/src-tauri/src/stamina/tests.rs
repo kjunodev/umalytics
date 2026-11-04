@@ -329,7 +329,7 @@ fn validates_conditions_build_ids_and_defaults() {
     assert_eq!(seed_count(&healing, e), 512);
     assert!(decoded.assume_skills_activate);
     assert!(decoded.rushed && decoded.lane_movement);
-    assert!(!decoded.spot_struggle && !decoded.dueling);
+    assert!(decoded.spot_struggle && decoded.dueling);
     assert_eq!(decoded.field, Field::AverageLobby);
     let course = validate(&decoded, e).unwrap();
     let field = race_input(&decoded, &course);
@@ -341,7 +341,7 @@ fn validates_conditions_build_ids_and_defaults() {
     .unwrap();
     assert_eq!(multi.field, Field::AverageLobby);
     assert!(multi.assume_skills_activate && multi.rushed && multi.lane_movement);
-    assert!(!multi.spot_struggle && !multi.dueling);
+    assert!(multi.spot_struggle && multi.dueling);
 }
 #[test]
 fn ground_weather_season_pass_through_exactly() {

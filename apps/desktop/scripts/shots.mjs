@@ -248,7 +248,7 @@ try {
     const field = page.getByRole('group', { name: 'Field', exact: true });
     check(await field.getByRole('button', { name: 'Average lobby', exact: true }).getAttribute('aria-pressed') === 'true', 'Average remains the default field');
     await field.getByRole('button', { name: 'Mirror', exact: true }).click();
-    for (const [label, enabled] of [['Assume skills activate', true], ['Rushed', true], ['Spot Struggle', false], ['Dueling', false], ['Lane movement', true]]) {
+    for (const [label, enabled] of [['Assume skills activate', true], ['Rushed', true], ['Spot Struggle', true], ['Dueling', true], ['Lane movement', true]]) {
       check(await page.getByRole('checkbox', { name: label, exact: true }).isChecked() === enabled, `${label} default`);
       await page.getByRole('checkbox', { name: label, exact: true }).setChecked(!enabled);
     }

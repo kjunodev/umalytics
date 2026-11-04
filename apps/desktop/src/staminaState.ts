@@ -3,7 +3,7 @@ import { defaultStaminaInput, type Catalog, type StaminaInput } from './staminaT
 import type { CourseChoices } from './staminaDraft';
 
 export type BuildTab = 'build' | 'presets' | 'race-settings';
-export interface StaminaMemory { input: StaminaInput; draftInput?: StaminaInput; recent: number[]; buildOpen?: boolean; buildTab?: BuildTab; buildCustomized?: boolean; courseChoices?: CourseChoices }
+export interface StaminaMemory { mechanicsDefaults?: number; input: StaminaInput; draftInput?: StaminaInput; recent: number[]; buildOpen?: boolean; buildTab?: BuildTab; buildCustomized?: boolean; courseChoices?: CourseChoices }
 const object = (value: unknown): Record<string, unknown> => value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 const integer = (value: unknown, low: number, high: number): value is number => typeof value === 'number' && Number.isInteger(value) && value >= low && value <= high;
 
@@ -32,13 +32,14 @@ export function restoreStaminaMemory(value: unknown, catalog: Catalog, defaultTa
   if (['average_lobby', 'mirror', 'pacemaker'].includes(String(raw.field))) input.field = raw.field as StaminaInput['field'];
   if (raw.target === 90 || raw.target === 95 || raw.target === 99) input.target = raw.target;
   if (integer(raw.seeds, 1, 1000)) input.seeds = raw.seeds;
-  for (const key of ['assume_skills_activate', 'rushed', 'spot_struggle', 'dueling', 'lane_movement'] as const) if (typeof raw[key] === 'boolean') input[key] = raw[key];
+  for (const key of ['assume_skills_activate', 'rushed', 'lane_movement'] as const) if (typeof raw[key] === 'boolean') input[key] = raw[key];
+  if (saved.mechanicsDefaults === 2) for (const key of ['spot_struggle', 'dueling'] as const) if (typeof raw[key] === 'boolean') input[key] = raw[key];
   const courseChoices: CourseChoices = Object.fromEntries(Object.entries(object(saved.courseChoices)).slice(-100).flatMap(([code, entries]) => {
     if (!code.trim() || code.length > 80) return [];
     const valid = Object.entries(object(entries)).filter((entry): entry is [string, string] => entry[0].length <= 2048 && typeof entry[1] === 'string' && catalog.courses.some(c => c.id === entry[1])).slice(-7);
     return valid.length ? [[code, Object.fromEntries(valid)]] : [];
   }));
-  return { input, buildTab: saved.buildTab === 'presets' || saved.buildTab === 'race-settings' ? saved.buildTab : 'build', buildCustomized: typeof saved.buildCustomized === 'boolean' ? saved.buildCustomized : JSON.stringify(input.build) !== JSON.stringify(defaultStaminaInput.build), ...(Object.keys(courseChoices).length ? { courseChoices } : {}), ...(typeof saved.buildOpen === 'boolean' ? { buildOpen: saved.buildOpen } : {}), ...(saved.draftInput ? { draftInput: restoreStaminaMemory({ input: saved.draftInput }, catalog, defaultTarget).input } : {}), recent: Array.isArray(saved.recent) ? [...new Set(saved.recent.filter((id): id is number => typeof id === 'number' && catalog.skills.some(s => s.id === id)))].slice(0, 30) : [] };
+  return { input, buildTab: saved.buildTab === 'presets' || saved.buildTab === 'race-settings' ? saved.buildTab : 'build', buildCustomized: typeof saved.buildCustomized === 'boolean' ? saved.buildCustomized : JSON.stringify(input.build) !== JSON.stringify(defaultStaminaInput.build), ...(Object.keys(courseChoices).length ? { courseChoices } : {}), ...(typeof saved.buildOpen === 'boolean' ? { buildOpen: saved.buildOpen } : {}), ...(saved.draftInput ? { draftInput: restoreStaminaMemory({ input: saved.draftInput, mechanicsDefaults: saved.mechanicsDefaults }, catalog, defaultTarget).input } : {}), recent: Array.isArray(saved.recent) ? [...new Set(saved.recent.filter((id): id is number => typeof id === 'number' && catalog.skills.some(s => s.id === id)))].slice(0, 30) : [] };
 }
 
 let store: ReturnType<typeof load> | undefined;
@@ -47,6 +48,7 @@ let saving = Promise.resolve();
 export async function loadStaminaMemory(catalog: Catalog, defaultTarget: StaminaInput['target'] = 90) { return restoreStaminaMemory(await (await getStaminaStore()).get('last-inputs-v1'), catalog, defaultTarget); }
 export function saveStaminaMemory(memory: StaminaMemory) {
   const snapshot = structuredClone(memory);
+  snapshot.mechanicsDefaults = 2;
   snapshot.input.request_id = '';
   if (snapshot.draftInput) snapshot.draftInput.request_id = '';
   saving = saving.catch(() => {}).then(async () => { const target = await getStaminaStore(); await target.set('last-inputs-v1', snapshot); await target.save(); });
