@@ -23,11 +23,14 @@ const plain = value => JSON.parse(JSON.stringify(value));
 
 test('dock state and valid match-scoped course choices survive storage', () => {
   const choices = { ABC123: { race: 'hanshin', removed: 'missing' }, XYZ789: { race: 42 }, empty: null };
-  const restored = restoreStaminaMemory({ buildOpen: true, courseChoices: choices }, catalog);
-  assert.equal(restored.buildOpen, true);
+  const restored = restoreStaminaMemory({ buildCollapsed: true, courseChoices: choices }, catalog);
+  assert.equal(restored.buildCollapsed, true);
   assert.deepEqual(plain(restored.courseChoices), { ABC123: { race: 'hanshin' } });
-  assert.equal(restoreStaminaMemory({ buildOpen: false }, catalog).buildOpen, false);
-  assert.equal(restoreStaminaMemory({ buildOpen: 'false', courseChoices: [] }, catalog).buildOpen, undefined);
+  assert.equal(restoreStaminaMemory({ buildCollapsed: false }, catalog).buildCollapsed, false);
+  assert.equal(restoreStaminaMemory({ buildCollapsed: 'false', courseChoices: [] }, catalog).buildCollapsed, false);
+  assert.equal(restoreStaminaMemory({ buildOpen: false }, catalog).buildCollapsed, false);
+  assert.equal(restoreStaminaMemory({ buildOpen: true }, catalog).buildCollapsed, false);
+  assert(!('buildOpen' in restored));
 });
 
 test('stamina memory restores race, conditions, every build field and advanced option', () => {
@@ -39,7 +42,7 @@ test('stamina memory restores race, conditions, every build field and advanced o
   input.build.skills = [{ id: 1, level: 6 }, { id: 2, level: 1 }];
   for (const key of ['assume_skills_activate', 'rushed', 'lane_movement']) input[key] = false;
   input.dueling = true; input.spot_struggle = true; input.seeds = 512;
-  assert.deepEqual(plain(restoreStaminaMemory({ input, recent: [2, 1], buildTab: 'race-settings', showAll: true }, catalog)), { input, recent: [2, 1], buildTab: 'race-settings', buildCustomized: true });
+  assert.deepEqual(plain(restoreStaminaMemory({ input, recent: [2, 1], buildTab: 'race-settings', showAll: true }, catalog)), { input, recent: [2, 1], buildTab: 'race-settings', buildCustomized: true, buildCollapsed: false });
 });
 
 test('stamina memory rejects corrupt values, stale skill IDs and duplicate skills', () => {

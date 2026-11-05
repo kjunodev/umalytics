@@ -112,3 +112,17 @@ test('seven-race screenshot fixture resolves the full pool and partial draft sta
   assert.equal(full.length, 7); assert(full.every(r => r.race));
   assert.equal(draft.draftRaces(draftSnapshotFixture(true), catalog).length, 1);
 });
+
+
+test('unknown course diagnostics preserve exact drafter details and include only requested metadata', () => {
+  const slot = { raw: 'Unknown track · 2000 · Turf · Firm', choiceKey: 'id:unknown', reason: 'No exact course in the drafter pool', label: 'Unknown course', secret: 'excluded' };
+  assert.equal(draft.unknownCourseDiagnostics('ABC123', 3, slot, '0.1.0', '2026-11-04'), [
+    'Room code: ABC123', 'Race number: 3', 'Raw course: Unknown track · 2000 · Turf · Firm', 'choiceKey: id:unknown',
+    'Reason: No exact course in the drafter pool', 'App version: 0.1.0', 'Engine data version: 2026-11-04'
+  ].join('\n'));
+  const text = draft.unknownCourseDiagnostics(undefined, 1, { raw: '', label: 'Unknown course' }, '0.1.0');
+  assert(text.includes('Room code: Unavailable'));
+  assert(text.includes('choiceKey: Unavailable'));
+  assert(!text.includes('Engine data version'));
+  assert(!text.includes('excluded'));
+});

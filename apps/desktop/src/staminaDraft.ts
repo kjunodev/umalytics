@@ -3,6 +3,9 @@ import { groundNames, weatherNames, seasonNames, type Catalog, type Course, type
 
 export interface DraftRace { label: string; raw: string; race?: RaceSelection; course?: Course; reason?: string; choiceKey?: string }
 export type CourseChoices = Record<string, Record<string, string>>;
+export function unknownCourseDiagnostics(roomCode: string | undefined, raceNumber: number, slot: DraftRace, appVersion: string, engineDataVersion?: string): string {
+  return [`Room code: ${roomCode ?? 'Unavailable'}`, `Race number: ${raceNumber}`, `Raw course: ${slot.raw}`, `choiceKey: ${slot.choiceKey ?? 'Unavailable'}`, `Reason: ${slot.reason ?? 'Unavailable'}`, `App version: ${appVersion}`, ...(engineDataVersion ? [`Engine data version: ${engineDataVersion}`] : [])].join('\n');
+}
 const normalized = (text: string | undefined) => (text ?? '').trim().toLowerCase();
 const track = (text: string | undefined) => normalized(text) === 'oi' ? 'ooi' : normalized(text);
 function resolve(map: DraftMapSelection | DraftTiebreakerMap, catalog: Catalog, choices: Record<string, string> = {}): DraftRace {

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useUiServices } from '@umalytics/ui';
-import type { EsportsTeamIconMap, PrematchPlayer } from '@umalytics/shared';
+import type { EsportsTeamIconMap, PrematchPlayer, PlayerStatsScope } from '@umalytics/shared';
 import { classifyPlayerQuery, filterLeaderboardEntries, formatLeaderboardRecord, formatLeaderboardWinRate, leaderboardDisplayRating, leaderboardEntryToPlayer } from '@umalytics/ui/players/playersData';
 import { lookupPlayer } from '@umalytics/core/explorer/explorerData';
 import { formatNumber } from '@umalytics/ui/common/format';
@@ -8,7 +8,7 @@ import { PlayerDrawer, usePlayerProfile } from './PlayerDrawer';
 import { DesktopTeamIcon } from './TeamIcon';
 import { cachedLeaderboard, loadDesktopLeaderboard } from './sessionData';
 
-export function Players({ onOpenMatch, teamIcons }: { onOpenMatch: (code: string) => void; teamIcons: EsportsTeamIconMap }) {
+export function Players({ onOpenMatch, teamIcons, scope }: { scope: PlayerStatsScope; onOpenMatch: (code: string) => void; teamIcons: EsportsTeamIconMap }) {
   const services = useUiServices();
   const [snapshot, setSnapshot] = useState(cachedLeaderboard);
   const board = snapshot?.data;
@@ -20,7 +20,7 @@ export function Players({ onOpenMatch, teamIcons }: { onOpenMatch: (code: string
   const [attempt, setAttempt] = useState(0);
   const [directory, setDirectory] = useState<PrematchPlayer[]>();
   const [searching, setSearching] = useState(false);
-  const { profile, loading } = usePlayerProfile(selected, 'currentSeason');
+  const { profile, loading } = usePlayerProfile(selected, scope);
   useEffect(() => {
     let disposed = false; setError(''); setRefreshing(true);
     void loadDesktopLeaderboard(attempt > 0).then(data => { if (!disposed) setSnapshot(data); }).catch(e => { if (!disposed) setError(String(e)); }).finally(() => { if (!disposed) setRefreshing(false); });

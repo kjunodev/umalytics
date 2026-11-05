@@ -4,13 +4,13 @@ import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import type { DraftSnapshot } from '@umalytics/shared';
 import { StaminaPresets } from './StaminaPresets';
 import { loadPresets, savePresets, restorePresets, type PresetMemory } from './staminaPresetState';
-import { draftRaces, draftFingerprint, passes, type DraftRace, type CourseChoices } from './staminaDraft';
+import { draftRaces, draftFingerprint, unknownCourseDiagnostics, passes, type DraftRace, type CourseChoices } from './staminaDraft';
 import { StaminaResults } from './StaminaResults';
 import { SkillPicker } from './SkillPicker';
 import { loadStaminaMemory, saveStaminaMemory, type BuildTab } from './staminaState';
 import { RaceSettings } from './RaceSettings';
 import { courseLabel, defaultStaminaInput, groundNames, weatherNames, seasonNames, type Catalog, type StaminaBuild, type StaminaInput, type StaminaProgress, type StaminaResult, type StaminaRaceResult, roleNames, strategy, withStrategy } from './staminaTypes';
-import { preferences } from './preferences';
+import { getVersion } from '@tauri-apps/api/app';
 
 export interface DraftRun { matchCode?: string; fingerprint: string; input: StaminaInput; slots: DraftRace[]; results: (StaminaResult | undefined)[] }
 
@@ -26,7 +26,7 @@ function Segments({ label, value, options, onChange }: { label: string; value: n
   return <div className="field"><span>{label}</span><div className="seg" role="group" aria-label={label}>{options.map((name, i) => <button type="button" key={name} aria-pressed={value === i + 1} onClick={() => onChange(i + 1)}>{name}</button>)}</div></div>;
 }
 
-export function Stamina({ draft, openDraft = 0, defaultTarget = preferences.staminaTarget, onDraftRunChange }: { draft?: DraftSnapshot; openDraft?: number; defaultTarget?: StaminaInput['target']; onDraftRunChange?: (run: DraftRun | undefined) => void }) {
+export function Stamina({ draft, openDraft = 0, onDraftRunChange }: { draft?: DraftSnapshot; openDraft?: number; onDraftRunChange?: (run: DraftRun | undefined) => void }) {
   const [catalog, setCatalog] = useState<Catalog>();
   const [anyInput, setAnyInput] = useState<StaminaInput>(defaultStaminaInput);
   const [draftInput, setDraftInput] = useState<StaminaInput>(structuredClone(defaultStaminaInput));
@@ -45,23 +45,17 @@ export function Stamina({ draft, openDraft = 0, defaultTarget = preferences.stam
   const [courseChoice, setCourseChoice] = useState<{ code: string; key: string; raw: string }>();
   const [courseQuery, setCourseQuery] = useState('');
   const [recent, setRecent] = useState<number[]>([]);
-  const [popover, setPopover] = useState<Popover>(), [buildOpen, setBuildOpen] = useState(false);
+  const [popover, setPopover] = useState<Popover>(), [buildCollapsed, setBuildCollapsed] = useState(false);
   const [notice, setNotice] = useState(false), [error, setError] = useState(''), [saveError, setSaveError] = useState('');
   const [ready, setReady] = useState(false), [running, setRunning] = useState(false), [cancelling, setCancelling] = useState(false);
   const [progress, setProgress] = useState<StaminaProgress>();
   const [result, setResult] = useState<{ data: StaminaResult; course: string }>();
-  const active = useRef<string | null>(null), toolbar = useRef<HTMLDivElement>(null), buildButton = useRef<HTMLButtonElement>(null), closeButton = useRef<HTMLButtonElement>(null);
+  const active = useRef<string | null>(null), toolbar = useRef<HTMLDivElement>(null), expandButton = useRef<HTMLButtonElement>(null), collapseButton = useRef<HTMLButtonElement>(null);
   const popupTrigger = useRef<HTMLButtonElement | null>(null), drawer = useRef<HTMLElement>(null);
-  const buildTrigger = useRef<HTMLElement | null>(null);
-  const previousDefaultTarget = useRef(defaultTarget);
+  const focusBuildToggle = useRef(false);
+  const [copyStatus, setCopyStatus] = useState('');
   useEffect(() => { onDraftRunChange?.(draftRun); }, [draftRun, onDraftRunChange]);
   useEffect(() => { if (openDraft) { setMode('draft'); setDetail(undefined); setPopover(undefined); } }, [openDraft]);
-  useEffect(() => {
-    if (previousDefaultTarget.current === defaultTarget || running || !ready) return;
-    previousDefaultTarget.current = defaultTarget;
-    setAnyInput(previous => ({ ...previous, target: defaultTarget }));
-    setDraftInput(previous => ({ ...previous, target: defaultTarget }));
-  }, [defaultTarget, running, ready]);
 
   useEffect(() => {
     let disposed = false; const stops: UnlistenFn[] = [];
@@ -78,11 +72,11 @@ export function Stamina({ draft, openDraft = 0, defaultTarget = preferences.stam
       if (disposed) { stopResult(); return; } stops.push(stopResult);
       const data = await invoke<Catalog>('engine_catalog');
       let memory;
-      try { memory = await loadStaminaMemory(data, preferences.staminaTarget); }
+      try { memory = await loadStaminaMemory(data); }
       catch { if (!disposed) setSaveError('Remembered inputs could not be loaded. Using defaults.'); }
       if (!disposed) {
         setCatalog(data);
-        if (memory) { setAnyInput(memory.input); setDraftInput(memory.draftInput ?? structuredClone(memory.input)); setRecent(memory.recent); setBuildOpen(memory.buildOpen ?? false); setBuildTab(memory.buildTab ?? 'build'); setBuildCustomized(memory.buildCustomized ?? false); setCourseChoices(memory.courseChoices ?? {}); }
+        if (memory) { setAnyInput(memory.input); setDraftInput(memory.draftInput ?? structuredClone(memory.input)); setRecent(memory.recent); setBuildCollapsed(memory.buildCollapsed); setBuildTab(memory.buildTab ?? 'build'); setBuildCustomized(memory.buildCustomized ?? false); setCourseChoices(memory.courseChoices ?? {}); }
         if (!data.local_skill_data && !missingDataNoticeShown) { missingDataNoticeShown = true; setNotice(true); }
         setReady(true);
       }
@@ -93,25 +87,29 @@ export function Stamina({ draft, openDraft = 0, defaultTarget = preferences.stam
   }, []);
 
   useEffect(() => {
-    if (ready) void saveStaminaMemory({ input: anyInput, draftInput, recent, buildOpen, buildTab, buildCustomized, courseChoices }).then(() => setSaveError('')).catch(() => setSaveError('Inputs could not be saved. Your current build is still available.'));
-  }, [ready, anyInput, draftInput, recent, buildOpen, buildTab, buildCustomized, courseChoices]);
+    if (ready) void saveStaminaMemory({ input: anyInput, draftInput, recent, buildCollapsed, buildTab, buildCustomized, courseChoices }).then(() => setSaveError('')).catch(() => setSaveError('Inputs could not be saved. Your current build is still available.'));
+  }, [ready, anyInput, draftInput, recent, buildCollapsed, buildTab, buildCustomized, courseChoices]);
   useEffect(() => {
     const escape = (e: KeyboardEvent) => {
       if (e.key !== 'Escape' || e.defaultPrevented) return;
       if (popover) { setPopover(undefined); popupTrigger.current?.focus(); }
-      else if (buildOpen) { setBuildOpen(false); (buildTrigger.current?.isConnected ? buildTrigger.current : buildButton.current)?.focus(); }
     };
     const outside = (e: PointerEvent) => { if (popover && !toolbar.current?.contains(e.target as Node)) setPopover(undefined); };
     document.addEventListener('keydown', escape); document.addEventListener('pointerdown', outside);
     return () => { document.removeEventListener('keydown', escape); document.removeEventListener('pointerdown', outside); };
-  }, [popover, buildOpen]);
-  useEffect(() => { if (buildOpen) closeButton.current?.focus(); }, [buildOpen]);
+  }, [popover]);
+  useEffect(() => { if (focusBuildToggle.current) { (buildCollapsed ? expandButton : collapseButton).current?.focus(); focusBuildToggle.current = false; } }, [buildCollapsed]);
   useEffect(() => { if (popover) toolbar.current?.querySelector<HTMLElement>(popover === 'draft-course' ? '.draft-course-query' : '.stamina-popover button, .stamina-popover select')?.focus(); }, [popover]);
   useEffect(() => { setPopover(current => current === 'draft-course' ? undefined : current); }, [draft?.matchCode]);
 
   const patch = (next: Partial<StaminaInput>) => setInput(previous => ({ ...previous, ...next }));
   const patchBuild = (next: Partial<StaminaBuild>) => { setBuildCustomized(true); setInput(previous => ({ ...previous, build: { ...previous.build, ...next } })); };
-  const openBuild = (tab: BuildTab, trigger: HTMLElement) => { buildTrigger.current = trigger; setBuildOpen(true); setBuildTab(tab); setPopover(undefined); };
+  const toggleBuild = (collapsed: boolean) => { focusBuildToggle.current = true; setBuildCollapsed(collapsed); };
+  const openBuild = (tab: BuildTab) => { if (buildCollapsed) toggleBuild(false); setBuildTab(tab); setPopover(undefined); };
+  const copyCourseDiagnostics = async (slot: DraftRace, raceNumber: number) => {
+    try { const version = await getVersion(); await navigator.clipboard.writeText(unknownCourseDiagnostics(draft?.matchCode, raceNumber, slot, version, catalog?.engine_data_version)); setCopyStatus('Diagnostics copied'); }
+    catch { setCopyStatus('Unable to copy diagnostics.'); }
+  };
   const patchRace = (next: Partial<StaminaInput['race']>) => setInput(previous => ({ ...previous, race: { ...previous.race, ...next } }));
   const races = catalog ? draftRaces(draft, catalog, courseChoices) : [];
   const fingerprint = draftFingerprint(draft, races);
@@ -154,10 +152,9 @@ export function Stamina({ draft, openDraft = 0, defaultTarget = preferences.stam
       <div className="mode-switch"><div className="seg" role="group" aria-label="Course mode"><button type="button" aria-pressed={mode === 'draft'} disabled={running} onClick={() => { setMode('draft'); setPopover(undefined); }}>Draft</button><button type="button" disabled={running} aria-pressed={mode === 'any'} onClick={() => { setMode('any'); setPopover(undefined); }}>Any course</button></div></div>
       {mode === 'any' ? <><div className="toolbar-race">{trigger('race', 'Race', compactRace)}</div>
       <div className="condition-chips">{trigger('ground', 'Ground condition', groundNames[input.race.ground_condition - 1])}{trigger('weather', 'Weather', weatherNames[input.race.weather - 1])}{trigger('season', 'Season', seasonNames[input.race.season - 1])}</div></> : <div className="draft-toolbar-label"><span>{races.length} of 7 races known</span><small>{draft ? `Room ${draft.matchCode ?? "—"} · ${draft.phase === "complete" ? "draft complete" : "draft in progress"}` : "No live draft available"}</small></div>}
-      <button ref={buildButton} className="toolbar-build" type="button" aria-label="Edit build" aria-expanded={buildOpen && buildTab === 'build'} disabled={!ready} onClick={event => openBuild('build', event.currentTarget)}><span>{roleNames[strategy(input.build) - 1]} · {input.build.skills.length} {input.build.skills.length === 1 ? 'skill' : 'skills'}</span><span className="edit-build-label"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m3 11 8-8 2 2-8 8-3 1 1-3ZM10 4l2 2"/></svg>Edit build</span></button>
       <span className="toolbar-target">Target <b>{input.target}%</b></span>
       {running ? <button className="cancel-run" type="button" disabled={cancelling} onClick={() => { void cancel(); }}>{cancelling ? 'Cancelling…' : 'Cancel'}</button> : <button className="run" type="button" disabled={!ready || (mode === 'draft' ? !draft || !races.some(r => r.race) : !selectedCourse || !!selectedCourse.unavailable_reason)} onClick={() => { void run(); }}>{mode === 'draft' ? `Run ${races.filter(r => r.race).length} races` : 'Run check'}</button>}
-      <button type="button" aria-label="Race settings" aria-expanded={buildOpen && buildTab === 'race-settings'} disabled={!ready || running} onClick={event => openBuild('race-settings', event.currentTarget)}>⚙</button>
+      <button type="button" aria-label="Race settings" aria-expanded={!buildCollapsed && buildTab === 'race-settings'} disabled={!ready || running} onClick={() => openBuild('race-settings')}>⚙</button>
       {popover && <div className={`stamina-popover panel popover-${popover}`} role="dialog" aria-label={popover === 'draft-course' ? 'Choose the course' : popover === 'race' ? 'Choose race' : `Choose ${popover}`} id="stamina-popover">
         <div className="popover-heading"><h2>{popover === 'draft-course' ? 'Choose the course' : popover === 'race' ? 'Race' : `Choose ${popover}`}</h2><button type="button" aria-label="Close picker" onClick={() => { setPopover(undefined); popupTrigger.current?.focus(); }}>×</button></div>
         {popover === 'draft-course' ? <>
@@ -178,9 +175,9 @@ export function Stamina({ draft, openDraft = 0, defaultTarget = preferences.stam
     {mode === 'any' && selectedCourse?.unavailable_reason && <p role="status">{selectedCourse.unavailable_reason}</p>}
     {running && <div className="simulation-progress" role="status" aria-live="polite"><span>{mode === 'draft' && progress?.race_total ? `Race ${progress.race_index! + 1} of ${progress.race_total} · ` : ''}{stageLabel}</span><progress aria-label="Simulation progress" aria-valuetext={stageLabel} max={100} value={progress?.percent ?? 0}/><b className="progress-percent">{Math.floor(progress?.percent ?? 0)}%</b></div>}
     {error && <div role="alert" className={`stamina-notice ${/cancelled/i.test(error) ? "cancelled" : "engine-error"}`}><b>{/cancelled/i.test(error) ? "Check cancelled" : "Engine error"}</b><p>{error}</p>{mode === "draft" && finished.length > 0 && <p>Finished races are kept below.</p>}</div>}{saveError && <p role="status" className="muted">{saveError}</p>}
-    <div className={`stamina-workspace${buildOpen && catalog ? " has-build" : ""}`}>
+    <div className={`stamina-workspace has-build${buildCollapsed ? " build-collapsed" : ""}`}>
     <section className={`stamina-results${running && mode === "any" && result ? " previous-result" : ""}`} aria-label="Result">
-      {ready && !buildCustomized && <p className="default-build-prompt">Using the default Pace build — <button type="button" aria-label="Edit default build" onClick={event => openBuild('build', event.currentTarget)}>Edit build</button></p>}
+      {ready && !buildCustomized && <p className="default-build-prompt">Using the default Pace build — <button type="button" aria-label="Edit default build" onClick={() => openBuild('build')}>Edit build</button></p>}
       {mode === 'draft' ? !draft && !draftRun ? <div className="panel result-empty"><h2>No draft available</h2><p>Share a live room from Uma Drafter to check its races, or choose Any course.</p></div> : <>
         {draftRun && fingerprint !== draftRun.fingerprint && <p className="stale-notice" role="status">Draft changed since this run</p>}
         {draftRun && JSON.stringify({ ...input, request_id: '' }) !== JSON.stringify({ ...draftRun.input, request_id: '' }) && <p className="stale-notice" role="status">Inputs changed since this run; press Run check to update</p>}
@@ -197,15 +194,15 @@ export function Stamina({ draft, openDraft = 0, defaultTarget = preferences.stam
                 <span className="race-value" role="cell">{data ? data.needed_effective_stamina.joint === null ? 'Not reached' : Math.round(data.needed_effective_stamina.joint).toLocaleString('en-US') : '—'}</span>
                 <span className="race-value" role="cell">{data ? Math.round(data.effective_stamina).toLocaleString('en-US') : '—'}</span>
                 <span className="race-outcome" role="cell">{data ? `${passes(data) ? 'Pass' : 'Short'}${margin !== undefined ? ` ${margin >= 0 ? '+' : '−'}${Math.abs(margin).toLocaleString('en-US')}` : ''}` : slot?.reason ? 'Can’t run' : running && i === batchSlots.current?.[progress?.race_index ?? 0] ? 'Running…' : slot?.race ? running ? 'Queued' : 'Not run' : 'Waiting'}</span>
-              </button>{slot?.choiceKey && !slot.course && <div className="course-choice-action"><button type="button" disabled={running || !draft?.matchCode} onClick={e => { if (!draft?.matchCode) return; setCourseChoice({ code: draft.matchCode, key: slot.choiceKey!, raw: slot.raw }); setCourseQuery(''); toggle('draft-course', e.currentTarget); }}>Choose the course</button>{!draft?.matchCode && <small>A match code is needed to remember a course choice.</small>}</div>}</div>;
+              </button>{slot?.choiceKey && !slot.course && <div className="course-choice-action"><button type="button" disabled={running || !draft?.matchCode} onClick={e => { if (!draft?.matchCode) return; setCourseChoice({ code: draft.matchCode, key: slot.choiceKey!, raw: slot.raw }); setCourseQuery(''); toggle('draft-course', e.currentTarget); }}>Choose the course</button><button type="button" disabled={running || !draft?.matchCode} onClick={() => { void copyCourseDiagnostics(slot, i + 1); }}>Copy diagnostics</button>{!draft?.matchCode && <small>A match code is needed to remember a course choice.</small>}</div>}</div>;
             })}</div>
           </div>
         </>}
       </> : result ? <>{JSON.stringify({ ...input, request_id: '' }) !== JSON.stringify({ ...result.data.input, request_id: '' }) && <p className="stale-notice" role="status">Inputs changed since this run; press Run check to update</p>}<StaminaResults result={result.data} course={result.course} skills={catalog?.skills ?? []}/></> : <div className="panel result-empty"><h2>How much stamina do you need?</h2><p>Choose a race and build, then run a check. Your answer measures full spurt and survival together in at least {input.target}% of races.</p><p className="muted">Thresholds are refined to 10 stamina. Estimates use finite samples.</p></div>}
       <footer>Simulated with uma-race-simulator (MIT). Game data © Cygames.</footer>
     </section>
-    {buildOpen && catalog && <aside ref={drawer} className="build-drawer desktop-tool panel" aria-label="Build editor">
-      <div className="drawer-heading"><div><span className="label">Your uma</span><h2>Build editor</h2></div><button ref={closeButton} type="button" aria-label="Close build editor" onClick={() => { setBuildOpen(false); (buildTrigger.current?.isConnected ? buildTrigger.current : buildButton.current)?.focus(); }}>×</button></div>
+    {catalog && (buildCollapsed ? <aside className="build-rail panel" aria-label="Build panel, collapsed"><button ref={expandButton} type="button" aria-label="Expand build panel" aria-expanded="false" onClick={() => toggleBuild(false)}>‹</button><span>{roleNames[strategy(input.build) - 1]} · {input.build.skills.length} {input.build.skills.length === 1 ? 'skill' : 'skills'}</span></aside> : <aside ref={drawer} className="build-drawer desktop-tool panel" aria-label="Build editor">
+      <div className="drawer-heading"><div><span className="label">Your uma</span><h2>Build editor</h2><small className="muted">{roleNames[strategy(input.build) - 1]} · {input.build.skills.length} {input.build.skills.length === 1 ? 'skill' : 'skills'}</small></div><button ref={collapseButton} type="button" aria-label="Collapse build panel" aria-expanded="true" onClick={() => toggleBuild(true)}>›</button></div>
       {running && <p className="build-lock" role="status">Build locked while the check runs</p>}
       <div className="build-fields">
       <div className="drawer-tabs" role="tablist" aria-label="Build panel"><button type="button" role="tab" disabled={running} aria-selected={buildTab === 'build'} onClick={() => setBuildTab('build')}>Build</button><button type="button" role="tab" disabled={running} aria-selected={buildTab === 'presets'} onClick={() => setBuildTab('presets')}>Presets</button><button type="button" role="tab" disabled={running} aria-selected={buildTab === 'race-settings'} onClick={() => setBuildTab('race-settings')}>Race settings</button></div>
@@ -219,8 +216,9 @@ export function Stamina({ draft, openDraft = 0, defaultTarget = preferences.stam
         </>}
       </fieldset></div>
       </div>
-      <div className="drawer-footer"><span className="muted">Inputs remembered automatically</span><button type="button" onClick={() => { setBuildOpen(false); (buildTrigger.current?.isConnected ? buildTrigger.current : buildButton.current)?.focus(); }}>Done</button></div>
-    </aside>}
+      <div className="drawer-footer"><span className="muted">Inputs remembered automatically</span></div>
+    </aside>)}
     </div>
+    <p role="status" aria-live="polite">{copyStatus}</p>
   </section>;
 }
