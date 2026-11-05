@@ -1,4 +1,5 @@
 /target/
 /gen/
 
-/resources/engine-data/
+/resources/engine-data/*
+!/resources/engine-data/.gitkeep
