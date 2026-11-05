@@ -13,6 +13,9 @@ import { Players } from './Players';
 import { History } from './History';
 import { Umas } from './Umas';
 import { Settings } from './Settings';
+import { UpdateBanner } from './UpdateBanner';
+import { useUpdater } from './useUpdater';
+import { roomIsActive } from './updateState';
 import { Lobby } from './Live';
 import { Draft } from './Draft';
 import { RailIcon } from './RailIcon';
@@ -64,6 +67,8 @@ export function App() {
   const feedBlocked = status?.state === 'port-in-use';
   const disconnected = status?.state === 'disconnected' && !!(roster?.players.length || draft);
   const liveView = displayedPage === 'Live';
+  const roomActive = roomIsActive(status?.state, room.current.state.matchCode);
+  const updates = useUpdater(prefs.automaticUpdates, roomActive);
 
   useEffect(() => { let disposed = false; void loadDesktopTeamIcons().then(map => { if (!disposed) setTeamIcons(map); }); return () => { disposed = true; }; }, []);
   useEffect(() => {
@@ -194,6 +199,7 @@ export function App() {
       </header> : <header className="page-header"><h1>{page === 'Stamina' ? 'Stamina check' : page}</h1>{page === 'Live' ? tabs : <span className="subtitle">{page === 'Stamina' ? 'Full spurt and survival' : ''}</span>}
         <div className="page-actions">{feedBox}{['Live', 'History'].includes(page) && <div className="seg" role="group" aria-label="Stats scope">{(['currentSeason', 'allTime'] as const).map(value => <button key={value} aria-pressed={scope === value} onClick={() => setScope(value)}>{value === 'currentSeason' ? 'Season' : 'All-time'}</button>)}</div>}
         <button disabled={windowBusy} onClick={() => { void toggleMode(); }}>Compact</button></div></header>}
+      <UpdateBanner updates={updates} roomActive={roomActive}/>
       <main className={`content ${liveView && liveTab === 'Umas' ? 'live-umas-content' : ''}`}>
         {shellError && <div className="feed-banner error" role="alert">{shellError}</div>}
         {liveView && !feedBlocked && (feedError || status?.state === 'error') && <div className="feed-banner error" role="alert"><b>{feedError || 'Feed unavailable. Available data remains visible.'}</b><button disabled={feedBusy} onClick={() => { void retryFeed(); }}>Retry feed</button></div>}
@@ -209,7 +215,7 @@ export function App() {
         <div className="desktop-tool" hidden={displayedPage !== 'Stamina'}><Stamina draft={draft} openDraft={openStaminaDraft} onDraftRunChange={setDraftRun}/></div>
         {displayedPage === 'Players' && <Players scope={scope} teamIcons={teamIcons} onOpenMatch={openMatch}/>}
         <div hidden={displayedPage !== 'History'}><History scope={scope} requestedMatch={requestedMatch} teamIcons={teamIcons} onOpenMatch={openMatch}/></div>
-        {displayedPage === 'Settings' && <Settings prefs={prefs} update={persist} pinned={pinned} busy={windowBusy} togglePin={() => { void togglePin(); }} copyDiagnostics={() => { void copyDiagnostics(); }} copyStatus={copyStatus}/>}
+        {displayedPage === 'Settings' && <Settings updates={updates} prefs={prefs} update={persist} pinned={pinned} busy={windowBusy} togglePin={() => { void togglePin(); }} copyDiagnostics={() => { void copyDiagnostics(); }} copyStatus={copyStatus}/>}
       </main>
       {compact && liveTab === 'Draft' && <CompactStamina run={currentRun} onOpen={() => { void openStamina(); }}/>}
     </div>

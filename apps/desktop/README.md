@@ -87,7 +87,8 @@ cargo clippy --manifest-path apps/desktop/src-tauri/Cargo.toml --locked -- -D wa
 
 `pnpm build:all` builds only the two extension targets.
 `pnpm build:desktop` builds the desktop frontend, independently versioned at 0.1.0.
-Native builds use the Tauri CLI. Packaging, signing and auto-update are disabled.
+Native builds use the Tauri CLI and create a per-user Windows NSIS installer.
+Updater artifacts are signed with the Tauri updater key. Beta installers have no Authenticode signature.
 
 Arena tokens and font faces live in `src/tokens.css`; desktop styles live in
 `src/arena.css`. Saira Condensed, Barlow and Geist Mono are bundled under
@@ -115,17 +116,17 @@ side panel over the results; Escape closes the active picker or panel. The
 last race, conditions, build, skills and analysis options are saved in the
 Tauri store (`stamina.json`, `last-inputs-v1`) and validated on restore.
 
-Optional local GameTora metadata is read at startup from
-`UMALYTICS_GAMEDATA_DIR`, defaulting in development to
-`%USERPROFILE%\Documents\Coding Projects\UmaLytics-GameData\gametora`.
+Bundled GameTora metadata is read from the installed `skill-data/` resource folder.
+`UMALYTICS_GAMEDATA_DIR` overrides it for development. Debug builds may fall back to
+`%USERPROFILE%\Documents\Coding Projects\UmaLytics-GameData\gametora` if bundled metadata is unavailable.
 This folder supplies `skills.json` and `icons/<iconid>.webp` (or `.png`).
 Engine IDs remain authoritative; inherited skills join through `gene_version`.
 Global filtering uses the parent's `loc.en`; Show all regions includes the
 remaining engine skills. Search supports fuzzy name matching and remembers
 recent selections. Only unique skills expose a level control.
 Without readable local metadata, the engine catalog remains available with
-engine names, no icons, and one quiet notice in the skill section. No game
-data or artwork is copied into the repository or frontend build.
+engine names, no icons, and one quiet notice in the skill section. Skill data and icons are committed under `src-tauri/resources/skill-data/`, with
+source credits and permission in `CREDITS.md`.
 Tauri's asset scope starts empty and allows only individually resolved icon
 files; canonical paths outside the configured icons folder are rejected.
 
@@ -175,9 +176,11 @@ fixed coarse mapping stage reports partial work. Adaptive refinement marks a
 stage rather than dividing by an expanding race total; the bar never retreats.
 
 The engine dependency is pinned to the fork commit in Cargo.toml/Cargo.lock.
-GameData loads lazily from uma_race_sim::data::DATA_DIR in that Cargo checkout.
-This development integration requires the checkout to remain available; it is
-not a portable installer. Do not copy game data into this repository. See
+The pre-build resource script locates that exact checkout using `cargo metadata`
+and copies its full `data/` folder into the ignored `resources/engine-data/` folder.
+All historical eras and skill history are included. Release builds resolve
+`resource_dir()/engine-data`; debug builds use the Cargo checkout. Startup
+validates the resource path and engine data before the lazy engine is used. See
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 Native tests cover all pool courses, option/default propagation, skill
@@ -192,3 +195,57 @@ The opt-in `measure_field_strength` native test compares the seven round-1
 fixtures against Average, Mirror and Weak (1200/900/900/500/900) fields with
 the default 256/512 seed banks and emits raw/effective thresholds. Weak is a
 measurement fixture, not a toolbar choice. Average remains the default.
+
+## Releasing
+
+Desktop versions are independent of extension versions. Keep the updater private
+key and its password backed up securely: losing the key strands every existing
+install; those users would have to download a replacement installer manually.
+Never commit the private key. The public key in `tauri.conf.json` is safe to commit.
+
+1. Bump `apps/desktop/package.json` and `src-tauri/Cargo.toml` together. Tauri
+   reads its version from `../package.json`; `tests/desktop-version.test.mjs`
+   rejects drift. Add `release-notes/<version>.md` with user-facing changes.
+2. Merge the reviewed change to `main`. **Build desktop release** runs on a
+   desktop package change, or can be dispatched on `main`. It creates a draft
+   `desktop-v<version>` containing the NSIS installer, `.sig`, and `latest.json`.
+   A published version is immutable; retries of an existing draft use its original
+   source commit. The extension release and GitHub latest release stay untouched.
+3. Install the previous desktop version. Download the draft installer while
+   authenticated, run it over that installation, and verify the version, saved
+   preferences, stamina checks and skill icons. Use a clean Windows user profile
+   with no development folders or `UMALYTICS_GAMEDATA_DIR`. Check that the app
+   installs under `%LOCALAPPDATA%` without an administrator prompt. Draft download
+   URLs are private: the public update feed cannot serve a draft.
+4. Before publishing, verify the actual signed updater path on an isolated test
+   machine: install the previous build, serve the draft installer, signature and
+   manifest from a temporary HTTPS endpoint, and use a test-only build of that
+   previous version whose updater endpoint targets it (keep the production public
+   key). Check background download, release notes, Update and restart, and room
+   deferral. Do not change the permanent feed for this test or commit the endpoint.
+5. After Sean has tested the draft, run **Publish desktop update** on `main` with
+   the exact version. It publishes `desktop-v<version>` as non-latest, validates
+   versioned NSIS URLs and signature assets, then copies `latest.json` with
+   `--clobber` to the published, non-latest **Desktop updater feed** release
+   (`desktop-updater`). A retry repairs the feed if publishing succeeded but the
+   upload failed. Older versions cannot replace a newer feed.
+6. Confirm the permanent feed and perform an update from the previous production
+   version. Never publish a version again with different bytes.
+
+The release runner uses Node 24, pnpm 9.15.4, Windows Rust MSVC, and the GitHub
+secrets `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`.
+Local installer builds use `pnpm.cmd --filter @umalytics/desktop tauri build`;
+without a local signing key, the installer may build but signed artifacts cannot
+be validated. Never substitute a new production key for local testing.
+
+Beta installers are unsigned: Windows SmartScreen may show **More info → Run
+anyway** when a downloaded installer is manually launched. In-app updates verify
+the Tauri signature. This does not give the installer Authenticode reputation.
+
+Automatic checks default on, run 10 seconds after launch and every six hours,
+and can be disabled in Settings → About. Manual checks remain available. Failed
+automatic checks are silent; Settings shows the last check or error. Found
+updates download immediately. A ready update stays pending until Update and
+restart is selected, or installs when an active connected room ends. Restart now
+overrides the room delay. Dismissal hides that version until the next launch or
+a newer version. Release notes are displayed as text from the release feed.

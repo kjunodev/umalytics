@@ -1,21 +1,64 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "UmaLytics",
-  "version": "0.1.0",
+  "version": "../package.json",
   "identifier": "guide.umalytics.desktop",
   "build": {
     "beforeDevCommand": "pnpm dev",
     "devUrl": "http://127.0.0.1:1420",
-    "beforeBuildCommand": "pnpm build",
+    "beforeBuildCommand": "node scripts/prepare-resources.mjs && pnpm build",
     "frontendDist": "../dist"
   },
   "app": {
-    "windows": [{ "label": "main", "title": "UmaLytics", "width": 1000, "height": 740 }],
+    "windows": [
+      {
+        "label": "main",
+        "title": "UmaLytics",
+        "width": 1000,
+        "height": 740
+      }
+    ],
     "security": {
       "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; connect-src ipc: http://ipc.localhost; img-src 'self' data: asset: http://asset.localhost https:",
-      "assetProtocol": { "enable": true, "scope": [] }
+      "assetProtocol": {
+        "enable": true,
+        "scope": []
+      }
     }
   },
-  "plugins": { "http": { "scopeRedirects": true } },
-  "bundle": { "active": false, "icon": ["icons/icon.png", "icons/icon.ico"] }
+  "plugins": {
+    "http": {
+      "scopeRedirects": true
+    },
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEMyQ0U1MEJFN0M3NjI1NDYKUldSR0pYWjh2bERPd2t2ZWhUSW1DbGpuK0Z5OFVLcjNCamYzYk92T2RQQ2pBSlVPcU9lZ3F5K3IK",
+      "endpoints": [
+        "https://github.com/kjunodev/umalytics/releases/download/desktop-updater/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
+  },
+  "bundle": {
+    "active": true,
+    "icon": [
+      "icons/icon.png",
+      "icons/icon.ico"
+    ],
+    "targets": [
+      "nsis"
+    ],
+    "createUpdaterArtifacts": true,
+    "resources": {
+      "resources/engine-data/": "engine-data/",
+      "resources/skill-data/": "skill-data/",
+      "../THIRD_PARTY_NOTICES.md": "THIRD_PARTY_NOTICES.md"
+    },
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser"
+      }
+    }
+  }
 }

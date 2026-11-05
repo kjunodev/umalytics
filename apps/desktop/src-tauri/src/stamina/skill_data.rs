@@ -14,12 +14,7 @@ pub(super) fn rarity(value: i32) -> &'static str {
 }
 
 fn data_dir() -> PathBuf {
-    std::env::var_os("UMALYTICS_GAMEDATA_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| {
-            PathBuf::from(std::env::var_os("USERPROFILE").unwrap_or_default())
-                .join("Documents/Coding Projects/UmaLytics-GameData/gametora")
-        })
+    crate::resources::skill_dir()
 }
 
 pub(super) fn status() -> (String, usize, usize) {

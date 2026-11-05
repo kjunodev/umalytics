@@ -11,12 +11,22 @@ notices are in `src/fonts/barlow/OFL.txt`, `src/fonts/sairacondensed/OFL.txt` an
 
 Source: https://github.com/kachi-dev/uma-race-simulator
 
-Pinned revision: `1750b13d56bf96a3608c9e108b6131170ad98ef8`.
+Pinned revision: `09aa4e03575075fe0d2772b81fb2f5219c8df6c2`.
 
 The engine source is provided under the following MIT license. Its game
 data belongs to Cygames, Inc. and is **not covered by this license**. The
-engine's `data/` directory is not copied into this repository or packaged
-by the desktop companion.
+engine's full `data/` directory is copied from the pinned dependency at build
+time and bundled as `engine-data/` for installed stamina checks. It is not
+committed to this repository.
+
+Race engine: uma-race-simulator (MIT). Fork:
+https://github.com/skimuic/uma-race-simulator.
+
+Skill data: GameTora (https://gametora.com/umamusume).
+Skill icons: uma.guide (https://uma.guide/) / GameTora.
+Game data and artwork © Cygames, Inc. Used with permission.
+Skill data and icons downloaded 2026-10-29; bundled under
+`src-tauri/resources/skill-data/` with `CREDITS.md`.
 
 MIT License
 

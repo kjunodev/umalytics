@@ -16,6 +16,7 @@ let browser;
 let checks = 0;
 const check = (condition, message) => { assert(condition, message); checks++; };
 const failures = [];
+const updatesOnly = process.env.DESKTOP_SHOTS_SCENES === 'updates';
 const staminaOnly = process.env.DESKTOP_SHOTS_SCENES === 'stamina';
 const arenaOnly = process.env.DESKTOP_SHOTS_SCENES === 'arena';
 const statesOnly = process.env.DESKTOP_SHOTS_SCENES === 'states';
@@ -112,6 +113,8 @@ try {
     check(errors.length === 0, `${name}: ${errors.join('; ')}`);
     console.log(`PASS ${name}`);
   }
+  if (updatesOnly) await (await import('./shots-updater.mjs')).runUpdateShots({ open, nav, shot, check });
+  else {
   for (const [width, height] of (statesOnly || usabilityOnly) ? [] : [[1280, 800], [1000, 700]]) {
     const page = await open('lobby', width, height);
     if (!staminaOnly) {
@@ -185,7 +188,7 @@ try {
     await page.getByText('Found', { exact: true }).waitFor();
     await shot(page, `settings-${width}x${height}`);
     await page.locator('.content').evaluate(el => { el.scrollTop = el.scrollHeight; });
-    check(await page.locator('#settings-about b').innerText() === 'UmaLytics 0.1.0' && await page.locator('#settings-about small').count() === 0, 'About shows only the app version');
+    check(await page.locator('#settings-about b').first().innerText() === 'UmaLytics 0.1.0' && await page.locator('#settings-about .about-credits li').count() === 4, 'About shows the app version and bundled data credits');
     await shot(page, `settings-about-${width}x${height}`);
     await page.locator('.content').evaluate(el => { el.scrollTop = 0; });
     await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
@@ -756,6 +759,8 @@ try {
     await focus.close();
   }
   if (!staminaOnly && !arenaOnly && !statesOnly && !dataOnly) await (await import('./shots-usability.mjs')).runUsabilityShots({ open, nav, shot, check });
+  if (!staminaOnly && !arenaOnly && !statesOnly && !dataOnly && !usabilityOnly) await (await import('./shots-updater.mjs')).runUpdateShots({ open, nav, shot, check });
+  }
   check(failures.length === 0, failures.join('\n'));
   console.log(`${checks} checks passed; screenshots: ${out}`);
 } finally { await browser?.close(); await server.close(); }
