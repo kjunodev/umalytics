@@ -17,7 +17,7 @@ use uma_race_sim::{
 mod skill_data;
 
 fn engine_data_dir() -> &'static Path {
-    Path::new(uma_race_sim::data::DATA_DIR)
+    crate::resources::engine_dir()
 }
 
 #[derive(Deserialize)]

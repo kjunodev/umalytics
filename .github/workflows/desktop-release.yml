@@ -1,0 +1,75 @@
+name: Build desktop release
+on:
+  push:
+    branches: [main]
+    paths: ['apps/desktop/package.json']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: desktop-release
+  cancel-in-progress: false
+jobs:
+  release:
+    if: github.repository == 'kjunodev/umalytics' && github.ref == 'refs/heads/main'
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Select release source
+        id: prepare
+        run: node apps/desktop/scripts/release.mjs prepare
+      - name: Check out immutable draft source
+        if: steps.prepare.outputs.skip != 'true'
+        env:
+          DESKTOP_SOURCE: ${{ steps.prepare.outputs.source }}
+        run: git checkout --detach $env:DESKTOP_SOURCE
+      - uses: pnpm/action-setup@v6
+        if: steps.prepare.outputs.skip != 'true'
+        with:
+          version: 9.15.4
+      - uses: dtolnay/rust-toolchain@stable
+        if: steps.prepare.outputs.skip != 'true'
+      - name: Install and verify
+        if: steps.prepare.outputs.skip != 'true'
+        run: |
+          if ((pnpm --version) -ne '9.15.4') { throw 'pnpm 9.15.4 required' }
+          pnpm install --frozen-lockfile
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          pnpm test
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          pnpm typecheck
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          node apps/desktop/scripts/prepare-resources.mjs
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml --locked
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - name: Create non-latest draft
+        if: steps.prepare.outputs.skip != 'true'
+        id: draft
+        env:
+          DESKTOP_VERSION: ${{ steps.prepare.outputs.version }}
+          DESKTOP_SOURCE: ${{ steps.prepare.outputs.source }}
+        run: node apps/desktop/scripts/release.mjs draft $env:DESKTOP_VERSION
+      - uses: tauri-apps/tauri-action@v0
+        if: steps.prepare.outputs.skip != 'true'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          projectPath: apps/desktop
+          releaseId: ${{ steps.draft.outputs.release-id }}
+          tagName: desktop-v${{ steps.prepare.outputs.version }}
+          releaseDraft: true
+          releaseBody: ${{ steps.draft.outputs.release-body }}
+          includeUpdaterJson: true
+          updaterJsonPreferNsis: true

@@ -1,0 +1,29 @@
+name: Publish desktop update
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Desktop version tested by installing over the previous version'
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: desktop-release
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: github.repository == 'kjunodev/umalytics' && github.ref == 'refs/heads/main'
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Publish tested draft and update feed
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DESKTOP_VERSION: ${{ inputs.version }}
+        run: node apps/desktop/scripts/release.mjs publish $env:DESKTOP_VERSION

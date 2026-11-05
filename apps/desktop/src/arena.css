@@ -15,6 +15,16 @@
 .live-dot { background: var(--acc); box-shadow: var(--glow-live); }
 .idle-dot { background: var(--tx3); }
 .workspace { min-height: 0; }
+.update-slot { position: relative; height: 38px; flex: 0 0 38px; z-index: var(--layer-popover); }
+.update-banner { display: flex; align-items: center; justify-content: center; gap: 8px; height: 38px; padding: 0 12px; background: #0B1F22; border-bottom: 1px solid #1D4A50; color: #9FEAF2; font-size: 12px; white-space: nowrap; }
+.update-banner button { border: 0; padding: 4px 0; background: transparent; color: var(--tx); cursor: pointer; font: 600 12px var(--font-body); text-decoration: underline; }
+.update-banner.error { background: #2B1920; color: #FFB3B3; }
+.update-banner .update-dismiss { margin-left: auto; padding: 4px; font-size: 18px; text-decoration: none; }
+.update-notes { position: absolute; top: 38px; right: 12px; max-width: min(520px, calc(100% - 24px)); max-height: 50vh; overflow: auto; padding: 18px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); box-shadow: var(--shadow-overlay); }
+.update-notes p { white-space: pre-wrap; overflow-wrap: anywhere; }
+.about-credits { padding-left: 18px; color: var(--tx2); line-height: 1.8; }
+.update-status { overflow-wrap: anywhere; }
+@container (width < 600px) { .update-banner { gap: 4px; padding: 0 8px; font-size: 10px; } .update-banner button { font-size: 10px; } }
 .page-header { min-height: var(--header-height); padding: 8px var(--space-page-x); gap: 12px; }
 .page-header h1 { font: 700 var(--font-step-xl)/1.2 var(--font-display); letter-spacing: .02em; text-transform: uppercase; }
 .page-header .subtitle { color: var(--tx3); white-space: nowrap; }

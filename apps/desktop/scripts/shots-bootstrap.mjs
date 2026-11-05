@@ -21,6 +21,12 @@ mockConvertFileSrc('windows');
 mockIPC(async (command, args) => {
   calls.push({ command, args: structuredClone(args) });
   if (command === 'plugin:app|version') return '0.1.0';
+  if (command === 'plugin:updater|check') return scene === 'updates' ? { rid: 900, currentVersion: '0.1.0', version: '0.2.0', body: 'Fixture release notes: bundled data and signed updates.', rawJson: {} } : null;
+  if (command === 'plugin:updater|download') {
+    if (window.__SHOT_CONTROL__.failUpdate) { window.__SHOT_CONTROL__.failUpdate = false; throw Error('Fixture update download failed'); }
+    return new Promise(resolve => { window.__SHOT_CONTROL__.finishUpdateDownload = () => resolve(901); });
+  }
+  if (command === 'plugin:resources|close' || command === 'plugin:updater|install' || command === 'plugin:process|restart') return;
   if (command === 'plugin:store|load') { const existing = [...stores].find(([, path]) => path === args.path); if (existing) return existing[0]; const rid = ++id; stores.set(rid, args.path); return rid; }
   if (command === 'plugin:store|get') {
     const key = `shots:${stores.get(args.rid)}:${args.key}`;

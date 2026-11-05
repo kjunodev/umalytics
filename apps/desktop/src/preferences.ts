@@ -4,8 +4,8 @@ export const pages = ['Live', 'Stamina', 'Players', 'History', 'Settings'] as co
 export const liveTabs = ['Lobby', 'Draft', 'Umas'] as const;
 export type LiveTab = typeof liveTabs[number];
 export type Page = typeof pages[number];
-export interface Preferences { page: Page; liveTab: LiveTab; compact: boolean; compactThreshold: number; pinned: boolean; uiSize: 'Small' | 'Default' | 'Large'; defaultScope: 'currentSeason' | 'allTime'; fullSize: { width: number; height: number } }
-export const preferences: Preferences = { page: 'Live', liveTab: 'Lobby', compact: false, compactThreshold: 760, pinned: false, uiSize: 'Default', defaultScope: 'currentSeason', fullSize: { width: 1280, height: 800 } };
+export interface Preferences { automaticUpdates: boolean; page: Page; liveTab: LiveTab; compact: boolean; compactThreshold: number; pinned: boolean; uiSize: 'Small' | 'Default' | 'Large'; defaultScope: 'currentSeason' | 'allTime'; fullSize: { width: number; height: number } }
+export const preferences: Preferences = { automaticUpdates: true, page: 'Live', liveTab: 'Lobby', compact: false, compactThreshold: 760, pinned: false, uiSize: 'Default', defaultScope: 'currentSeason', fullSize: { width: 1280, height: 800 } };
 let store: Awaited<ReturnType<typeof load>>;
 let saving = Promise.resolve();
 
@@ -16,6 +16,7 @@ export async function loadPreferences() {
   preferences.liveTab = liveTabs.includes(saved?.page as LiveTab) ? saved!.page as LiveTab : liveTabs.includes(saved?.liveTab as LiveTab) ? saved!.liveTab! : 'Lobby';
   const threshold = saved?.compactThreshold;
   preferences.compactThreshold = typeof threshold === 'number' && Number.isInteger(threshold) && threshold >= 440 && threshold <= 1000 ? threshold : 760;
+  preferences.automaticUpdates = saved?.automaticUpdates !== false;
   preferences.compact = saved?.compact === true;
   preferences.pinned = saved?.pinned === true;
   preferences.uiSize = saved?.uiSize === 'Small' || saved?.uiSize === 'Large' ? saved.uiSize : 'Default';

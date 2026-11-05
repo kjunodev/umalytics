@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
 import { getVersion } from '@tauri-apps/api/app';
 import { invoke } from '@tauri-apps/api/core';
+import type { UpdateControls } from './useUpdater';
 import type { Catalog } from './staminaTypes';
 import type { Preferences } from './preferences';
 
-export function Settings({ prefs, update, pinned, busy, togglePin, copyDiagnostics, copyStatus }: {
-  prefs: Preferences; update: (patch: Partial<Preferences>) => void; pinned: boolean; busy: boolean; togglePin: () => void; copyDiagnostics: () => void; copyStatus: string;
+export function Settings({ updates, prefs, update, pinned, busy, togglePin, copyDiagnostics, copyStatus }: {
+  updates: UpdateControls; prefs: Preferences; update: (patch: Partial<Preferences>) => void; pinned: boolean; busy: boolean; togglePin: () => void; copyDiagnostics: () => void; copyStatus: string;
 }) {
   const [catalog, setCatalog] = useState<Catalog>();
   const [version, setVersion] = useState('');
@@ -25,6 +26,10 @@ export function Settings({ prefs, update, pinned, busy, togglePin, copyDiagnosti
     </section>
     <section className="data-box" id="settings-data"><h2>Data</h2><div className="setting-row"><div><b>Local skill data</b><small className="local-data-path">{catalog?.local_skill_path ?? (error || 'Loading folder path…')}</small><small>{catalog ? `${catalog.local_skill_count ?? 0} skills · ${catalog.local_icon_count ?? 0} icons` : 'Reading local data status'}</small></div><span className={catalog?.local_skill_data ? 'win' : 'muted'}>{catalog ? catalog.local_skill_data ? 'Found' : 'Not found' : '—'}</span></div><div className="setting-row"><div><b>Engine data version</b><small>{catalog?.engine_data_version ?? 'Not exposed by the engine'}</small></div></div></section>
     <section className="data-box" id="settings-diagnostics"><h2>Diagnostics</h2><div className="setting-row"><div><b>Local feed</b><small>Listener status and accepted/rejected counts</small></div><button onClick={copyDiagnostics}>Copy diagnostics</button></div><p role="status">{copyStatus}</p></section>
-    <section className="data-box" id="settings-about"><h2>About</h2><div className="setting-row"><div><b>UmaLytics {version || '…'}</b></div></div></section>
+    <section className="data-box" id="settings-about"><h2>About</h2><div className="setting-row"><div><b>UmaLytics {version || '…'}</b><small>Beta installers are unsigned.</small></div></div>
+      <div className="setting-row"><div><b>Check for updates automatically</b><small>After launch and every six hours</small></div><button role="switch" aria-label="Check for updates automatically" aria-checked={prefs.automaticUpdates} onClick={() => update({ automaticUpdates: !prefs.automaticUpdates })}>{prefs.automaticUpdates ? 'On' : 'Off'}</button></div>
+      <div className="setting-row"><div><b>App updates</b><small className="update-status" role="status">{updates.state.error || (updates.state.lastChecked ? 'Last checked ' + new Date(updates.state.lastChecked).toLocaleString() : 'Not checked yet')}</small></div><button disabled={['checking', 'downloading', 'installing'].includes(updates.state.phase)} onClick={updates.check}>{updates.state.phase === 'checking' ? 'Checking…' : 'Check for updates'}</button></div>
+      <ul className="about-credits"><li>Race engine: uma-race-simulator (MIT)</li><li>Skill data: GameTora</li><li>Skill icons: uma.guide / GameTora</li><li>Game data and artwork © Cygames, Inc.</li></ul>
+    </section>
   </div></section>;
 }
