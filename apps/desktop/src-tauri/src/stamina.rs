@@ -352,9 +352,9 @@ pub struct Input {
     assume_skills_activate: bool,
     #[serde(default = "default_true")]
     rushed: bool,
-    #[serde(default)]
+    #[serde(default = "default_true")]
     spot_struggle: bool,
-    #[serde(default)]
+    #[serde(default = "default_true")]
     dueling: bool,
     #[serde(default = "default_true")]
     lane_movement: bool,
@@ -376,9 +376,9 @@ pub struct MultiInput {
     assume_skills_activate: bool,
     #[serde(default = "default_true")]
     rushed: bool,
-    #[serde(default)]
+    #[serde(default = "default_true")]
     spot_struggle: bool,
-    #[serde(default)]
+    #[serde(default = "default_true")]
     dueling: bool,
     #[serde(default = "default_true")]
     lane_movement: bool,
