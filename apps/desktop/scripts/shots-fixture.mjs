@@ -39,6 +39,7 @@ export function apiResponse(url, scene) {
   if (parsed.pathname === '/api/leaderboard') {
     const entries = players.map((p, i) => ({ userId: p.discordId, displayName: p.displayName, rating: 1800 - i * 31, rd: 50, wins: i === 0 ? 212 : 12, losses: i === 0 ? 119 : 8 }));
     entries.splice(5, 0, ...Array.from({ length: 13 }, (_, i) => ({ userId: String(100000000000001001n + BigInt(i)), displayName: `Leaderboard fixture ${i + 1}`, rating: 1675 - i, rd: 50, wins: 12, losses: 8 })));
+    if (scene === 'badge-layout') return { entries: entries.filter(e => e.userId !== players[4].discordId) };
     return { entries };
   }
   if (parsed.pathname === '/api/players/directory-search') return { players: players.map(p => ({ discordId: p.discordId, discordUsername: p.displayName })) };
@@ -66,6 +67,13 @@ export function apiResponse(url, scene) {
     }
     const i = players.findIndex(p => p.discordId === player);
     const multiplier = parsed.searchParams.has('season') ? 1 : 2;
+    if (scene === 'badge-layout' && [0, 4].includes(i)) return { summary: { matchesIncluded: 30, totalPointsScored: 90, totalPodiumPlacements: 0, totalMvpMatches: 0 }, umaEntries: [{ umaId: '100101', matches: 3, wins: 1, losses: 2, pointsScored: 9 }] };
+    if (scene === 'badge-layout' && i === 1) return { summary: { matchesIncluded: 30, totalPointsScored: 90, totalPodiumPlacements: 0, totalMvpMatches: 0 }, umaEntries: [{ umaId: '100101', matches: 20, wins: 10, losses: 10, pointsScored: 60 }] };
+    if (i === 2) return {
+      summary: { matchesIncluded: 30 * multiplier, totalPointsScored: 195 * multiplier, totalPodiumPlacements: 30 * multiplier, totalMvpMatches: 9 * multiplier },
+      umaEntries: Array.from({ length: 8 }, (_, j) => ({ umaId: String(100101 + j * 100), matches: (j < 6 ? 4 : 3) * multiplier,
+        wins: 2 * multiplier, losses: (j < 6 ? 2 : 1) * multiplier, pointsScored: 24 * multiplier, podiumPlacements: 3 * multiplier, mvpMatches: multiplier }))
+    };
     return { summary: { matchesIncluded: 27 * multiplier, totalPointsScored: (180 + i * 3) * multiplier, totalPodiumPlacements: 81 * multiplier, totalMvpMatches: 3 }, umaEntries: [...[100101, 100201, 100301].map((id, j) => ({ umaId: String(id), matches: (10 - j) * multiplier,
       wins: (6 - j) * multiplier - (j === 2 ? 1 : 0), losses: 4 * multiplier - (j === 2 ? 1 : 0), pointsScored: (70 - j * 10 + i) * multiplier, podiumPlacements: 4, mvpMatches: 1 })), { umaId: '100401', matches: 2, wins: 1, losses: 1, pointsScored: 10, podiumPlacements: 2, mvpMatches: 0 }] };
   }

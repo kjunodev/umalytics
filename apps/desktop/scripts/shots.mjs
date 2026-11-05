@@ -61,8 +61,8 @@ try {
     }
     return page;
   }
-  async function shot(page, name) {
-    await page.mouse.move(page.viewportSize().width - 8, 8);
+  async function shot(page, name, keepHover = false) {
+    if (!keepHover) await page.mouse.move(page.viewportSize().width - 8, 8);
     await page.evaluate(() => document.fonts.ready);
     const errors = await page.evaluate(() => {
       const errors = [];
@@ -115,6 +115,70 @@ try {
   }
   if (updatesOnly) await (await import('./shots-updater.mjs')).runUpdateShots({ open, nav, shot, check });
   else {
+  async function tooltipOnTop(owner, tooltipSelector, label) {
+    await owner.page().mouse.move(owner.page().viewportSize().width - 8, 8);
+    await owner.hover();
+    const tooltip = owner.locator(tooltipSelector);
+    await tooltip.waitFor({ state: 'visible' });
+    await tooltip.evaluate(el => new Promise(resolve => { const tick = () => getComputedStyle(el).opacity === '1' ? resolve() : requestAnimationFrame(tick); tick(); }));
+    check(await tooltip.evaluate(el => {
+      const r = el.getBoundingClientRect();
+      // Hit-test passive tooltips while preserving their normal click-through behaviour.
+      const pointerEvents = el.style.pointerEvents;
+      el.style.pointerEvents = 'auto';
+      const hit = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+      el.style.pointerEvents = pointerEvents;
+      if (!el.contains(hit)) throw new Error(`Tooltip covered by ${hit?.outerHTML.slice(0, 300)} at ${r.x},${r.y}`);
+      return true;
+    }), label);
+  }
+  if (!staminaOnly && !statesOnly && !usabilityOnly) {
+    const page = await open('badge-layout', 1000, 700);
+    await page.waitForFunction(() => document.querySelectorAll('.arena-card[data-state=loaded]').length === 10);
+    await page.locator('.arena-card .team-icon').first().waitFor();
+    const card = page.locator('.arena-card').nth(2);
+    const badges = card.locator('.chip');
+    check(await badges.count() === 5, 'All five card badges use the shared row');
+    check(await badges.first().innerText() === 'Top 10', 'Rank renders as a text chip');
+    check(await badges.evaluateAll(els => new Set(els.map(el => Math.round(el.getBoundingClientRect().top))).size) === 2, 'Five badges occupy two rows');
+    const aligned = await page.locator('.arena-card').evaluateAll(cards => {
+      const counts = [0, 2, 4].map(i => cards[i].querySelectorAll('.chip').length);
+      const offsets = [0, 2, 4].map(i => Math.round(cards[i].querySelector('.arena-stats').getBoundingClientRect().top - cards[i].getBoundingClientRect().top));
+      return counts.join(',') === '1,5,0' && new Set(offsets).size === 1;
+    });
+    check(aligned, 'Stat strips align with zero, one and five badges');
+    await tooltipOnTop(card.locator('.team-icon'), '.team-icon-tooltip', 'Card team tooltip paints above badges');
+    await shot(page, 'lobby-team-tooltip-1000x700', true);
+    const oneTrick = page.locator('.arena-card').nth(1).getByLabel(/^One-trick:/);
+    await tooltipOnTop(oneTrick, '.chip-tooltip', 'One-trick tooltip paints over the stat strip');
+    check((await oneTrick.locator('.chip-tooltip').innerText()).includes('20 of 30'), 'One-trick tooltip includes real numbers');
+    await shot(page, 'lobby-badge-rows-tooltip-1000x700', true);
+    await page.mouse.move(992, 8);
+    await page.getByRole('button', { name: 'Open details for Replay Player 3', exact: true }).click();
+    await page.getByText('Replay Champion', { exact: true }).waitFor();
+    check((await page.locator('.drawer-badges > span').allTextContents()).join('|') === 'Top 10|High scoring|Established|MVP Menace|Deep pool', 'Drawer shows all five labels in notable badge order');
+    check((await page.locator('.drawer-badges > span').evaluateAll(els => els.map(el => el.className))).join('|') === 'player-tag notable-tag rank|player-tag notable-tag scoring|player-tag notable-tag sample|player-tag notable-tag scoring|player-tag notable-tag style', 'Drawer chips use badge tones');
+    await tooltipOnTop(page.locator('.drawer-identity .team-icon'), '.team-icon-tooltip', 'Drawer team tooltip paints over the stat strip');
+    await shot(page, 'drawer-team-tooltip-1000x700', true);
+    await page.mouse.move(992, 8);
+    await page.locator('.drawer-history .recent-match-code').first().waitFor();
+    await shot(page, 'drawer-five-badges-1000x700');
+    await page.keyboard.press('Escape');
+    await tooltipOnTop(page.locator('.sidebar .nav-item').first(), '.rail-tooltip', 'Rail tooltip paints above the workspace');
+    await nav(page, 'Players');
+    await page.locator('.table-player').first().waitFor();
+    await tooltipOnTop(page.locator('.leaderboard-player .team-icon').first(), '.team-icon-tooltip', 'Leaderboard team tooltip paints above adjacent rows');
+    check(await page.locator('.page-header [aria-label="Stats scope"]').count() === 1, 'Players has the scope toggle');
+    await page.mouse.move(992, 8);
+    await page.getByRole('button', { name: 'Replay Player 3', exact: true }).click();
+    await page.waitForFunction(() => document.querySelector('.drawer-stat-strip')?.textContent.includes('12-8'));
+    await page.locator('.arena-player-drawer').getByRole('button', { name: 'All-time', exact: true }).click();
+    await page.waitForFunction(() => document.querySelector('.drawer-stat-strip')?.textContent.includes('32-28'));
+    check(await page.getByRole('heading', { name: 'Season leaderboard', exact: true }).count() === 1, 'Leaderboard remains labelled Season leaderboard');
+    await page.locator('.drawer-history .recent-match-code').first().waitFor();
+    await shot(page, 'players-scope-drawer-1000x700');
+    await page.close();
+  }
   for (const [width, height] of (statesOnly || usabilityOnly) ? [] : [[1280, 800], [1000, 700]]) {
     const page = await open('lobby', width, height);
     if (!staminaOnly) {
@@ -122,7 +186,7 @@ try {
     check(await page.locator('.arena-card.top10').count() === 5 && await page.locator('.arena-card.top25').count() === 5, 'Gold Top 10 and silver Top 25 cards use actual leaderboard rank');
     await shot(page, `lobby-${width}x${height}`);
     await page.getByRole('button', { name: 'All-time', exact: true }).click();
-    await page.waitForFunction(() => document.querySelectorAll('.compact-scouting-grid').length === 10 && [...document.querySelectorAll('.compact-scouting-grid')].every(stats => stats.textContent.includes('30-24')));
+    await page.waitForFunction(() => document.querySelectorAll('.compact-scouting-grid').length === 10 && [...document.querySelectorAll('.compact-scouting-grid')].every((stats, i) => stats.textContent.includes(i === 2 ? '32-28' : '30-24')));
     check((await page.locator('.compact-scouting-grid').first().innerText()).includes('56%'), 'Win rate converts the core fraction to a percentage');
     await page.getByRole('button', { name: 'Open details for Replay Player 1', exact: true }).click();
     await page.getByText('Replay Champion', { exact: true }).waitFor();
@@ -147,6 +211,7 @@ try {
     check(await page.locator('.draft-columns > *').count() === 3, 'Full draft has team / races / team panels');
     await shot(page, `draft-mid-${width}x${height}`);
     await page.getByRole('button', { name: 'Players', exact: true }).click();
+    await page.getByRole('group', { name: 'Stats scope', exact: true }).getByRole('button', { name: 'Season', exact: true }).click();
     await page.locator('.table-player').first().waitFor();
     check(await page.locator('.table-player').count() === 20, 'Players paginates the leaderboard');
     await shot(page, `players-${width}x${height}`);

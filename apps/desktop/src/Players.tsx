@@ -8,7 +8,7 @@ import { PlayerDrawer, usePlayerProfile } from './PlayerDrawer';
 import { DesktopTeamIcon } from './TeamIcon';
 import { cachedLeaderboard, loadDesktopLeaderboard } from './sessionData';
 
-export function Players({ onOpenMatch, teamIcons, scope }: { scope: PlayerStatsScope; onOpenMatch: (code: string) => void; teamIcons: EsportsTeamIconMap }) {
+export function Players({ onOpenMatch, teamIcons, scope, onScopeChange }: { scope: PlayerStatsScope; onScopeChange: (scope: PlayerStatsScope) => void; onOpenMatch: (code: string) => void; teamIcons: EsportsTeamIconMap }) {
   const services = useUiServices();
   const [snapshot, setSnapshot] = useState(cachedLeaderboard);
   const board = snapshot?.data;
@@ -49,6 +49,6 @@ export function Players({ onOpenMatch, teamIcons, scope }: { scope: PlayerStatsS
       <nav className="data-pager" aria-label="Leaderboard pages"><button aria-label="Previous players" disabled={page <= 1} onClick={() => setPage(page - 1)}>‹</button><span>Page {page} of {Math.max(1, Math.ceil(filtered.length / 20))}</span><button aria-label="Next players" disabled={page * 20 >= filtered.length} onClick={() => setPage(page + 1)}>›</button></nav>
       </>}
     </section>
-    {selected && <PlayerDrawer key={`${selected.discordId}:currentSeason`} player={selected} profile={profile} teamIcon={teamIcons[selected.discordId]} loading={loading} scope="currentSeason" onClose={() => setSelected(undefined)} onOpenMatch={onOpenMatch}/>}
+    {selected && <PlayerDrawer key={`${selected.discordId}:${scope}`} player={selected} profile={profile} teamIcon={teamIcons[selected.discordId]} loading={loading} scope={scope} onScopeChange={onScopeChange} onClose={() => setSelected(undefined)} onOpenMatch={onOpenMatch}/>}
   </section>;
 }

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { getSelectedPlayerContext } from '@umalytics/ui';
 import { PlayerDrawer } from './PlayerDrawer';
 import { DesktopTeamIcon } from './TeamIcon';
-import { BadgeIcon } from '@umalytics/ui/lobby/BadgeChip';
+import { BadgeChipRow } from '@umalytics/ui/lobby/BadgeChip';
 import { getCardProfile, getCardState, getPlayerDisplayRating, getTeamAverageRating, CaptainCrown } from '@umalytics/ui/lobby/TeamSection';
 import { BestUmaPortrait } from '@umalytics/ui/player/BestUmaPortrait';
 import { sortTopUmasForCard } from '@umalytics/ui/player/TopUmasList';
@@ -22,9 +22,6 @@ function PlayerCard({ player, profile, scope, loading, onSelect, selected, onRet
   const p = getCardProfile(profile, scope);
   const state = loading && p?.isPartial && p.matches == null && !p.statsPrivate && !p.error ? 'loading' : getCardState(profile, p, loading, isDiscordSnowflake(player.discordId) ? player.discordId : undefined);
   const allBadges = state === 'loaded' ? getNotableBadges(p) : [];
-  const badges = allBadges.filter(badge => ['oneTrick', 'deepPool', 'podiumRegular', 'underrated', 'newcomer'].includes(badge.kind));
-  const shownBadges = badges.slice(0, badges.length > 3 ? 2 : 3);
-  const moreBadges = badges.slice(shownBadges.length);
   const tier = allBadges.find(badge => badge.kind === 'top10' || badge.kind === 'top25')?.kind ?? '';
   const rating = getPlayerDisplayRating(player, profile);
   const umas = sortTopUmasForCard(p?.allUmas ?? p?.topUmas ?? []);
@@ -32,9 +29,8 @@ function PlayerCard({ player, profile, scope, loading, onSelect, selected, onRet
   return <li className={`arena-card player-row ${tier} ${selected ? 'is-selected' : ''}`} data-state={state}>
     <button type="button" className="card-hit arena-card-hit" onClick={onSelect} aria-label={`Open details for ${name}`}/>
     <div className="arena-card-name"><strong title={name}>{name}</strong><DesktopTeamIcon icon={teamIcon}/>{(player.isCaptain || player.role === 'captain') && <CaptainCrown/>}<span className="rank num">{state === 'loading' ? '…' : state === 'private' || state === 'unavailable' ? '—' : formatRank(p, false)}</span></div>
-    <div className="arena-card-meta"><span><b className="num">{formatNumber(rating)}</b> rating</span><div className="arena-badges">{shownBadges.map(badge => <span key={badge.kind} className={`arena-badge ${badge.tone === 'rank' ? 'gold' : ''}`} tabIndex={0} aria-label={`${badge.label}: ${badge.title}`}>
-      {badge.kind === 'top10' || badge.kind === 'top25' ? <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5 2h6v4a3 3 0 0 1-6 0V2ZM5 3H2v2a3 3 0 0 0 3 3m6-5h3v2a3 3 0 0 1-3 3M8 9v4m-3 1h6"/></svg> : <BadgeIcon kind={badge.kind}/>}
-      <span className="arena-tooltip" role="tooltip"><b>{badge.label}</b>{badge.title}</span></span>)}{moreBadges.length > 0 && <span className="arena-badge" tabIndex={0} aria-label={`${moreBadges.length} more badges: ${moreBadges.map(badge => badge.label).join(', ')}`}><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="3" cy="8" r="1"/><circle cx="8" cy="8" r="1"/><circle cx="13" cy="8" r="1"/></svg><span className="arena-tooltip" role="tooltip"><b>{moreBadges.length} more badges</b>{moreBadges.map(badge => badge.label).join(' · ')}. All badges are listed in details.</span></span>}</div></div>
+    <div className="arena-card-meta"><span><b className="num">{formatNumber(rating)}</b> rating</span></div>
+    <BadgeChipRow badges={allBadges}/>
     {state === 'loaded' ? <><div className="arena-stats compact-scouting-grid" aria-label={`${name} scouting summary`}>{[
       ['W–L', formatRecord(p)], ['Win', formatPercent(p?.winRate)], ['PPG', formatDecimal(p?.pointsPerGame)], ['MVP', formatNumber(p?.mvpMatches)]
     ].map(([label, value]) => <div key={label}><b>{value}</b><span>{label}</span></div>)}</div><div className="arena-umas"><div className="label"><span>Most played</span><span>Games</span></div><ol className="top-umas-rows">{umas.map(uma => <li key={uma.umaId}><Uma uma={uma}/></li>)}</ol>{!umas.length && <p className="muted">No ranked Uma stats</p>}</div></> : state === 'loading' ? <div className="arena-loading" role="status" aria-label={`Loading stats for ${name}`}><span/><span/><span/><span/></div> : <div className="arena-card-message"><b>{state === 'private' ? 'Stats are private' : state === 'error' ? 'Couldn’t load stats' : 'No linked profile'}</b><span>{state === 'private' ? 'Open details for match history' : state === 'error' ? 'Available details remain accessible.' : 'No Discord account is linked.'}</span>{state === 'error' && <button type="button" disabled={loading} onClick={onRetry}>Retry stats</button>}</div>}
