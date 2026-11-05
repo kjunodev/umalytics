@@ -60,3 +60,28 @@ test('external URLs use the opener and are limited to the exact Drafter HTTPS or
   assert.deepEqual(capabilities.permissions.find(p => p.identifier === 'opener:allow-open-url').allow, [{ url: 'https://drafter.uma.guide/*' }]);
   assert(!capabilities.permissions.includes('opener:default'));
 });
+
+
+test('preferences default to 760px and Season, ignore retired target, validate and save scope', async () => {
+  let saved, writes = [];
+  const p = moduleWithMocks('../apps/desktop/src/preferences.ts', { '@tauri-apps/plugin-store': { load: async () => ({ get: async () => saved, set: async (_, value) => { saved = value; writes.push(value); }, save: async () => {} }) } });
+  assert.equal(p.preferences.compactThreshold, 760);
+  assert.equal(p.preferences.defaultScope, 'currentSeason');
+  for (const value of [undefined, null, {}, { compactThreshold: 439 }, { compactThreshold: 1001 }, { compactThreshold: 760.5 }, { compactThreshold: '760' }]) {
+    saved = value; await p.loadPreferences(); assert.equal(p.preferences.compactThreshold, 760);
+  }
+  for (const compactThreshold of [440, 600, 760, 1000]) {
+    saved = { compactThreshold }; await p.loadPreferences(); assert.equal(p.preferences.compactThreshold, compactThreshold);
+  }
+  for (const defaultScope of ['currentSeason', 'allTime', undefined, null, 'invalid', 1]) {
+    saved = { defaultScope, staminaTarget: 99 }; await p.loadPreferences();
+    assert.equal(p.preferences.defaultScope, defaultScope === 'allTime' ? 'allTime' : 'currentSeason');
+    assert(!('staminaTarget' in p.preferences));
+  }
+  await p.savePreferences({ defaultScope: 'allTime' });
+  assert.equal(writes.at(-1).defaultScope, 'allTime');
+  assert(!('staminaTarget' in writes.at(-1)));
+  await p.loadPreferences(); assert.equal(p.preferences.defaultScope, 'allTime');
+  await p.savePreferences({ defaultScope: 'currentSeason' });
+  assert.equal(writes.at(-1).defaultScope, 'currentSeason');
+});

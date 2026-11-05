@@ -45,7 +45,7 @@ export function App() {
   const [copyStatus, setCopyStatus] = useState('');
   const [lastUpdate, setLastUpdate] = useState<number>();
   const [profileError, setProfileError] = useState('');
-  const [scope, setScope] = useState<PlayerStatsScope>('currentSeason');
+  const [scope, setScope] = useState<PlayerStatsScope>(prefs.defaultScope);
   const [profiles, setProfiles] = useState<Record<string, PlayerProfileSummary>>({});
   const [profilesLoading, setProfilesLoading] = useState(false);
   const [requestedMatch, setRequestedMatch] = useState<RequestedMatch>();
@@ -206,8 +206,8 @@ export function App() {
             {liveTab === 'Umas' && <Umas roster={roster ?? { players: [] }} profiles={profiles} scope={scope} compact={compact}/>}
           </div>
         </>}
-        <div className="desktop-tool" hidden={displayedPage !== 'Stamina'}><Stamina draft={draft} openDraft={openStaminaDraft} defaultTarget={prefs.staminaTarget} onDraftRunChange={setDraftRun}/></div>
-        {displayedPage === 'Players' && <Players teamIcons={teamIcons} onOpenMatch={openMatch}/>}
+        <div className="desktop-tool" hidden={displayedPage !== 'Stamina'}><Stamina draft={draft} openDraft={openStaminaDraft} onDraftRunChange={setDraftRun}/></div>
+        {displayedPage === 'Players' && <Players scope={scope} teamIcons={teamIcons} onOpenMatch={openMatch}/>}
         <div hidden={displayedPage !== 'History'}><History scope={scope} requestedMatch={requestedMatch} teamIcons={teamIcons} onOpenMatch={openMatch}/></div>
         {displayedPage === 'Settings' && <Settings prefs={prefs} update={persist} pinned={pinned} busy={windowBusy} togglePin={() => { void togglePin(); }} copyDiagnostics={() => { void copyDiagnostics(); }} copyStatus={copyStatus}/>}
       </main>

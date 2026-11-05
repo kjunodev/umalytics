@@ -11,7 +11,6 @@
 .stamina-toolbar .toolbar-race { flex: 0 1 auto; max-width: 100%; }
 .stamina-toolbar .toolbar-race button { padding: 6px 10px; min-height: 36px; font-size: 13px; }
 .stamina-toolbar .condition-chips button { border-radius: var(--radius-md); padding: 0 9px; min-height: 36px; }
-.stamina-toolbar .toolbar-build { order: 1; flex: 1 0 100%; min-height: 28px; padding: 4px 8px; border: 0; background: transparent; color: var(--tx2); }
 .stamina-toolbar .toolbar-target { margin-left: auto; color: var(--tx3); font-size: 12px; white-space: nowrap; }
 .toolbar-target b { color: var(--tx); }
 .stamina-toolbar :is(.run, .cancel-run) { flex: 0 0 auto; min-height: 36px; padding: 0 16px; font-size: 13px; }
@@ -25,6 +24,10 @@
 @container desktop-content (min-width: 1130px) {
   .stamina-workspace.has-build { grid-template-columns: minmax(0, 1fr) 340px; }
 }
+.stamina-workspace.has-build.build-collapsed { grid-template-columns: minmax(0, 1fr) 52px; }
+.stamina-layout .build-rail { display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 8px; position: sticky; top: 0; }
+.build-rail button { width: 34px; padding: 0; }
+.build-rail > span { writing-mode: vertical-rl; color: var(--tx2); font-size: 12px; }
 .stamina-layout .stamina-results { gap: 12px; container: stamina-results / inline-size; }
 .stamina-layout .build-drawer { position: sticky; top: 0; right: auto; bottom: auto; width: auto; max-height: calc(100dvh - 194px); display: flex; flex-direction: column; min-width: 0; border: 1px solid var(--line); padding: 0; gap: 0; animation: none; background: var(--s1); overflow: hidden; }
 .stamina-layout .drawer-heading { padding: 12px 14px 10px; border: 0; }
@@ -36,7 +39,6 @@
 .stamina-layout .drawer-tabs button[aria-selected=true] { color: var(--tx); border-bottom-color: var(--acc); }
 .stamina-layout .build-body { padding: 14px; gap: 14px; overflow-y: auto; overscroll-behavior-y: contain; }
 .stamina-layout .drawer-footer { padding: 10px 14px; gap: 6px; font-size: 11.5px; }
-.stamina-layout .drawer-footer button { padding: 0 8px; min-height: 26px; }
 .stamina-layout .build-body .seg button { font-size: 11.5px; padding: 0 3px; min-height: 28px; }
 .stamina-layout .build-body label { gap: 3px; font-size: 11px; }
 .stamina-layout .build-body :is(input, select) { width: 100%; min-height: 32px; padding: 0 6px; }
@@ -159,7 +161,7 @@
 .stamina-layout .result-empty h2 { font-size: 26px; text-transform: uppercase; }
 .stamina-layout .result-empty p { font-size: 13px; color: var(--tx2); }
 .stamina-layout .previous-result > :is(.kpi, .kpis, .chart-panel, details) { opacity: .45; }
-.stamina-layout .course-choice-action { padding: 0 0 10px 34px; }
+.stamina-layout .course-choice-action { padding: 0 0 10px 34px; display: flex; flex-wrap: wrap; gap: 6px; }
 .stamina-layout .course-choice-action button { padding: 0 10px; font-size: 12px; color: var(--acc); }
 .stamina-layout .course-choice-action small { display: block; color: var(--tx3); }
 .stamina-layout .popover-draft-course { padding: 14px; gap: 10px; }
@@ -190,10 +192,6 @@
 .stamina-toolbar { z-index: var(--layer-popover); }
 .stamina-layout .build-drawer { z-index: var(--layer-panel); }
 .stamina-layout .stamina-results { position: relative; z-index: var(--layer-base); }
-.stamina-toolbar .toolbar-build { flex: 0 1 auto; border: 1px solid var(--line); background: var(--s2); padding: 6px 10px; min-height: 36px; gap: 12px; justify-content: space-between; }
-.stamina-toolbar .toolbar-build:hover { background: var(--s3); border-color: var(--border-emphasis); }
-.edit-build-label { display: inline-flex; align-items: center; gap: 5px; color: var(--acc); white-space: nowrap; }
-.edit-build-label svg { width: 14px; height: 14px; stroke: currentColor; stroke-width: 1.5; fill: none; }
 .stamina-toolbar > button[aria-label="Race settings"] { width: 36px; height: 36px; padding: 0; font-size: 19px; }
 .default-build-prompt { color: var(--tx2); font-size: 12px; }
 .default-build-prompt button { padding: 0; border: 0; background: transparent; color: var(--acc); min-height: 28px; text-decoration: underline; }
