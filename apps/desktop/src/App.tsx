@@ -197,7 +197,7 @@ export function App() {
         <button className="icon-button" aria-label="Pin on top" aria-pressed={pinned} disabled={windowBusy} onClick={() => { void togglePin(); }}><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 2h4l-.5 4 2.5 2v1H4V8l2.5-2L6 2zM8 9v5"/></svg></button>
         <button className="icon-button" aria-label="Expand to full mode" disabled={windowBusy} onClick={() => { void toggleMode(); }}><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M9.5 2.5h4v4M6.5 13.5h-4v-4M13.5 2.5 9 7M2.5 13.5 7 9"/></svg></button>
       </header> : <header className="page-header"><h1>{page === 'Stamina' ? 'Stamina check' : page}</h1>{page === 'Live' ? tabs : <span className="subtitle">{page === 'Stamina' ? 'Full spurt and survival' : ''}</span>}
-        <div className="page-actions">{feedBox}{['Live', 'History'].includes(page) && <div className="seg" role="group" aria-label="Stats scope">{(['currentSeason', 'allTime'] as const).map(value => <button key={value} aria-pressed={scope === value} onClick={() => setScope(value)}>{value === 'currentSeason' ? 'Season' : 'All-time'}</button>)}</div>}
+        <div className="page-actions">{feedBox}{['Live', 'History', 'Players'].includes(page) && <div className="seg" role="group" aria-label="Stats scope">{(['currentSeason', 'allTime'] as const).map(value => <button key={value} aria-pressed={scope === value} onClick={() => setScope(value)}>{value === 'currentSeason' ? 'Season' : 'All-time'}</button>)}</div>}
         <button disabled={windowBusy} onClick={() => { void toggleMode(); }}>Compact</button></div></header>}
       <UpdateBanner updates={updates} roomActive={roomActive}/>
       <main className={`content ${liveView && liveTab === 'Umas' ? 'live-umas-content' : ''}`}>
@@ -213,7 +213,7 @@ export function App() {
           </div>
         </>}
         <div className="desktop-tool" hidden={displayedPage !== 'Stamina'}><Stamina draft={draft} openDraft={openStaminaDraft} onDraftRunChange={setDraftRun}/></div>
-        {displayedPage === 'Players' && <Players scope={scope} teamIcons={teamIcons} onOpenMatch={openMatch}/>}
+        {displayedPage === 'Players' && <Players onScopeChange={setScope} scope={scope} teamIcons={teamIcons} onOpenMatch={openMatch}/>}
         <div hidden={displayedPage !== 'History'}><History scope={scope} requestedMatch={requestedMatch} teamIcons={teamIcons} onOpenMatch={openMatch}/></div>
         {displayedPage === 'Settings' && <Settings updates={updates} prefs={prefs} update={persist} pinned={pinned} busy={windowBusy} togglePin={() => { void togglePin(); }} copyDiagnostics={() => { void copyDiagnostics(); }} copyStatus={copyStatus}/>}
       </main>

@@ -178,3 +178,13 @@
 .leaderboard-player { display: flex; align-items: center; gap: 8px; }
 .leaderboard-player .table-player { min-width: 0; }
 .quiet-table[aria-label="Season leaderboard"] th:nth-child(2) { width: 40%; }
+
+.desktop-team-icon:is(:hover, :focus-within), .drawer-identity:has(.team-icon:is(:hover, :focus-visible)) { z-index: var(--layer-tooltip); }
+.desktop-team-icon .team-icon-tooltip { pointer-events: auto; }
+.drawer-badges > .notable-tag { border: 1px solid; }
+.drawer-badges > .rank { background: var(--tone-rank-bg); border-color: var(--tone-rank-fg); color: var(--tone-rank-fg); }
+.drawer-badges > .scoring { background: var(--tone-skill-bg); border-color: #6a9bff; color: var(--tone-skill-fg); }
+.drawer-badges > .sample { background: #13261f; border-color: #4cc38a; color: var(--tone-style-fg); }
+.drawer-badges > .style { background: var(--tone-style-bg); border-color: #4cc38a; color: var(--tone-style-fg); }
+.drawer-badges > .private { background: var(--border-default); border-color: var(--border-strong); color: var(--text-secondary); }
+.arena-drawer-banner:has(.rank-top25) .drawer-badges > .rank { background: #141D2A; border-color: var(--silver); color: var(--silver); }

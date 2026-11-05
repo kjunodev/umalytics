@@ -7,6 +7,8 @@
 @font-face { font-family: 'Saira Condensed'; src: url('./fonts/sairacondensed/SairaCondensed-Bold.ttf') format('truetype'); font-weight: 700; font-display: swap; }
 @font-face { font-family: 'Geist Mono'; src: url('./fonts/geistmono/GeistMono[wght].ttf') format('truetype'); font-weight: 100 900; font-display: swap; }
 :root {
+  --tone-style-bg: #1c2e28; --tone-style-fg: #9fe0c0;
+  --tone-mvp-bg: #351d2a; --tone-mvp-fg: #ff9fc2;
   --layer-base: 0; --layer-hit: 1; --layer-control: 2; --layer-card: 3; --layer-panel: 10; --layer-rail: 20; --layer-popover: 30; --layer-dialog: 40; --layer-tooltip: 50;
   --bg: #080B11; --chrome: #06080D; --s1: #0F141E; --s2: #151C2A; --s3: #1D2638; --line: #222C3F;
   --tx: #EEF3FA; --tx2: #A9B4C6; --tx3: #7E8A9F; --acc: #35D6E8; --acc-ink: #03161A;
@@ -17,8 +19,8 @@
   --text-primary: var(--tx); --text-secondary: var(--tx2); --text-muted: var(--tx3); --text-link: var(--acc); --text-link-hover: #9FEAF2;
   --accent-blue: var(--acc); --accent-blue-soft: #9FEAF2; --accent-orange: var(--t2); --accent-gold: var(--gold); --accent-silver: var(--silver);
   --accent-green: var(--good); --accent-green-soft: var(--good); --sidebar-text: var(--tx3); --status-bg: var(--s1);
-  --tone-rank-bg: #2E2410; --tone-rank-fg: var(--gold); --tone-skill-bg: #0B1F22; --tone-skill-fg: #9FEAF2;
-  --tone-sample-bg: var(--s3); --tone-sample-fg: var(--tx2); --status-win-bg: #147553; --status-loss-bg: #24101A; --status-loss-fg: var(--bad);
+  --tone-rank-bg: #2E2410; --tone-rank-fg: var(--gold); --tone-skill-bg: #16243f; --tone-skill-fg: #9cc2ff;
+  --tone-sample-bg: #232b3c; --tone-sample-fg: #c6cdda; --status-win-bg: #147553; --status-loss-bg: #24101A; --status-loss-fg: var(--bad);
   --status-live-bg: #0B1F22; --status-live-fg: #9FEAF2; --status-live-dot: var(--acc); --status-live-code: var(--tx);
   --radius-sm: 5px; --radius-md: 8px; --radius-lg: 10px; --radius-xl: 14px; --radius-pill: 999px;
   --space-3xs: 2px; --space-2xs: 4px; --space-xs: 6px; --space-sm: 8px; --space-md: 10px; --space-lg: 14px; --space-xl: 18px; --space-2xl: 22px;

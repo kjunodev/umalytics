@@ -4,12 +4,12 @@ import type { EsportsTeamIcon, PlayerProfileSummary, PlayerStatsScope, PlayerTop
 import { DesktopTeamIcon } from './TeamIcon';
 import { getDisplayedProfileStats, getLookupDiscordId } from '@umalytics/ui/player/playerProfileDisplay';
 import { BestUmaPortrait } from '@umalytics/ui/player/BestUmaPortrait';
+import { badgeToneStyle } from '@umalytics/ui/lobby/BadgeChip';
 import { getNotableBadges } from '@umalytics/ui/common/badges';
 import { formatDecimal, formatNumber, formatPercent, formatRank, formatRecord } from '@umalytics/ui/common/format';
 import { getPagerSlots } from '@umalytics/ui/player/PlayerDrawer';
 import { formatRecentResult, getRecentResultTone } from '@umalytics/ui/player/recentMatchFormat';
 
-const allowedBadges = new Set(['oneTrick', 'deepPool', 'podiumRegular', 'underrated', 'newcomer']);
 export function usePlayerProfile(player: PrematchPlayer | undefined, scope: PlayerStatsScope) {
   const { loadExplorerProfiles } = useUiServices();
   const [state, setState] = useState<{ key: string; profile?: PlayerProfileSummary; loading: boolean; error?: string }>({ key: '', loading: false });
@@ -30,8 +30,8 @@ export function StatStrip({ profile }: { profile?: PlayerProfileSummary }) {
   return <div className="arena-stats drawer-stat-strip">{[['W–L', formatRecord(profile)], ['Win rate', formatPercent(profile?.winRate)], ['Pts / game', formatDecimal(profile?.pointsPerGame)], ['MVP', formatNumber(profile?.mvpMatches)]].map(([label, value]) => <div key={label}><b>{value}</b><span>{label}</span></div>)}</div>;
 }
 
-export function PlayerDrawer({ player, profile, scope, loading, onClose, onOpenMatch, teamIcon }: {
-  player: PrematchPlayer; profile?: PlayerProfileSummary; scope: PlayerStatsScope; loading: boolean; onClose: () => void; onOpenMatch: (code: string) => void; teamIcon?: EsportsTeamIcon;
+export function PlayerDrawer({ player, profile, scope, loading, onClose, onOpenMatch, teamIcon, onScopeChange }: {
+  player: PrematchPlayer; profile?: PlayerProfileSummary; scope: PlayerStatsScope; loading: boolean; onClose: () => void; onOpenMatch: (code: string) => void; teamIcon?: EsportsTeamIcon; onScopeChange?: (scope: PlayerStatsScope) => void;
 }) {
   const services = useUiServices();
   const drawer = useRef<HTMLElement>(null);
@@ -98,8 +98,8 @@ export function PlayerDrawer({ player, profile, scope, loading, onClose, onOpenM
     <aside className="arena-player-drawer player-drawer" role="dialog" aria-modal="true" aria-label="Player details" ref={drawer}>
       <header className="arena-drawer-banner">
         {banner && <div className="drawer-banner-art"><BestUmaPortrait uma={banner}/></div>}
-        <div className="drawer-identity"><h2>{profile?.displayName ?? player.displayName}</h2><div className="drawer-subtitle"><span className="muted">{profile?.title ?? title}</span>{teamIcon && <span className="drawer-esports-team"><DesktopTeamIcon icon={teamIcon}/><span>{teamIcon.teamName}</span></span>}</div><div className="drawer-rank"><span className={`rank num ${rankTier}`}>{formatRank(p, loading)}</span><span><b className="num">{formatNumber(profile?.conservativeRating ?? profile?.rating ?? player.displayRatingSnapshot ?? player.ratingSnapshot)}</b> rating</span><span>{scope === 'currentSeason' ? 'Season' : 'All-time'}</span></div>
-        <div className="drawer-badges">{getNotableBadges(p).filter(b => allowedBadges.has(b.kind)).map(b => <span key={b.kind} title={b.title}>{b.label}</span>)}</div></div>
+        <div className="drawer-identity"><h2>{profile?.displayName ?? player.displayName}</h2><div className="drawer-subtitle"><span className="muted">{profile?.title ?? title}</span>{teamIcon && <span className="drawer-esports-team"><DesktopTeamIcon icon={teamIcon}/><span>{teamIcon.teamName}</span></span>}</div><div className="drawer-rank"><span className={`rank num ${rankTier}`}>{formatRank(p, loading)}</span><span><b className="num">{formatNumber(profile?.conservativeRating ?? profile?.rating ?? player.displayRatingSnapshot ?? player.ratingSnapshot)}</b> rating</span><span>{onScopeChange ? <span className="seg" role="group" aria-label="Stats scope">{(['currentSeason', 'allTime'] as const).map(value => <button key={value} aria-pressed={scope === value} onClick={() => onScopeChange(value)}>{value === 'currentSeason' ? 'Season' : 'All-time'}</button>)}</span> : scope === 'currentSeason' ? 'Season' : 'All-time'}</span></div>
+        <div className="drawer-badges">{getNotableBadges(p).map(b => <span key={b.kind} className={`player-tag notable-tag ${b.tone}`} style={{ ...badgeToneStyle(b.kind), borderColor: badgeToneStyle(b.kind)?.color }} title={b.title}>{b.label}</span>)}</div></div>
         <button className="iconbtn drawer-close" aria-label="Close details" ref={close} onClick={onClose}>×</button>
       </header>
       <div className="arena-drawer-body">

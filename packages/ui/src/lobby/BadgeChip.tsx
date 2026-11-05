@@ -2,7 +2,7 @@ import type { NotableBadge, NotableBadgeKind } from '../common/badges';
 
 const RANK_KINDS = new Set<NotableBadgeKind>(['top10', 'top25']);
 
-// Card-only display order: rank first, then playstyle, then sample size.
+// Card-only display order: rank first, then playstyle, scoring, then sample size.
 // This is presentational only; it never changes getNotableBadges() itself,
 // which other consumers (the drawer, diagnostics) rely on as-is.
 const CARD_BADGE_PRIORITY: Partial<Record<NotableBadgeKind, number>> = {
@@ -24,6 +24,10 @@ const ICON_KIND_STYLE: Partial<Record<NotableBadgeKind, { background: string; co
   deepPool: { background: 'var(--tone-style-bg)', color: 'var(--tone-style-fg)' },
   newcomer: { background: 'var(--tone-sample-bg)', color: 'var(--tone-sample-fg)' }
 };
+
+export function badgeToneStyle(kind: NotableBadgeKind) {
+  return ICON_KIND_STYLE[kind];
+}
 
 const MAX_CARD_BADGES = 7;
 
@@ -155,15 +159,7 @@ export function BadgeIcon({ kind }: { kind: NotableBadgeKind }) {
     case 'deepPool':
       return (
         <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-          <circle cx="3.2" cy="3.2" r="1" fill="currentColor" />
-          <circle cx="7" cy="3.2" r="1" fill="currentColor" />
-          <circle cx="10.8" cy="3.2" r="1" fill="currentColor" />
-          <circle cx="3.2" cy="7" r="1" fill="currentColor" />
-          <circle cx="7" cy="7" r="1" fill="currentColor" />
-          <circle cx="10.8" cy="7" r="1" fill="currentColor" />
-          <circle cx="3.2" cy="10.8" r="1" fill="currentColor" />
-          <circle cx="7" cy="10.8" r="1" fill="currentColor" />
-          <circle cx="10.8" cy="10.8" r="1" fill="currentColor" />
+          <path d="M7 1.5 12 4 7 6.5 2 4 7 1.5Z M2 7l5 2.5L12 7 M2 10l5 2.5 5-2.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       );
     case 'newcomer':
