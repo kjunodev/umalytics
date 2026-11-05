@@ -9,6 +9,8 @@ const stores = new Map([[1, 'shell.json'], [2, 'profiles.json']]);
 const calls = [];
 let id = 10;
 let pending;
+const reorderKeys = value => Array.isArray(value) ? value.map(reorderKeys) : value && typeof value === 'object'
+  ? Object.fromEntries(Object.entries(value).reverse().map(([key, nested]) => [key, reorderKeys(nested)])) : value;
 const draftMessage = (partial, version = 1001) => {
   const snapshot = draftSnapshotFixture(partial);
   const raw = m => ({ id: m.mapId, track: m.track, distance: m.distance, surface: m.surface, variant: m.variant, conditions: { ground: m.ground, weather: m.weather, season: m.season } });
@@ -49,7 +51,7 @@ mockIPC(async (command, args) => {
   if (command === 'stamina_check') {
     if (window.__SHOT_CONTROL__.failNext) { window.__SHOT_CONTROL__.failNext = false; throw new Error('Engine could not complete this check.'); }
     if (window.__SHOT_CONTROL__.slow) return new Promise((resolve, reject) => { pending = { resolve, reject }; void emit('stamina-progress', { request_id: args.input.request_id, completed: 100, total: 544, stage: 'mapping', percent: 15 }); });
-    return staminaResult(args.input);
+    return staminaResult(reorderKeys(args.input));
   }
   if (command === 'stamina_check_races') {
     const results = [];

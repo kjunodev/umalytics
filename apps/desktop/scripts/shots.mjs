@@ -232,6 +232,7 @@ try {
     await page.getByRole('group', { name: 'Race', exact: true }).getByRole('button', { name: '3200 · Turf · Outer to Inner', exact: true }).click();
     await page.getByRole('button', { name: /^Run (check|\d+ races)$/ }).click();
     await page.locator('.stamina-chart').waitFor();
+    check(await page.locator('.stale-notice').count() === 0, 'Reordered engine input keys do not mark an unchanged result stale');
     check(!(await page.locator('.result-table').getAttribute('open')), 'Per-stamina table collapsed by default');
     check((await page.locator('.stamina-headline').innerText()).includes('1,070'), 'Headline uses the joint threshold');
     check(await page.locator('.joint-curve').count() === 1, 'Curve includes joint outcomes');
