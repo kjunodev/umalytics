@@ -79,10 +79,10 @@ export function apiResponse(url, scene) {
   }
   throw new Error(`Unexpected API path: ${parsed.pathname}`);
 }
-export function staminaResult(input, thresholdOffset = 0) {
+export function staminaResult(input, thresholdOffset = 0, activationRate = 1) {
   const healing = input.build.skills.filter(s => catalog.skills.find(meta => meta.id === s.id)?.hp_recovery);
   const seeds = (input.seeds ?? (healing.length ? 512 : 256)) * (input.target === 99 ? 10 : input.target === 95 ? 2 : 1);
-  const fraction = .055 * healing.length;
+  const fraction = .055 * activationRate * healing.length;
   const passRate = .925 ** healing.length;
   const rate = (stamina, center) => Math.min(100, Math.max(0, 100 / (1 + Math.exp(-(stamina - center - thresholdOffset) / 57))));
   const point = (stamina, samples = 32) => {
@@ -102,6 +102,6 @@ export function staminaResult(input, thresholdOffset = 0) {
   return { input: structuredClone(input), request_id: input.request_id, curve, current: point(input.build.stats.stamina, seeds),
     thresholds, threshold_samples: { joint: { seeds }, full_spurt: { seeds }, survival: { seeds } }, needed_effective_stamina: { joint: thresholds.joint + equivalent(thresholds.joint), full_spurt: thresholds.full_spurt + equivalent(thresholds.full_spurt), survival: thresholds.survival + equivalent(thresholds.survival) },
     effective_stamina: input.build.stats.stamina + equivalent(input.build.stats.stamina),
-    heal_equivalents: healing.map(s => ({ skill_id: s.id, fraction: .055, stamina: equivalent(input.build.stats.stamina), variable: false })),
+    heal_equivalents: healing.map(s => ({ skill_id: s.id, fraction: .055, activation_rate: activationRate, stamina: equivalent(input.build.stats.stamina) / healing.length, variable: false })),
     seeds, races: 3456, elapsed_ms: 1250, ms_per_race: .36, course };
 }

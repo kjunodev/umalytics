@@ -400,6 +400,28 @@ try {
     await page.waitForFunction(() => document.querySelector('.stamina-headline.sufficient'));
     check((await page.locator('.heal-contributions').innerText()).includes('Replay Recovery'), 'Heal contribution names included');
     await shot(page, `stamina-heal-${width}x${height}`);
+    check(!(await page.locator('.heal-contributions').innerText()).includes('fires'), 'Full activation uses the plain heal amount');
+    const fullHeal = await page.locator('.heal-contributions strong').first().innerText();
+    for (const [rate, state, text] of [[0.5, 'partial', 'fires in 50% of races'], [0, 'never', 'Never fires in this race']]) {
+      await page.evaluate(rate => { window.__SHOT_CONTROL__.healRate = rate; }, rate);
+      await page.getByRole('button', { name: /^Run (check|\d+ races)$/ }).click();
+      await page.locator('.heal-contributions').getByText(text, { exact: false }).first().waitFor();
+      check(await page.locator('.heal-contributions strong').first().innerText() !== fullHeal, `${state} activation reduces the heal amount`);
+      if (rate === 0) {
+        check(await page.locator('.heal-contributions strong').first().innerText() === '+0', 'Never fires contributes zero');
+        check(await page.locator('.heal-inactive').count() > 0, 'Never fires is greyed');
+        check(await page.locator('.heal-inactive').first().evaluate(el => {
+          const expected = getComputedStyle(document.documentElement).getPropertyValue('--text-muted').trim();
+          const probe = document.createElement('span'); probe.style.color = expected; el.append(probe);
+          const muted = getComputedStyle(probe).color; probe.remove();
+          return getComputedStyle(el).color === muted && getComputedStyle(el.querySelector('strong')).color === muted;
+        }), 'Never fires text and amount use the muted color');
+      }
+      await shot(page, `stamina-heal-${state}-${width}x${height}`);
+    }
+    await page.evaluate(() => { window.__SHOT_CONTROL__.healRate = 1; });
+    await page.getByRole('button', { name: /^Run (check|\d+ races)$/ }).click();
+    await page.waitForFunction(() => !document.querySelector('.heal-contributions').textContent.includes('fires'));
     await page.getByRole('complementary', { name: 'Build editor', exact: true }).getByRole('tab', { name: 'Build', exact: true }).click();
     await shot(page, `stamina-results-panel-populated-${width}x${height}`);
     await page.keyboard.press('Escape');
@@ -578,6 +600,11 @@ try {
     await page.evaluate(async () => { const c = window.__SHOT_CONTROL__; await c.emit('feed-message', c.draftMessage(false, 1003)); });
     await page.getByText('7 of 7 races known', { exact: true }).waitFor();
     check(await page.locator('.draft-races > div > button:enabled').count() === 0, 'Feed changes do not auto-run');
+    await build.getByRole('tab', { name: 'Build', exact: true }).click();
+    await build.getByRole('button', { name: '+ Add skill', exact: true }).first().click();
+    await search.fill('Replay Recovery');
+    await build.getByRole('listbox', { name: 'Matching skills' }).getByRole('option').first().click();
+    await page.keyboard.press('Escape');
     await page.getByRole('button', { name: /^Run (check|\d+ races)$/ }).click();
     await page.waitForFunction(() => document.querySelectorAll('.draft-races > div > button:enabled').length === 7);
     await page.getByRole('complementary', { name: 'Build editor', exact: true }).getByRole('tab', { name: 'Build', exact: true }).click();
@@ -585,6 +612,16 @@ try {
     await page.locator('.draft-races > div > button').nth(4).click();
     await page.locator('.stamina-chart').waitFor();
     await shot(page, 'stamina-race-detail-' + width + 'x' + height);
+    check(!(await page.locator('.heal-contributions').innerText()).includes('fires'), 'Draft full activation uses the plain amount');
+    for (const [rate, state, text] of [[0.5, 'partial', 'fires in 50% of races'], [0, 'never', 'Never fires in this race'], [1, 'full', 'Replay Recovery']]) {
+      await page.evaluate(rate => { window.__SHOT_CONTROL__.healRate = rate; }, rate);
+      await page.getByRole('button', { name: /^Run (check|\d+ races)$/ }).click();
+      await page.waitForFunction(() => document.querySelectorAll('.draft-races > div > button:enabled').length === 7);
+      await page.locator('.draft-races > div > button').nth(4).click();
+      await page.locator('.heal-contributions').getByText(text, { exact: false }).first().waitFor();
+      if (rate === 0) check(await page.locator('.heal-inactive strong').first().innerText() === '+0', 'Draft never fires contributes zero');
+      if (rate < 1) await shot(page, `stamina-race-detail-heal-${state}-${width}x${height}`);
+    }
     await page.getByRole('button', { name: '← Back to draft races', exact: true }).click();
     await page.evaluate(async () => { const c = window.__SHOT_CONTROL__, message = c.draftMessage(false, 1004); message.event.state.team1.pickedMaps[0].conditions.ground = 'Heavy'; await c.emit('feed-message', message); });
     await page.getByText('Draft changed since this run', { exact: true }).waitFor();
