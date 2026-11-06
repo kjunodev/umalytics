@@ -11,6 +11,7 @@ use std::{
 use tauri::Emitter;
 use uma_race_sim::{
     data::{DataEra, GameData},
+    event_kind,
     sim::{defs::last_spurt_calc_result, race, tick},
     AnalysisOptions, HorseInput, RaceInput, SkillInput, SkillWizCheck,
 };
@@ -537,6 +538,7 @@ pub struct ThresholdSamples {
 pub struct HealEquivalent {
     skill_id: i32,
     fraction: f64,
+    activation_rate: f64,
     stamina: f64,
     variable: bool,
 }
@@ -673,6 +675,7 @@ struct Sample {
     full_spurt: bool,
     entry_full: bool,
     min_hp: f64,
+    activated_skills: BTreeSet<i32>,
 }
 fn full_spurt(result: i32) -> bool {
     result == last_spurt_calc_result::TRUE_EXCEED_NEED_MAX_HP
@@ -705,6 +708,13 @@ fn one_race(input: &RaceInput, data: &GameData, token: &AtomicBool) -> Result<Sa
                 full_spurt: full_spurt(horse.ai.last_spurt_calc_result),
                 entry_full: entry_full.unwrap_or(false),
                 min_hp: f64::from(min_hp),
+                activated_skills: race
+                    .recorder
+                    .events
+                    .iter()
+                    .filter(|e| e.kind == event_kind::SKILL && e.params.first() == Some(&0))
+                    .filter_map(|e| e.params.get(1).copied())
+                    .collect(),
             });
         }
     }
@@ -721,7 +731,7 @@ fn effective_style(build: &Build) -> i32 {
         build.running_style
     }
 }
-fn heals(input: &Input, engine: &Engine, distance: i32) -> Vec<HealEquivalent> {
+fn heals(input: &Input, engine: &Engine, distance: i32, samples: &[Sample]) -> Vec<HealEquivalent> {
     input
         .build
         .skills
@@ -753,14 +763,20 @@ fn heals(input: &Input, engine: &Engine, distance: i32) -> Vec<HealEquivalent> {
                     ))
                 })
                 .sum();
+            let activation_rate = samples
+                .iter()
+                .filter(|sample| sample.activated_skills.contains(&s.id))
+                .count() as f64
+                / samples.len() as f64;
             Some(HealEquivalent {
                 skill_id: s.id,
                 fraction,
+                activation_rate,
                 stamina: heal_equivalent(
                     input.build.stats.stamina,
                     distance,
                     effective_style(&input.build),
-                    fraction,
+                    fraction * activation_rate,
                 ),
                 variable: abilities.iter().any(|a| {
                     ![0, 1].contains(&a.ability_value_usage) || a.additional_activate_type != 0
@@ -1038,7 +1054,10 @@ fn effective_thresholds(
     distance: i32,
     style: i32,
 ) -> EffectiveThresholds {
-    let fraction = equivalents.iter().map(|h| h.fraction).sum::<f64>();
+    let fraction = equivalents
+        .iter()
+        .map(|h| h.fraction * h.activation_rate)
+        .sum::<f64>();
     let effective =
         |stamina| f64::from(stamina) + heal_equivalent(stamina, distance, style, fraction);
     EffectiveThresholds {
@@ -1081,7 +1100,6 @@ fn run_bank(
     let engine = engine()?;
     let course = validate(&input, engine)?;
     let seeds = seed_count(&input, engine);
-    let equivalents = heals(&input, engine, course.distance);
     let mut solver = Solver {
         input: &input,
         engine,
@@ -1114,6 +1132,14 @@ fn run_bank(
     // displayed current value cannot change the curve or threshold search.
     solver.evaluate([input.build.stats.stamina], seeds)?;
     let current = solver.cache[&input.build.stats.stamina].clone();
+    // Reuse the current point's full sample bank, independently for each course.
+    // These rates also weight the heal fraction at every raw threshold.
+    let equivalents = heals(
+        &input,
+        engine,
+        course.distance,
+        &solver.samples[&input.build.stats.stamina],
+    );
     let races = solver.races;
     let needed_effective_stamina = effective_thresholds(
         &thresholds,

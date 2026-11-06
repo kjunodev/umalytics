@@ -51,13 +51,13 @@ mockIPC(async (command, args) => {
   if (command === 'stamina_check') {
     if (window.__SHOT_CONTROL__.failNext) { window.__SHOT_CONTROL__.failNext = false; throw new Error('Engine could not complete this check.'); }
     if (window.__SHOT_CONTROL__.slow) return new Promise((resolve, reject) => { pending = { resolve, reject }; void emit('stamina-progress', { request_id: args.input.request_id, completed: 100, total: 544, stage: 'mapping', percent: 15 }); });
-    return staminaResult(reorderKeys(args.input));
+    return staminaResult(reorderKeys(args.input), 0, window.__SHOT_CONTROL__.healRate ?? 1);
   }
   if (command === 'stamina_check_races') {
     const results = [];
     for (const [index, race] of args.input.races.entries()) {
       const { races: _races, ...input } = args.input;
-      const result = staminaResult({ ...input, race }, index < 2 ? -400 : index * 20); results.push(result);
+      const result = staminaResult({ ...input, race }, index < 2 ? -400 : index * 20, window.__SHOT_CONTROL__.healRate ?? 1); results.push(result);
       await emit('stamina-progress', { request_id: input.request_id, map_id: race.map_id, stage: 'refining', percent: (index * 100 + 65) / args.input.races.length, race_index: index, race_total: args.input.races.length });
       await emit('stamina-race-result', { request_id: input.request_id, index, total: args.input.races.length, result });
       if (window.__SHOT_CONTROL__.slow && index === 1) return new Promise((resolve, reject) => { pending = { resolve, reject }; });

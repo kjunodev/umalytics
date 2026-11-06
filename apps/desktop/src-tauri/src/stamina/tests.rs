@@ -423,7 +423,9 @@ fn effective_stamina_known_numbers_and_engine_heals() {
         id: 200331,
         level: 1,
     });
-    let h = heals(&i, e, 2500);
+    let c = validate(&i, e).unwrap();
+    let sample = one_race(&race_input(&i, &c), &e.data, &AtomicBool::new(false)).unwrap();
+    let h = heals(&i, e, 2500, &[sample]);
     assert_eq!(h.len(), 1);
     assert!(h[0].fraction > 0.0);
     let r = run(i, &AtomicBool::new(false), &|_| {}).unwrap();
@@ -438,6 +440,143 @@ fn effective_stamina_known_numbers_and_engine_heals() {
         )
     );
     assert_eq!(r.current.seeds, r.seeds);
+}
+
+#[test]
+fn after_school_stroll_requires_downhill_and_end_closer() {
+    let e = engine().unwrap();
+    let mut i = input();
+    i.build.running_style = 4;
+    i.build.skills = vec![SelectedSkill {
+        id: 201482,
+        level: 1,
+    }];
+    i.race.map_id = "niigata-2400-turf-inner".into();
+    let flat = validate(&i, e).unwrap();
+    assert_eq!(flat.course_set_id, 10309);
+    assert!(e
+        .data
+        .course_event_params
+        .get("10309")
+        .unwrap()
+        .courseParams
+        .iter()
+        .all(|p| p._paramType != 11));
+    let result = run(i.clone(), &AtomicBool::new(false), &|_| {}).unwrap();
+    let heal = &result.heal_equivalents[0];
+    assert_eq!(heal.activation_rate, 0.0);
+    assert_eq!(heal.stamina, 0.0);
+    assert_eq!(result.effective_stamina, 800.0);
+    assert_eq!(
+        result.needed_effective_stamina.joint,
+        result.thresholds.joint.map(f64::from)
+    );
+
+    // Nakayama 2500 m turf inner has a downhill in the engine's course event params.
+    i.race.map_id = "nakayama-2500-turf-inner".into();
+    let downhill = validate(&i, e).unwrap();
+    assert!(e
+        .data
+        .course_event_params
+        .get(&downhill.course_set_id.to_string())
+        .unwrap()
+        .courseParams
+        .iter()
+        .any(|p| p._paramType == 11 && p._values[0] < 0));
+    let result = run(i.clone(), &AtomicBool::new(false), &|_| {}).unwrap();
+    assert!(result.heal_equivalents[0].activation_rate > 0.0);
+    i.build.running_style = 2;
+    let result = run(i, &AtomicBool::new(false), &|_| {}).unwrap();
+    assert_eq!(result.heal_equivalents[0].activation_rate, 0.0);
+    assert_eq!(result.effective_stamina, 800.0);
+}
+
+#[test]
+fn unconditional_mid_race_heal_records_with_frames_disabled() {
+    let e = engine().unwrap();
+    let mut i = input();
+    // Ignited Spirit STA (210022): phase_random==1, no course/style/position conditions.
+    i.build.skills = vec![SelectedSkill {
+        id: 210022,
+        level: 1,
+    }];
+    i.assume_skills_activate = true;
+    let c = validate(&i, e).unwrap();
+    let sample = one_race(&race_input(&i, &c), &e.data, &AtomicBool::new(false)).unwrap();
+    assert!(sample.activated_skills.contains(&210022));
+    let result = run(i, &AtomicBool::new(false), &|_| {}).unwrap();
+    assert_eq!(result.heal_equivalents[0].activation_rate, 1.0);
+    assert!(result.effective_stamina > 800.0);
+}
+
+#[test]
+fn draft_heal_rates_are_measured_independently_on_each_course() {
+    let mut i = input();
+    i.build.running_style = 4;
+    i.build.skills = vec![SelectedSkill {
+        id: 201482,
+        level: 1,
+    }];
+    let mut flat = i.race.clone();
+    flat.map_id = "niigata-2400-turf-inner".into();
+    let multi = MultiInput {
+        request_id: i.request_id,
+        build: i.build,
+        races: vec![flat, i.race],
+        field: i.field,
+        seeds: i.seeds,
+        target: i.target,
+        assume_skills_activate: i.assume_skills_activate,
+        rushed: i.rushed,
+        spot_struggle: i.spot_struggle,
+        dueling: i.dueling,
+        lane_movement: i.lane_movement,
+    };
+    let results = run_races(multi, &AtomicBool::new(false), &|_| {}, &|_| {}).unwrap();
+    assert_eq!(results[0].heal_equivalents[0].activation_rate, 0.0);
+    assert_eq!(results[0].effective_stamina, 800.0);
+    assert!(results[1].heal_equivalents[0].activation_rate > 0.0);
+    assert!(results[1].effective_stamina > 800.0);
+}
+
+#[test]
+fn heal_rates_count_races_and_weight_current_and_threshold_values() {
+    let e = engine().unwrap();
+    let mut i = input();
+    i.build.skills = vec![SelectedSkill {
+        id: 201482,
+        level: 1,
+    }];
+    let samples: Vec<_> = [true, false, true, false]
+        .into_iter()
+        .map(|fired| Sample {
+            survival: true,
+            full_spurt: true,
+            entry_full: true,
+            min_hp: 1.0,
+            activated_skills: if fired {
+                BTreeSet::from([201482])
+            } else {
+                BTreeSet::new()
+            },
+        })
+        .collect();
+    let heals = heals(&i, e, 2400, &samples);
+    assert_eq!(heals[0].activation_rate, 0.5);
+    assert_eq!(
+        heals[0].stamina,
+        heal_equivalent(800, 2400, 2, heals[0].fraction * 0.5)
+    );
+    let thresholds = Thresholds {
+        joint: Some(1000),
+        full_spurt: None,
+        survival: Some(900),
+    };
+    let effective = effective_thresholds(&thresholds, &heals, 2400, 2);
+    assert_eq!(
+        effective.joint,
+        Some(1000.0 + heal_equivalent(1000, 2400, 2, heals[0].fraction * 0.5))
+    );
 }
 #[test]
 fn full_spurt_fixture_and_recording_do_not_change_result() {
@@ -826,18 +965,21 @@ fn rates_include_every_simulated_outcome() {
             full_spurt: true,
             entry_full: false,
             min_hp: 100.0,
+            activated_skills: BTreeSet::new(),
         },
         Sample {
             survival: false,
             full_spurt: false,
             entry_full: false,
             min_hp: 0.0,
+            activated_skills: BTreeSet::new(),
         },
         Sample {
             survival: true,
             full_spurt: false,
             entry_full: false,
             min_hp: 50.0,
+            activated_skills: BTreeSet::new(),
         },
     ];
     let point = point(800, &samples);
@@ -971,6 +1113,7 @@ fn effective_needs_use_each_true_threshold_without_a_second_solve() {
     let equivalent = HealEquivalent {
         skill_id: 1,
         fraction: 0.055,
+        activation_rate: 1.0,
         stamina: 9999.0,
         variable: false,
     };
@@ -1021,6 +1164,7 @@ fn joint_counts_the_intersection_not_two_marginal_passes() {
             full_spurt: n < 90,
             entry_full: true,
             min_hp: 0.0,
+            activated_skills: BTreeSet::new(),
         })
         .collect();
     let p = point(800, &samples);

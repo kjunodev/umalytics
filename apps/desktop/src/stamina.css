@@ -110,6 +110,8 @@
 .stamina-layout .kpi small { font-size: 11.5px; }
 .stamina-layout .heal-contributions { gap: 6px; grid-column: auto; font-size: 12px; }
 .stamina-layout .heal-contributions .num { font-size: 14px; color: var(--good); }
+.stamina-layout .heal-contributions .heal-inactive,
+.stamina-layout .heal-contributions .heal-inactive .num { color: var(--text-muted); }
 .stamina-layout :is(.simulation-mode, .heal-note) { font-size: 11.5px; color: var(--tx3); line-height: 1.45; }
 .stamina-layout .simulation-mode:has(+ .heal-note) { margin-bottom: -8px; }
 .stamina-layout .chart-panel { padding: 12px 14px 8px; }

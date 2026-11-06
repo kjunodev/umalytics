@@ -33,7 +33,7 @@ export interface Thresholds { joint: number | null; full_spurt: number | null; s
 export interface StaminaResult {
   input: StaminaInput; request_id: string; curve: StaminaPoint[]; current: StaminaPoint;
   thresholds: Thresholds; threshold_samples: { joint: { seeds: number } | null; full_spurt: { seeds: number } | null; survival: { seeds: number } | null }; needed_effective_stamina: Thresholds; effective_stamina: number;
-  heal_equivalents: { skill_id: number; fraction: number; stamina: number; variable: boolean }[];
+  heal_equivalents: { skill_id: number; fraction: number; activation_rate: number; stamina: number; variable: boolean }[];
   seeds: number; races: number; elapsed_ms: number; ms_per_race: number; course: Course;
 }
 export interface StaminaProgress { request_id: string; map_id: string; completed: number; total: number; stage: 'mapping' | 'refining' | 'done'; percent: number; race_index?: number; race_total?: number }
