@@ -402,7 +402,7 @@ try {
     await shot(page, `stamina-heal-${width}x${height}`);
     check(!(await page.locator('.heal-contributions').innerText()).includes('fires'), 'Full activation uses the plain heal amount');
     const fullHeal = await page.locator('.heal-contributions strong').first().innerText();
-    for (const [rate, state, text] of [[0.5, 'partial', 'fires in 50% of races'], [0, 'never', 'Never fires on this course']]) {
+    for (const [rate, state, text] of [[0.5, 'partial', 'fires in 50% of races'], [0, 'never', 'Never fires in this race']]) {
       await page.evaluate(rate => { window.__SHOT_CONTROL__.healRate = rate; }, rate);
       await page.getByRole('button', { name: /^Run (check|\d+ races)$/ }).click();
       await page.locator('.heal-contributions').getByText(text, { exact: false }).first().waitFor();
@@ -613,7 +613,7 @@ try {
     await page.locator('.stamina-chart').waitFor();
     await shot(page, 'stamina-race-detail-' + width + 'x' + height);
     check(!(await page.locator('.heal-contributions').innerText()).includes('fires'), 'Draft full activation uses the plain amount');
-    for (const [rate, state, text] of [[0.5, 'partial', 'fires in 50% of races'], [0, 'never', 'Never fires on this course'], [1, 'full', 'Replay Recovery']]) {
+    for (const [rate, state, text] of [[0.5, 'partial', 'fires in 50% of races'], [0, 'never', 'Never fires in this race'], [1, 'full', 'Replay Recovery']]) {
       await page.evaluate(rate => { window.__SHOT_CONTROL__.healRate = rate; }, rate);
       await page.getByRole('button', { name: /^Run (check|\d+ races)$/ }).click();
       await page.waitForFunction(() => document.querySelectorAll('.draft-races > div > button:enabled').length === 7);
