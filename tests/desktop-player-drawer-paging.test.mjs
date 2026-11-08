@@ -35,5 +35,5 @@ test('a loaded profile stays visible while other lobby profiles load', () => {
   assert.equal(drawerProfileLoading(true, { discordId: '1' }), false);
   assert.equal(drawerProfileLoading(false, undefined), false);
   const live = fs.readFileSync(new URL('../apps/desktop/src/Live.tsx', import.meta.url), 'utf8');
-  assert.match(live, /loading={drawerProfileLoading(loading, profiles[context.player.discordId])}/);
+  assert.ok(live.includes('loading={drawerProfileLoading(loading, profiles[context.player.discordId])}'));
 });
