@@ -24,7 +24,7 @@
   --status-live-bg: #0B1F22; --status-live-fg: #9FEAF2; --status-live-dot: var(--acc); --status-live-code: var(--tx);
   --radius-sm: 5px; --radius-md: 8px; --radius-lg: 10px; --radius-xl: 14px; --radius-pill: 999px;
   --space-3xs: 2px; --space-2xs: 4px; --space-xs: 6px; --space-sm: 8px; --space-md: 10px; --space-lg: 14px; --space-xl: 18px; --space-2xl: 22px;
-  --space-section: 16px; --space-page-x: 18px; --space-page-y: 16px;
+  --space-page-x: 18px; --space-page-y: 16px;
   --font-step-xs: 10px; --font-step-sm: 12px; --font-step-md: 13px; --font-step-lg: 17px; --font-step-xl: 24px;
   --shadow-card: inset 0 1px 0 #FFFFFF08, 0 10px 24px -14px #000; --shadow-overlay: 0 12px 28px -8px #000;
   --glow-gold: 0 0 12px #F6C45388; --glow-silver: 0 0 10px #B8C7DD88; --glow-live: 0 0 8px var(--acc);
