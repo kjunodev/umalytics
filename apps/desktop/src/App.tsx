@@ -208,14 +208,14 @@ export function App() {
         {liveView && feedBlocked ? <section className="empty-state port-error" role="alert"><h2>Local feed port is in use</h2><p>UmaLytics could not listen on 127.0.0.1:38917. Close another running UmaLytics window or the app using this port, then retry.</p><div><button disabled={feedBusy} onClick={() => { void retryFeed(); }}>Retry</button><button onClick={() => { void copyDiagnostics(); }}>Copy diagnostics</button></div><p role="status">{copyStatus}</p></section> : liveView && <>
           {disconnected && <div className="feed-banner reconnect" role="status"><b>Uma Drafter disconnected.</b><span>Showing the last {liveTab === 'Lobby' ? 'roster' : 'draft'}{lastUpdate ? ` received at ${new Date(lastUpdate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : ''}. Reconnecting automatically.</span></div>}
           <div className={disconnected ? 'live-content dimmed' : 'live-content'}>
-            {liveTab === 'Lobby' && <Lobby roster={roster} profiles={profiles} loading={profilesLoading} compact={compact} scope={scope} emptyStatus={feedLabel} teamIcons={teamIcons} onOpenMatch={openMatch} onRetry={() => setRefresh(value => value + 1)}/>}
+            {liveTab === 'Lobby' && <Lobby onScopeChange={setScope} roster={roster} profiles={profiles} loading={profilesLoading} compact={compact} scope={scope} emptyStatus={feedLabel} teamIcons={teamIcons} onOpenMatch={openMatch} onRetry={() => setRefresh(value => value + 1)}/>}
             {liveTab === 'Draft' && <Draft draft={draft?.phase === 'lobby' ? undefined : draft} pickOrder={pickOrder} loading={status?.state === 'connected' && !draft}/>}
             {liveTab === 'Umas' && <Umas roster={roster ?? { players: [] }} profiles={profiles} scope={scope} compact={compact}/>}
           </div>
         </>}
         <div className="desktop-tool" hidden={displayedPage !== 'Stamina'}><Stamina draft={draft} openDraft={openStaminaDraft} onDraftRunChange={setDraftRun}/></div>
         {displayedPage === 'Players' && <Players onScopeChange={setScope} scope={scope} teamIcons={teamIcons} onOpenMatch={openMatch}/>}
-        <div hidden={displayedPage !== 'History'}><History scope={scope} requestedMatch={requestedMatch} teamIcons={teamIcons} onOpenMatch={openMatch}/></div>
+        <div hidden={displayedPage !== 'History'}><History onScopeChange={setScope} scope={scope} requestedMatch={requestedMatch} teamIcons={teamIcons} onOpenMatch={openMatch}/></div>
         {displayedPage === 'Settings' && <Settings updates={updates} prefs={prefs} update={persist} pinned={pinned} busy={windowBusy} togglePin={() => { void togglePin(); }} copyDiagnostics={() => { void copyDiagnostics(); }} copyStatus={copyStatus}/>}
       </main>
       {compact && liveTab === 'Draft' && <CompactStamina run={currentRun} onOpen={() => { void openStamina(); }}/>}

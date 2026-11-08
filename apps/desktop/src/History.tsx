@@ -11,7 +11,7 @@ import { Umas } from './Umas';
 import { rememberMatch, restoreRecentMatches, type RecentMatch } from './recentMatches';
 
 const store = () => load('history.json', { autoSave: false, defaults: {} });
-export function History({ requestedMatch, scope, onOpenMatch, teamIcons }: { requestedMatch?: RequestedMatch; scope: PlayerStatsScope; onOpenMatch: (code: string) => void; teamIcons: EsportsTeamIconMap }) {
+export function History({ requestedMatch, scope, onOpenMatch, teamIcons, onScopeChange }: { requestedMatch?: RequestedMatch; onScopeChange: (scope: PlayerStatsScope) => void; scope: PlayerStatsScope; onOpenMatch: (code: string) => void; teamIcons: EsportsTeamIconMap }) {
   const services = useUiServices();
   const [query, setQuery] = useState('');
   const [match, setMatch] = useState<HistoricalMatch>();
@@ -80,7 +80,7 @@ export function History({ requestedMatch, scope, onOpenMatch, teamIcons }: { req
       <header className="data-box match-heading"><button disabled={loading} onClick={() => { request.current?.abort(); setLoading(false); setMatch(undefined); setError(''); }}>← Matches</button><strong className="match-code">{match.matchCode}</strong><div><b><span className="team-blue">{match.draft.teams.team1.name}</span> vs <span className="team-orange">{match.draft.teams.team2.name}</span></b><small>{match.completedAt ? new Date(match.completedAt).toLocaleString() : 'Date not provided'} · {match.status} · {match.roster.players.length} players</small></div><a href={`https://drafter.uma.guide/matches/${encodeURIComponent(match.matchCode)}`} onClick={e => { e.preventDefault(); void openDrafterUrl(e.currentTarget.href).catch(() => setError('Unable to open Uma Drafter in the system browser.')); }}>Open in Uma Drafter ↗</a></header>
       {match.warnings.map(w => <p className="muted" key={w}>{w}</p>)}
       <div className="seg match-tabs" role="group" aria-label="Match view">{(['Lobby', 'Draft', 'Umas'] as const).map(tab => <button key={tab} aria-pressed={scene === tab} onClick={() => setScene(tab)}>{tab}</button>)}</div>
-      {scene === 'Lobby' && <Lobby roster={match.roster} profiles={profiles} loading={profilesLoading} compact={false} scope={scope} emptyStatus="No historical roster" teamIcons={teamIcons} onOpenMatch={onOpenMatch} onRetry={() => setRetry(n => n + 1)}/>}
+      {scene === 'Lobby' && <Lobby onScopeChange={onScopeChange} roster={match.roster} profiles={profiles} loading={profilesLoading} compact={false} scope={scope} emptyStatus="No historical roster" teamIcons={teamIcons} onOpenMatch={onOpenMatch} onRetry={() => setRetry(n => n + 1)}/>}
       {scene === 'Draft' && <Draft draft={match.draft}/>}
       {scene === 'Umas' && <Umas roster={match.roster} profiles={profiles} scope={scope}/>}
     </>}
