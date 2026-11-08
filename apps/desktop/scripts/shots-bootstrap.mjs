@@ -83,4 +83,11 @@ mockIPC(async (command, args) => {
   if (command === 'plugin:http|fetch_cancel' || command === 'plugin:http|fetch_cancel_body') return;
   throw new Error(`Unmocked IPC: ${command}`);
 }, { shouldMockEvents: true });
+const { desktopUiServices } = await import('../src/services');
+const loadProfiles = desktopUiServices.loadExplorerProfiles;
+window.__SHOT_CONTROL__.profileLoads = 0;
+desktopUiServices.loadExplorerProfiles = (...args) => {
+  window.__SHOT_CONTROL__.profileLoads++;
+  return loadProfiles(...args);
+};
 await import('../src/main.tsx');

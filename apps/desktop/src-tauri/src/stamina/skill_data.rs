@@ -1,7 +1,8 @@
 use super::Skill;
 use serde_json::Value;
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
+    ffi::{OsStr, OsString},
     path::{Path, PathBuf},
 };
 
@@ -17,56 +18,72 @@ fn data_dir() -> PathBuf {
     crate::resources::skill_dir()
 }
 
-pub(super) fn status() -> (String, usize, usize) {
-    status_from(&data_dir())
+struct Icons {
+    root: Option<PathBuf>,
+    names: HashSet<OsString>,
 }
 
-fn status_from(dir: &Path) -> (String, usize, usize) {
-    let skills = std::fs::read_to_string(dir.join("skills.json"))
-        .ok()
-        .and_then(|json| serde_json::from_str::<Vec<Value>>(&json).ok())
-        .map_or(0, |rows| rows.len());
-    let icon_root = dir.join("icons").canonicalize().ok();
-    let icons = std::fs::read_dir(dir.join("icons"))
-        .into_iter()
-        .flatten()
-        .filter_map(Result::ok)
-        .filter(|entry| {
-            let path = entry.path();
-            let id = path
-                .file_stem()
-                .and_then(|s| s.to_str())
-                .and_then(|s| s.parse::<i64>().ok());
-            matches!(
-                path.extension().and_then(|s| s.to_str()),
-                Some("webp" | "png")
-            ) && id.is_some_and(|id| id > 0)
-                && path.canonicalize().ok().is_some_and(|p| {
-                    p.is_file() && icon_root.as_ref().is_some_and(|root| p.starts_with(root))
-                })
-        })
-        .count();
-    (dir.to_string_lossy().into_owned(), skills, icons)
+impl Icons {
+    fn new(dir: &Path) -> Self {
+        let root = dir.join("icons").canonicalize().ok();
+        let names = root
+            .as_ref()
+            .and_then(|root| std::fs::read_dir(root).ok())
+            .into_iter()
+            .flatten()
+            .filter_map(Result::ok)
+            .map(|entry| entry.file_name())
+            .collect();
+        Self { root, names }
+    }
+
+    fn resolve(&self, name: &OsStr) -> Option<PathBuf> {
+        if !self.names.contains(name) {
+            return None;
+        }
+        let root = self.root.as_ref()?;
+        contained_icon(root, &root.join(name))
+    }
+
+    fn count(&self) -> usize {
+        self.names
+            .iter()
+            .filter(|name| {
+                let path = Path::new(name);
+                let id = path
+                    .file_stem()
+                    .and_then(|s| s.to_str())
+                    .and_then(|s| s.parse::<i64>().ok());
+                matches!(
+                    path.extension().and_then(|s| s.to_str()),
+                    Some("webp" | "png")
+                ) && id.is_some_and(|id| id > 0)
+                    && self.resolve(name).is_some()
+            })
+            .count()
+    }
+
+    fn path(&self, icon: i64) -> Option<String> {
+        if icon <= 0 {
+            return None;
+        }
+        for ext in ["webp", "png"] {
+            if let Some(path) = self.resolve(OsStr::new(&format!("{icon}.{ext}"))) {
+                return Some(path.to_string_lossy().into_owned());
+            }
+        }
+        None
+    }
 }
 
 // Only numbered image files whose canonical path stays inside icons/ are
 // returned to the asset protocol. Symlinks escaping that directory are rejected.
-fn icon_path(dir: &Path, icon: i64) -> Option<String> {
-    if icon <= 0 {
-        return None;
-    }
-    let root = dir.join("icons").canonicalize().ok()?;
-    for ext in ["webp", "png"] {
-        if let Ok(path) = root.join(format!("{icon}.{ext}")).canonicalize() {
-            if path.starts_with(&root) && path.is_file() {
-                return Some(path.to_string_lossy().into_owned());
-            }
-        }
-    }
-    None
+fn contained_icon(root: &Path, candidate: &Path) -> Option<PathBuf> {
+    let path = candidate.canonicalize().ok()?;
+    (path.starts_with(root) && path.is_file()).then_some(path)
 }
 
-fn apply(skills: &mut [Skill], rows: &[Value], dir: &Path) {
+fn apply(skills: &mut [Skill], rows: &[Value], icons: &Icons) {
     let mut metadata = HashMap::new();
     for row in rows {
         if let Some(id) = row["id"].as_i64() {
@@ -97,25 +114,33 @@ fn apply(skills: &mut [Skill], rows: &[Value], dir: &Path) {
                 _ => "white",
             }
             .into();
-            skill.icon_path = row["iconid"].as_i64().and_then(|id| icon_path(dir, id));
+            skill.icon_path = row["iconid"].as_i64().and_then(|id| icons.path(id));
         }
     }
 }
 
-pub(super) fn enrich(skills: &mut [Skill]) -> bool {
+pub(super) fn enrich(skills: &mut [Skill]) -> (bool, String, usize, usize) {
     enrich_from(skills, &data_dir())
 }
 
-fn enrich_from(skills: &mut [Skill], dir: &Path) -> bool {
+fn enrich_from(skills: &mut [Skill], dir: &Path) -> (bool, String, usize, usize) {
     let rows = std::fs::read_to_string(dir.join("skills.json"))
         .ok()
         .and_then(|json| serde_json::from_str::<Vec<Value>>(&json).ok());
-    if let Some(rows) = rows.filter(|rows| !rows.is_empty()) {
-        apply(skills, &rows, dir);
+    let count = rows.as_ref().map_or(0, Vec::len);
+    let icons = Icons::new(dir);
+    let enriched = if let Some(rows) = rows.filter(|rows| !rows.is_empty()) {
+        apply(skills, &rows, &icons);
         true
     } else {
         false
-    }
+    };
+    (
+        enriched,
+        dir.to_string_lossy().into_owned(),
+        count,
+        icons.count(),
+    )
 }
 
 #[cfg(test)]
@@ -136,7 +161,11 @@ mod tests {
              "gene_version":{"id":910001,"name_en":"Fixture inherited","rarity":1}},
             {"id":200001,"name_en":"Fixture gold","rarity":2}
         ]);
-        apply(&mut skills, rows.as_array().unwrap(), Path::new("missing"));
+        apply(
+            &mut skills,
+            rows.as_array().unwrap(),
+            &Icons::new(Path::new("missing")),
+        );
         assert_eq!(skills[0].rarity, "unique");
         assert_eq!(skills[1].rarity, "white");
         assert_eq!(skills[1].name, "Fixture inherited (inherited)");
@@ -162,31 +191,39 @@ mod tests {
             rarity: "white".into(),
             icon_path: None,
         }];
-        assert!(!enrich_from(&mut skills, &root));
+        assert!(!enrich_from(&mut skills, &root).0);
         assert_eq!(
-            status_from(&root),
-            (root.to_string_lossy().into_owned(), 0, 0)
+            enrich_from(&mut skills, &root),
+            (false, root.to_string_lossy().into_owned(), 0, 0)
         );
         assert_eq!(skills[0].name, "Engine fallback");
         assert!(skills[0].icon_path.is_none());
         std::fs::write(root.join("icons/123.png"), b"synthetic").unwrap();
         std::fs::write(root.join("icons/456.svg"), b"synthetic").unwrap();
         std::fs::write(root.join("789.png"), b"synthetic").unwrap();
+        std::fs::create_dir(root.join("icons/321.png")).unwrap();
         assert_eq!(
-            PathBuf::from(icon_path(&root, 123).unwrap()),
+            PathBuf::from(Icons::new(&root).path(123).unwrap()),
             root.join("icons/123.png").canonicalize().unwrap()
         );
-        assert!(icon_path(&root, 456).is_none());
-        assert!(icon_path(&root, 789).is_none());
-        assert!(icon_path(&root, -123).is_none());
-        assert_eq!(status_from(&root).2, 1);
+        assert!(Icons::new(&root).path(456).is_none());
+        assert!(Icons::new(&root).path(789).is_none());
+        assert!(Icons::new(&root).path(321).is_none());
+        assert!(Icons::new(&root).path(-123).is_none());
+        let icons = Icons::new(&root);
+        assert!(contained_icon(icons.root.as_ref().unwrap(), &root.join("789.png")).is_none());
+        assert!(contained_icon(icons.root.as_ref().unwrap(), &root.join("icons")).is_none());
+        assert_eq!(enrich_from(&mut skills, &root).3, 1);
         std::fs::write(root.join("icons/123.webp"), b"synthetic").unwrap();
-        assert!(icon_path(&root, 123).unwrap().ends_with("123.webp"));
+        assert!(Icons::new(&root).path(123).unwrap().ends_with("123.webp"));
         std::fs::write(root.join("skills.json"), b"broken").unwrap();
-        assert!(!enrich_from(&mut skills, &root));
-        assert_eq!(status_from(&root).1, 0);
-        std::fs::write(root.join("skills.json"), b"[{\"id\":123}]").unwrap();
-        assert_eq!(status_from(&root).1, 1);
+        assert!(!enrich_from(&mut skills, &root).0);
+        assert_eq!(enrich_from(&mut skills, &root).2, 0);
+        std::fs::write(root.join("skills.json"), b"[{\"id\":123,\"iconid\":123}]").unwrap();
+        let status = enrich_from(&mut skills, &root);
+        assert!(status.0);
+        assert_eq!(status.2, 1);
+        assert!(skills[0].icon_path.as_ref().unwrap().ends_with("123.webp"));
         std::fs::remove_dir_all(root).unwrap();
     }
 }

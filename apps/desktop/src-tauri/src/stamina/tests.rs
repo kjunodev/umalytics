@@ -26,6 +26,65 @@ fn bundled_role_kits_only_reference_catalog_skills() {
 }
 
 #[test]
+fn missing_lane_file_is_unavailable_and_corrupt_lane_file_is_a_guarded_race_error() {
+    let root = std::env::temp_dir().join(format!(
+        "umalytics-lane-files-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    std::fs::create_dir_all(root.join("coursepath")).unwrap();
+    std::fs::create_dir_all(root.join("courseeventparam")).unwrap();
+    for name in ["names.json", "race_paramdefine.json", "master_sim.db"] {
+        std::fs::copy(engine_data_dir().join(name), root.join(name)).unwrap();
+    }
+    for entry in std::fs::read_dir(engine_data_dir().join("courseeventparam")).unwrap() {
+        let entry = entry.unwrap();
+        std::fs::copy(
+            entry.path(),
+            root.join("courseeventparam").join(entry.file_name()),
+        )
+        .unwrap();
+    }
+    let i = input();
+    let e = guarded(|| load_engine_from(&root)).unwrap();
+    let course = e
+        .catalog
+        .courses
+        .iter()
+        .find(|c| c.id == i.race.map_id)
+        .unwrap();
+    let c = &e.data.master.race_course_set[&course.course_set_id];
+    let path = uma_race_sim::data::course::lane_path_name(
+        c.race_track_id,
+        c.distance,
+        c.ground,
+        c.inout,
+        0,
+    );
+    let reason = format!("Engine lane path missing: {path}.");
+    assert_eq!(course.unavailable_reason.as_deref(), Some(reason.as_str()));
+    assert!(validate(&i, &e).unwrap_err().contains(&reason));
+
+    std::fs::write(
+        root.join("coursepath").join(format!("{path}.json")),
+        "{invalid JSON",
+    )
+    .unwrap();
+    let e = guarded(|| load_engine_from(&root)).unwrap();
+    let course = validate(&i, &e).unwrap();
+    assert!(course.unavailable_reason.is_none());
+    let result = guarded(|| one_race(&race_input(&i, &course), &e.data, &AtomicBool::new(false)));
+    assert_eq!(
+        result.unwrap_err(),
+        "The race engine could not simulate this build or load its data."
+    );
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn catalog_includes_upgrades_and_scenario_skills_without_region_flags() {
     let e = engine().unwrap();
     for id in [201241, 210052, 202051] {
