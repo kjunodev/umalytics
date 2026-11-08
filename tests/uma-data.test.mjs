@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
-import { loadModule, loadFunction, parseTsxModule, readModule } from './support/harness.mjs';
+import { loadModule, readModule } from './support/harness.mjs';
 
 test('Uma hits count distinct lobby players with scoped experience', () => {
   const c = vm.createContext({
@@ -30,11 +30,11 @@ test('Uma hits count distinct lobby players with scoped experience', () => {
 });
 
 test('Uma scope labels are All, Team 1, and Team 2 and draft plan is removed', () => {
-  const c = vm.createContext({});
-  const syntax = parseTsxModule('uiUmasScene');
-  loadFunction(c, syntax, 'getHitScopeLabel');
-  assert.deepEqual(['all', 'team1', 'team2'].map(scope => c.getHitScopeLabel(scope)), ['All', 'Team 1', 'Team 2']);
-  assert.doesNotMatch(readModule('uiUmasScene'), /DraftPlanTray|DRAFT_PLAN_PIN_LIMIT|pinnedUmaIds|Pin to plan/);
+  const source = readModule('uiUmasScene');
+  const options = source.match(/UMA_CATALOG_HIT_SCOPE_OPTIONS[^=]*=\s*\[([\s\S]*?)\];/)?.[1] ?? '';
+  assert.deepEqual([...options.matchAll(/value: '(\w+)', label: '([^']+)'/g)].map(m => [m[1], m[2]]),
+    [['all', 'All'], ['team1', 'Team 1'], ['team2', 'Team 2']]);
+  assert.doesNotMatch(source, /DraftPlanTray|DRAFT_PLAN_PIN_LIMIT|pinnedUmaIds|Pin to plan/);
 });
 
 function umaPortraitContext() {

@@ -111,8 +111,9 @@ Mirror uses eight opponents with the submitted runner's five raw stats,
 A aptitudes, Great mood, no skills and the same 2/3/2/1 strategy distribution.
 Their stamina stays fixed at the submitted value throughout the search.
 
-The toolbar opens race/condition pickers and advanced options. Build opens a
-side panel over the results; Escape closes the active picker or panel. The
+The toolbar opens race and condition pickers. The build panel stays beside the
+results and collapses to a rail; Race settings is a tab in that panel. Escape
+closes the active picker. The
 last race, conditions, build, skills and analysis options are saved in the
 Tauri store (`stamina.json`, `last-inputs-v1`) and validated on restore.
 

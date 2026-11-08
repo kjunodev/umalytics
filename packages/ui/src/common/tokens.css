@@ -60,8 +60,6 @@
   --status-win-fg: #ffffff;
   --status-loss-bg: #2a1f1a;
   --status-loss-fg: var(--accent-orange);
-  --status-unplayed-bg: #232b3c;
-  --status-unplayed-fg: var(--text-secondary);
 
   /* Live indicator */
   --status-live-bg: #13261f;
