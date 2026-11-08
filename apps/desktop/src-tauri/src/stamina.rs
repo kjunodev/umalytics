@@ -100,10 +100,12 @@ fn inout(variant: Option<&str>) -> Result<i32, String> {
     }
 }
 fn load_engine() -> Result<Engine, String> {
-    let data = GameData::load(engine_data_dir(), DataEra::current())?;
+    load_engine_from(engine_data_dir())
+}
+fn load_engine_from(data_dir: &Path) -> Result<Engine, String> {
+    let data = GameData::load(data_dir, DataEra::current())?;
     let names: Names = serde_json::from_str(
-        &std::fs::read_to_string(engine_data_dir().join("names.json"))
-            .map_err(|e| e.to_string())?,
+        &std::fs::read_to_string(data_dir.join("names.json")).map_err(|e| e.to_string())?,
     )
     .map_err(|e| e.to_string())?;
     let pool: Pool = serde_json::from_str(include_str!("../data/drafter-map-pool-global.json"))
@@ -182,7 +184,11 @@ fn load_engine() -> Result<Engine, String> {
                 "Engine course geometry missing: courseeventparam {}.",
                 c.id
             ))
-        } else if data.course_paths.get(&path).is_none() {
+        } else if !data_dir
+            .join("coursepath")
+            .join(format!("{path}.json"))
+            .is_file()
+        {
             Some(format!("Engine lane path missing: {path}."))
         } else {
             None
