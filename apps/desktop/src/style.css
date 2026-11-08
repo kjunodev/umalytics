@@ -311,7 +311,6 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; }
   .toolbar-race { grid-column: 1; grid-row: 1; }
   .condition-chips { grid-column: 2; grid-row: 1; }
   .stamina-toolbar .run { grid-column: 3; grid-row: 1; }
-  .stamina-toolbar > button:last-of-type { grid-column: 4; grid-row: 1; padding: 0; }
   .toolbar-build { grid-column: 1 / -1; grid-row: 2; }
 }
 @container desktop-content (max-width: 600px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } .heal-contributions { grid-column: 1 / -1; } }

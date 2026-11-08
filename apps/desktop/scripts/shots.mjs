@@ -332,6 +332,7 @@ try {
     check(!(await page.locator('.result-table').getAttribute('open')), 'Per-stamina table collapsed by default');
     check((await page.locator('.stamina-headline').innerText()).includes('1,070'), 'Headline uses the joint threshold');
     check(await page.locator('.joint-curve').count() === 1, 'Curve includes joint outcomes');
+    check(await page.locator('.stamina-toolbar .run').evaluate(el => parseFloat(getComputedStyle(el).paddingLeft) >= 12), 'Run button keeps its padding');
     await shot(page, `stamina-toolbar-${width}x${height}`);
     await shot(page, `stamina-results-${width}x${height}`);
     const resultTop = await page.locator('.stamina-headline').evaluate(el => el.getBoundingClientRect().top);

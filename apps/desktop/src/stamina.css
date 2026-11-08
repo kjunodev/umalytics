@@ -16,7 +16,6 @@
 .stamina-toolbar :is(.run, .cancel-run) { flex: 0 0 auto; min-height: 36px; padding: 0 16px; font-size: 13px; }
 .stamina-toolbar .run { background: var(--acc); color: var(--acc-ink); border: 0; }
 .stamina-toolbar .run:hover { filter: none; background: var(--text-link-hover); }
-.stamina-toolbar > button[aria-label="Advanced settings"] { width: 36px; height: 36px; padding: 0; font-size: 19px; }
 .stamina-toolbar .draft-toolbar-label { line-height: 1.3; }
 .draft-toolbar-label small { font-size: 11.5px; color: var(--tx3); }
 .stamina-workspace { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; align-items: start; min-width: 0; }
@@ -194,7 +193,6 @@
 .stamina-toolbar { z-index: var(--layer-popover); }
 .stamina-layout .build-drawer { z-index: var(--layer-panel); }
 .stamina-layout .stamina-results { position: relative; z-index: var(--layer-base); }
-.stamina-toolbar > button[aria-label="Race settings"] { width: 36px; height: 36px; padding: 0; font-size: 19px; }
 .default-build-prompt { color: var(--tx2); font-size: 12px; }
 .default-build-prompt button { padding: 0; border: 0; background: transparent; color: var(--acc); min-height: 28px; text-decoration: underline; }
 .stamina-layout .drawer-tabs { margin-inline: 10px; }
