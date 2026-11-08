@@ -2,6 +2,7 @@ import { DiscordName, discordNameLabel } from './DiscordName';
 import { useEffect, useState } from 'react';
 import { getSelectedPlayerContext } from '@umalytics/ui';
 import { PlayerDrawer } from './PlayerDrawer';
+import { drawerProfileLoading } from './playerDrawerPaging';
 import { DesktopTeamIcon } from './TeamIcon';
 import { BadgeChipRow } from '@umalytics/ui/lobby/BadgeChip';
 import { getCardProfile, getCardState, getPlayerDisplayRating, getTeamAverageRating, CaptainCrown } from '@umalytics/ui/lobby/TeamSection';
@@ -56,6 +57,6 @@ export function Lobby({ roster, profiles, loading, compact, scope, emptyStatus, 
         const usable = state === 'loaded'; const uma = sortTopUmasForCard(p?.allUmas ?? p?.topUmas ?? [])[0];
         return <li key={getPlayerKey(player)}><button className="compact-player-row" onClick={() => setSelected(getPlayerKey(player))} aria-label={`Open details for ${discordNameLabel(player.displayName, player.discordUsername)}`}>{usable && uma ? <BestUmaPortrait uma={uma}/> : <span className="compact-portrait-empty"/>}<span className="player-identity"><strong><DiscordName name={player.displayName} username={player.discordUsername}/></strong><small>{usable ? uma ? `${uma.name} · ${uma.matches}g` : 'No ranked Uma stats' : state === 'private' ? 'Stats are private' : state === 'loading' ? 'Loading stats…' : 'Stats unavailable'}</small></span><span className="rank num">{usable ? formatRank(p, false) : '—'}</span><span className="num">{usable ? formatRecord(p) : '—'}</span><span className="num">{usable ? formatDecimal(p?.pointsPerGame) : '—'}</span></button></li>;
       })}</ol></section>)}</div>
-    {context && <PlayerDrawer key={context.player.discordId} player={context.player} profile={profiles[context.player.discordId]} teamIcon={teamIcons[context.player.discordId]} scope={scope} onScopeChange={onScopeChange} loading={loading} onClose={() => setSelected(undefined)} onOpenMatch={onOpenMatch}/>}
+    {context && <PlayerDrawer key={context.player.discordId} player={context.player} profile={profiles[context.player.discordId]} teamIcon={teamIcons[context.player.discordId]} scope={scope} onScopeChange={onScopeChange} loading={drawerProfileLoading(loading, profiles[context.player.discordId])} onClose={() => setSelected(undefined)} onOpenMatch={onOpenMatch}/>}
   </>;
 }

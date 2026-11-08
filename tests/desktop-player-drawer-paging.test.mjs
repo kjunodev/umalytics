@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { getHistoryPageRows, getHistoryPageSlices } from '../src/playerDrawerPaging.ts';
+import fs from 'node:fs';
+import { drawerProfileLoading, getHistoryPageRows, getHistoryPageSlices } from '../apps/desktop/src/playerDrawerPaging.ts';
 
 test('eight-row UI pages request only the twenty-row API pages they touch', () => {
   assert.deepEqual(getHistoryPageSlices(1, 55), [{ apiPage: 1, start: 0, end: 8 }]);
@@ -27,4 +28,12 @@ test('empty, exact boundaries and short pages never request a surplus API page',
     const rows = Array.from({ length: Math.ceil(total / 8) }, (_, i) => getHistoryPageRows(pages, i + 1, total)).flat();
     assert.deepEqual(rows, Array.from({ length: total }, (_, i) => i));
   }
+});
+
+test('a loaded profile stays visible while other lobby profiles load', () => {
+  assert.equal(drawerProfileLoading(true, undefined), true);
+  assert.equal(drawerProfileLoading(true, { discordId: '1' }), false);
+  assert.equal(drawerProfileLoading(false, undefined), false);
+  const live = fs.readFileSync(new URL('../apps/desktop/src/Live.tsx', import.meta.url), 'utf8');
+  assert.match(live, /loading={drawerProfileLoading(loading, profiles[context.player.discordId])}/);
 });

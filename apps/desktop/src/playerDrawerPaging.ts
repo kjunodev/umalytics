@@ -21,3 +21,8 @@ export function getHistoryPageRows<T>(pages: Record<number, { matches: T[] }>, p
   if (slices.some(slice => !pages[slice.apiPage])) return [];
   return slices.flatMap(slice => pages[slice.apiPage]!.matches.slice(slice.start, slice.end));
 }
+
+// The lobby load flag covers all ten players; a player whose profile arrived is not loading.
+export function drawerProfileLoading(lobbyLoading: boolean, profile: unknown): boolean {
+  return lobbyLoading && !profile;
+}
