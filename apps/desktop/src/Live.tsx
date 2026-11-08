@@ -1,3 +1,4 @@
+import { DiscordName, discordNameLabel } from './DiscordName';
 import { useEffect, useState } from 'react';
 import { getSelectedPlayerContext } from '@umalytics/ui';
 import { PlayerDrawer } from './PlayerDrawer';
@@ -27,8 +28,8 @@ function PlayerCard({ player, profile, scope, loading, onSelect, selected, onRet
   const umas = sortTopUmasForCard(p?.allUmas ?? p?.topUmas ?? []);
   const name = profile?.displayName ?? player.displayName;
   return <li className={`arena-card player-row ${tier} ${selected ? 'is-selected' : ''}`} data-state={state}>
-    <button type="button" className="card-hit arena-card-hit" onClick={onSelect} aria-label={`Open details for ${name}`}/>
-    <div className="arena-card-name"><strong title={name}>{name}</strong><DesktopTeamIcon icon={teamIcon}/>{(player.isCaptain || player.role === 'captain') && <CaptainCrown/>}<span className="rank num">{state === 'loading' ? '…' : state === 'private' || state === 'unavailable' ? '—' : formatRank(p, false)}</span></div>
+    <button type="button" className="card-hit arena-card-hit" onClick={onSelect} aria-label={`Open details for ${discordNameLabel(name, player.discordUsername)}`}/>
+    <div className="arena-card-name"><strong><DiscordName name={name} username={player.discordUsername} onClick={onSelect}/></strong><DesktopTeamIcon icon={teamIcon}/>{(player.isCaptain || player.role === 'captain') && <CaptainCrown/>}<span className="rank num">{state === 'loading' ? '…' : state === 'private' || state === 'unavailable' ? '—' : formatRank(p, false)}</span></div>
     <div className="arena-card-meta"><span><b className="num">{formatNumber(rating)}</b> rating</span></div>
     <BadgeChipRow badges={allBadges}/>
     {state === 'loaded' ? <><div className="arena-stats compact-scouting-grid" aria-label={`${name} scouting summary`}>{[
@@ -53,7 +54,7 @@ export function Lobby({ roster, profiles, loading, compact, scope, emptyStatus, 
         if (!compact) return <PlayerCard key={getPlayerKey(player)} player={player} profile={profile} teamIcon={teamIcons[player.discordId]} scope={scope} loading={loading} selected={selected === getPlayerKey(player)} onSelect={() => setSelected(getPlayerKey(player))} onRetry={onRetry}/>;
         const state = getCardState(profile, p, loading, isDiscordSnowflake(player.discordId) ? player.discordId : undefined);
         const usable = state === 'loaded'; const uma = sortTopUmasForCard(p?.allUmas ?? p?.topUmas ?? [])[0];
-        return <li key={getPlayerKey(player)}><button className="compact-player-row" onClick={() => setSelected(getPlayerKey(player))} aria-label={`Open details for ${player.displayName}`}>{usable && uma ? <BestUmaPortrait uma={uma}/> : <span className="compact-portrait-empty"/>}<span className="player-identity"><strong>{player.displayName}</strong><small>{usable ? uma ? `${uma.name} · ${uma.matches}g` : 'No ranked Uma stats' : state === 'private' ? 'Stats are private' : state === 'loading' ? 'Loading stats…' : 'Stats unavailable'}</small></span><span className="rank num">{usable ? formatRank(p, false) : '—'}</span><span className="num">{usable ? formatRecord(p) : '—'}</span><span className="num">{usable ? formatDecimal(p?.pointsPerGame) : '—'}</span></button></li>;
+        return <li key={getPlayerKey(player)}><button className="compact-player-row" onClick={() => setSelected(getPlayerKey(player))} aria-label={`Open details for ${discordNameLabel(player.displayName, player.discordUsername)}`}>{usable && uma ? <BestUmaPortrait uma={uma}/> : <span className="compact-portrait-empty"/>}<span className="player-identity"><strong><DiscordName name={player.displayName} username={player.discordUsername}/></strong><small>{usable ? uma ? `${uma.name} · ${uma.matches}g` : 'No ranked Uma stats' : state === 'private' ? 'Stats are private' : state === 'loading' ? 'Loading stats…' : 'Stats unavailable'}</small></span><span className="rank num">{usable ? formatRank(p, false) : '—'}</span><span className="num">{usable ? formatRecord(p) : '—'}</span><span className="num">{usable ? formatDecimal(p?.pointsPerGame) : '—'}</span></button></li>;
       })}</ol></section>)}</div>
     {context && <PlayerDrawer key={`${context.player.discordId}:${scope}`} player={context.player} profile={profiles[context.player.discordId]} teamIcon={teamIcons[context.player.discordId]} scope={scope} loading={loading && !profiles[context.player.discordId]} onClose={() => setSelected(undefined)} onOpenMatch={onOpenMatch}/>}
   </>;

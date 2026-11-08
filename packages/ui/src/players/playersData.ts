@@ -93,7 +93,7 @@ export function sortLeaderboardEntries(entries: SeasonLeaderboardEntry[], sortKe
 }
 
 export function leaderboardEntryToPlayer(entry: SeasonLeaderboardEntry): PrematchPlayer {
-  return lookupPlayer(entry.userId, entry.displayName ?? entry.userId);
+  return { ...lookupPlayer(entry.userId, entry.displayName ?? entry.userId), discordUsername: entry.discordUsername };
 }
 
 export function rankTintClass(rank: number): string | undefined {

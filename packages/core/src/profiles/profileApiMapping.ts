@@ -67,6 +67,7 @@ export interface ApiLeaderboard {
 }
 
 export interface ApiLeaderboardEntry {
+  discordUsername?: string | null;
   userId?: string;
   displayName?: string | null;
   rating?: number;

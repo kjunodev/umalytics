@@ -1,3 +1,4 @@
+import { NumberField } from './NumberField';
 import { useState } from 'react';
 import { SkillPicker } from './SkillPicker';
 import { ballparkBuild, ballparkDefaults, defaultKits, roles, type PresetMemory, type Role } from './staminaPresetState';
@@ -11,7 +12,7 @@ export function StaminaPresets({ catalog, memory, onChange, build, onLoad, recen
   const update = (defaults: StaminaBuild) => onChange({ ...memory, defaults });
   return <div className="presets-content">
     <section aria-label="Ballpark builds"><h3>Ballpark builds</h3><p className="muted">Loads defaults and the role kit. Keeps your stamina; your unique starts empty.</p>
-      <div className="ballpark-actions">{roles.map((role, i) => <button type="button" key={role} onClick={() => onLoad(ballparkBuild(role, memory, build))}>Ballpark {roleNames[i]}</button>)}</div>
+      <div className="ballpark-actions ballpark-load">{roles.map((role, i) => <button type="button" key={role} aria-label={`Load ballpark ${roleNames[i]} build`} onClick={() => onLoad(ballparkBuild(role, memory, build))}>{roleNames[i]}</button>)}</div>
     </section>
     <section aria-label="Saved builds"><h3>Saved builds</h3><form className="preset-save" onSubmit={e => { e.preventDefault(); if (!name.trim() || memory.builds.length >= 100) return; onChange({ ...memory, builds: [...memory.builds, { id: crypto.randomUUID(), name: name.trim(), build: structuredClone(build) }] }); setName(''); }}>
       <label>Preset name<input aria-label="Preset name" required maxLength={80} value={name} onChange={e => setName(e.target.value)}/></label><button type="submit" disabled={!name.trim() || memory.builds.length >= 100}>Save current build</button>
@@ -34,7 +35,7 @@ export function StaminaPresets({ catalog, memory, onChange, build, onLoad, recen
       </div>}
       <small className="muted kit-source">{defaultKits.source}</small>
     </section>
-    <details className="ballpark-defaults"><summary>Ballpark defaults</summary><p className="muted">Stamina is kept from the current build.</p><div className="defaults-stats">{(['speed', 'pow', 'guts', 'wiz'] as const).map(key => <label key={key}>{({ speed: 'Speed', pow: 'Power', guts: 'Guts', wiz: 'Wit' })[key]}<input aria-label={`Default ${key}`} type="number" min={1} max={2000} required value={memory.defaults.stats[key]} onChange={e => update({ ...memory.defaults, stats: { ...memory.defaults.stats, [key]: Number(e.target.value) } })}/></label>)}</div>
+    <details className="ballpark-defaults"><summary>Ballpark defaults</summary><p className="muted">Stamina is kept from the current build.</p><div className="defaults-stats">{(['speed', 'pow', 'guts', 'wiz'] as const).map(key => <label key={key}>{({ speed: 'Speed', pow: 'Power', guts: 'Guts', wiz: 'Wit' })[key]}<NumberField aria-label={`Default ${key}`} min={1} max={2000} required value={memory.defaults.stats[key]} onChange={value => update({ ...memory.defaults, stats: { ...memory.defaults.stats, [key]: value } })}/></label>)}</div>
       <label>Mood<select aria-label="Default mood" value={memory.defaults.motivation} onChange={e => update({ ...memory.defaults, motivation: Number(e.target.value) })}>{['Awful', 'Bad', 'Normal', 'Good', 'Great'].map((name, i) => <option key={name} value={i + 1}>{name}</option>)}</select></label>
       {(['distance', 'style', 'ground'] as const).map(group => <div className={`aptitude-grid aptitude-${group}`} key={group}>{({ distance: ['Sprint', 'Mile', 'Medium', 'Long'], style: roleNames.slice(0, 4), ground: ['Turf', 'Dirt'] })[group].map((label, i) => <label key={label}>{label}<select aria-label={`Default ${label} aptitude`} value={memory.defaults[group][i]} onChange={e => { const values = [...memory.defaults[group]]; values[i] = Number(e.target.value); update({ ...memory.defaults, [group]: values }); }}>{['G', 'F', 'E', 'D', 'C', 'B', 'A', 'S'].map((grade, j) => <option key={grade} value={j + 1}>{grade}</option>)}</select></label>)}</div>)}
       <button type="button" onClick={() => update(structuredClone(ballparkDefaults))}>Reset ballpark defaults</button>

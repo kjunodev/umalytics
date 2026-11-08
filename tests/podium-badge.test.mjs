@@ -22,6 +22,28 @@ const baseProfile = (podiums, matches) => ({
   topUmas: [], bestUmas: [], allUmas: [], recentMatches: [{}]
 });
 
+test('rank, scoring and MVP tooltips include the player numbers', () => {
+  const c = badgesContext();
+  const profile = { ...baseProfile(0, 30), rank: 7, pointsPerGame: 7.25, mvpMatches: 9 };
+  const titles = Object.fromEntries(c.getNotableBadges(profile).map(b => [b.kind, b.title]));
+  assert.equal(titles.top10, 'Current-season rank #7.');
+  assert.equal(titles.eliteScoring, 'Averages 7.3 points per game over 30 games.');
+  assert.equal(titles.mvpMenace, 'MVP in 30% of games (9 of 30).');
+  const other = Object.fromEntries(c.getNotableBadges({ ...profile, rank: 19, pointsPerGame: 6.5 }).map(b => [b.kind, b.title]));
+  assert.equal(other.top25, 'Current-season rank #19.');
+  assert.equal(other.highScoring, 'Averages 6.5 points per game over 30 games.');
+});
+
+test('Underrated uses current-season stats and retains its rank, game and scoring thresholds', () => {
+  const c = badgesContext();
+  const profile = { ...baseProfile(0, 15), rank: 101, pointsPerGame: 5.5 };
+  const hasBadge = p => c.getNotableBadges(p).some(b => b.kind === 'underrated');
+  assert.equal(hasBadge({ ...profile, statsScope: 'currentSeason' }), true);
+  assert.equal(hasBadge({ ...profile, statsScope: 'allTime' }), false);
+  assert.equal(hasBadge({ ...profile, rank: null, statsScope: 'allTime' }), false);
+  for (const patch of [{ rank: 100 }, { matches: 14 }, { pointsPerGame: 5.49 }]) assert.equal(hasBadge({ ...profile, ...patch }), false);
+});
+
 test('an unknown rank (leaderboard unavailable) never earns rank-based badges like Underrated', () => {
   const c = badgesContext();
   const strong = { discordId: '1', matches: 40, pointsPerGame: 6.5, rank: null, statsPrivate: false, topUmas: [], bestUmas: [], allUmas: [] };

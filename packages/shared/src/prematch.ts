@@ -6,6 +6,7 @@ export interface PrematchPlayer {
   userId: string;
   discordId: string;
   displayName: string;
+  discordUsername?: string;
   partyId: string | null;
   partyRatingBonus: number;
   team?: TeamId;

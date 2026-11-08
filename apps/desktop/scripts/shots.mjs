@@ -147,6 +147,11 @@ try {
       return counts.join(',') === '1,5,0' && new Set(offsets).size === 1;
     });
     check(aligned, 'Stat strips align with zero, one and five badges');
+    check(await page.locator('.arena-card').nth(0).locator('.discord-name-tooltip').count() === 0, 'No name tooltip without a Discord username');
+    check(await page.locator('.arena-card').nth(1).locator('.discord-name-tooltip').count() === 0, 'No name tooltip for equal display and Discord names');
+    await tooltipOnTop(card.locator('.discord-name'), '.discord-name-tooltip', 'Discord name tooltip paints above the card hit layer and badges');
+    check(await card.locator('.arena-card-hit').getAttribute('aria-label') === 'Open details for Replay Player 3 (Discord: replay.racer)', 'Card button includes the Discord username');
+    await shot(page, 'lobby-discord-tooltip-1000x700', true);
     await tooltipOnTop(card.locator('.team-icon'), '.team-icon-tooltip', 'Card team tooltip paints above badges');
     await shot(page, 'lobby-team-tooltip-1000x700', true);
     const oneTrick = page.locator('.arena-card').nth(1).getByLabel(/^One-trick:/);
@@ -154,7 +159,10 @@ try {
     check((await oneTrick.locator('.chip-tooltip').innerText()).includes('20 of 30'), 'One-trick tooltip includes real numbers');
     await shot(page, 'lobby-badge-rows-tooltip-1000x700', true);
     await page.mouse.move(992, 8);
-    await page.getByRole('button', { name: 'Open details for Replay Player 3', exact: true }).click();
+    await card.locator('.discord-name').click();
+    await page.locator('.arena-player-drawer').waitFor();
+    check(await page.locator('.arena-player-drawer').count() === 1, 'Clicking the raised name still opens the drawer');
+    await tooltipOnTop(page.locator('.drawer-identity .discord-name'), '.discord-name-tooltip', 'Drawer title shows Discord username');
     await page.getByText('Replay Champion', { exact: true }).waitFor();
     check((await page.locator('.drawer-badges > span').allTextContents()).join('|') === 'Top 10|High scoring|Established|MVP Menace|Deep pool', 'Drawer shows all five labels in notable badge order');
     check((await page.locator('.drawer-badges > span').evaluateAll(els => els.map(el => el.className))).join('|') === 'player-tag notable-tag rank|player-tag notable-tag scoring|player-tag notable-tag sample|player-tag notable-tag scoring|player-tag notable-tag style', 'Drawer chips use badge tones');
@@ -167,6 +175,7 @@ try {
     await tooltipOnTop(page.locator('.sidebar .nav-item').first(), '.rail-tooltip', 'Rail tooltip paints above the workspace');
     await nav(page, 'Players');
     await page.locator('.table-player').first().waitFor();
+    await tooltipOnTop(page.locator('.table-player').filter({ hasText: 'Replay Player 3' }).locator('.discord-name'), '.discord-name-tooltip', 'Leaderboard names retain Discord usernames');
     await tooltipOnTop(page.locator('.leaderboard-player .team-icon').first(), '.team-icon-tooltip', 'Leaderboard team tooltip paints above adjacent rows');
     check(await page.locator('.page-header [aria-label="Stats scope"]').count() === 1, 'Players has the scope toggle');
     await page.mouse.move(992, 8);
@@ -177,6 +186,11 @@ try {
     check(await page.getByRole('heading', { name: 'Season leaderboard', exact: true }).count() === 1, 'Leaderboard remains labelled Season leaderboard');
     await page.locator('.drawer-history .recent-match-code').first().waitFor();
     await shot(page, 'players-scope-drawer-1000x700');
+    await page.locator('.drawer-history .recent-match-code').first().click();
+    await page.getByRole('group', { name: 'Match view' }).getByRole('button', { name: 'Lobby', exact: true }).click();
+    await page.waitForFunction(() => document.querySelectorAll('.arena-card[data-state=loaded]').length === 10);
+    await tooltipOnTop(page.locator('.arena-card').nth(2).locator('.discord-name'), '.discord-name-tooltip', 'History cards retain Discord usernames');
+    await shot(page, 'history-discord-tooltip-1000x700', true);
     await page.close();
   }
   for (const [width, height] of (statesOnly || usabilityOnly) ? [] : [[1280, 800], [1000, 700]]) {
@@ -291,6 +305,23 @@ try {
     if (!arenaOnly && !dataOnly) {
     await page.getByRole('button', { name: 'Stamina', exact: true }).click();
     await shot(page, `stamina-empty-${width}x${height}`);
+    check(await page.getByRole('button', { name: 'Race settings', exact: true }).count() === 0, 'Toolbar gear removed');
+    const staminaField = page.getByRole('spinbutton', { name: 'Stamina', exact: true });
+    const previousStamina = await staminaField.inputValue();
+    await staminaField.fill('');
+    check(await staminaField.inputValue() === '', 'Stamina stays empty while editing');
+    await staminaField.pressSequentially('1200');
+    await staminaField.press('Enter');
+    check(await staminaField.inputValue() === '1200', 'Clear then type 1200 commits 1200');
+    await page.waitForFunction(() => JSON.parse(localStorage.getItem('shots:stamina.json:last-inputs-v1'))?.input.build.stats.stamina === 1200);
+    await staminaField.fill('');
+    await staminaField.blur();
+    check(await staminaField.inputValue() === '1200', 'Clear then blur restores the last committed value');
+    await staminaField.fill('2001');
+    await staminaField.press('Enter');
+    check(await staminaField.inputValue() === '1200', 'Enter restores the last valid value for an invalid draft');
+    await staminaField.fill(previousStamina);
+    await staminaField.blur();
     await page.getByRole('button', { name: 'Race', exact: true }).click();
     check(await page.getByRole('group', { name: 'Track', exact: true }).getByRole('button').count() === 14, 'All 14 tracks');
     await page.getByRole('group', { name: 'Track', exact: true }).getByRole('button', { name: 'Hanshin', exact: true }).click();
@@ -301,6 +332,7 @@ try {
     check(!(await page.locator('.result-table').getAttribute('open')), 'Per-stamina table collapsed by default');
     check((await page.locator('.stamina-headline').innerText()).includes('1,070'), 'Headline uses the joint threshold');
     check(await page.locator('.joint-curve').count() === 1, 'Curve includes joint outcomes');
+    check(await page.locator('.stamina-toolbar .run').evaluate(el => parseFloat(getComputedStyle(el).paddingLeft) >= 12), 'Run button keeps its padding');
     await shot(page, `stamina-toolbar-${width}x${height}`);
     await shot(page, `stamina-results-${width}x${height}`);
     const resultTop = await page.locator('.stamina-headline').evaluate(el => el.getBoundingClientRect().top);
@@ -318,7 +350,8 @@ try {
       await page.keyboard.press('Escape');
       check(await page.getByRole('button', { name, exact: true }).evaluate(el => el === document.activeElement), `${name} restores focus`);
     }
-    await page.getByRole('button', { name: 'Race settings', exact: true }).click();
+    if (await page.getByRole('button', { name: 'Expand build panel', exact: true }).count()) await page.getByRole('button', { name: 'Expand build panel', exact: true }).click();
+    await page.getByRole('tab', { name: 'Race settings', exact: true }).click();
     const field = page.getByRole('group', { name: 'Field', exact: true });
     check(await field.getByRole('button', { name: 'Average lobby', exact: true }).getAttribute('aria-pressed') === 'true', 'Average remains the default field');
     await field.getByRole('button', { name: 'Mirror', exact: true }).click();
@@ -386,14 +419,16 @@ try {
     check(await build.evaluate(el => el.getBoundingClientRect().top >= document.querySelector('.stamina-results').getBoundingClientRect().bottom), 'Narrow full mode keeps the stacked expanded panel');
     await page.getByRole('button', { name: 'Collapse build panel', exact: true }).click();
     check(await page.getByRole('button', { name: 'Expand build panel', exact: true }).evaluate(el => el === document.activeElement), 'Stacked collapse focuses expand');
-    await page.getByRole('button', { name: 'Race settings', exact: true }).click();
-    check(await build.getByRole('tab', { name: 'Race settings', exact: true }).getAttribute('aria-selected') === 'true', 'Gear expands the collapsed panel to Race settings');
-    check(await page.getByRole('button', { name: 'Collapse build panel', exact: true }).evaluate(el => el === document.activeElement), 'Gear expansion focuses collapse');
+    if (await page.getByRole('button', { name: 'Expand build panel', exact: true }).count()) await page.getByRole('button', { name: 'Expand build panel', exact: true }).click();
+    await page.getByRole('tab', { name: 'Race settings', exact: true }).click();
+    check(await build.getByRole('tab', { name: 'Race settings', exact: true }).getAttribute('aria-selected') === 'true', 'Expanding the panel exposes the Race settings tab');
+    check(await build.getByRole('tab', { name: 'Race settings', exact: true }).evaluate(el => el === document.activeElement), 'Selecting Race settings focuses the tab');
     await page.setViewportSize({ width, height });
     await page.locator('.content').evaluate(el => { el.scrollTop = 0; });
     await page.getByRole('button', { name: /^Run (check|\d+ races)$/ }).click();
     await page.waitForFunction(() => document.querySelector('.stamina-headline.insufficient'));
-    await page.getByRole('button', { name: 'Race settings', exact: true }).click();
+    if (await page.getByRole('button', { name: 'Expand build panel', exact: true }).count()) await page.getByRole('button', { name: 'Expand build panel', exact: true }).click();
+    await page.getByRole('tab', { name: 'Race settings', exact: true }).click();
     await page.getByRole('checkbox', { name: 'Assume skills activate', exact: true }).check();
     await page.keyboard.press('Escape');
     await page.getByRole('button', { name: /^Run (check|\d+ races)$/ }).click();
@@ -430,7 +465,8 @@ try {
     await page.locator('.result-table').evaluate(el => el.scrollIntoView({ block: 'start' }));
     await shot(page, `stamina-table-${width}x${height}`);
     await page.locator('.result-table summary').click();
-    await page.getByRole('button', { name: 'Race settings', exact: true }).click();
+    if (await page.getByRole('button', { name: 'Expand build panel', exact: true }).count()) await page.getByRole('button', { name: 'Expand build panel', exact: true }).click();
+    await page.getByRole('tab', { name: 'Race settings', exact: true }).click();
     await page.getByRole('checkbox', { name: 'Assume skills activate', exact: true }).uncheck();
     await page.keyboard.press('Escape');
     await page.getByRole('complementary', { name: 'Build editor', exact: true }).getByRole('tab', { name: 'Build', exact: true }).click();
@@ -465,13 +501,15 @@ try {
     await build.getByRole('button', { name: 'Collapse build panel', exact: true }).click();
     check((await page.getByRole('button', { name: 'Race', exact: true }).innerText()).includes('Hanshin 3200'), 'Race restored');
     for (const name of ['Heavy', 'Rainy', 'Summer']) check((await page.locator('.condition-chips').innerText()).includes(name), `${name} condition restored`);
-    await page.getByRole('button', { name: 'Race settings', exact: true }).click();
+    if (await page.getByRole('button', { name: 'Expand build panel', exact: true }).count()) await page.getByRole('button', { name: 'Expand build panel', exact: true }).click();
+    await page.getByRole('tab', { name: 'Race settings', exact: true }).click();
     check(await field.getByRole('button', { name: 'Mirror', exact: true }).getAttribute('aria-pressed') === 'true', 'Field restored');
     check(!(await page.getByRole('checkbox', { name: 'Assume skills activate', exact: true }).isChecked()), 'Engine settings restored');
     check(await page.getByRole('combobox', { name: 'Mood', exact: true }).inputValue() === '4', 'Mood restored');
     await page.keyboard.press('Escape');
     // Round 2b: independent inputs, presets, targets and a real feed-shaped draft fixture.
-    await page.getByRole('button', { name: 'Race settings', exact: true }).click();
+    if (await page.getByRole('button', { name: 'Expand build panel', exact: true }).count()) await page.getByRole('button', { name: 'Expand build panel', exact: true }).click();
+    await page.getByRole('tab', { name: 'Race settings', exact: true }).click();
     await page.getByRole('group', { name: 'Target', exact: true }).getByRole('button', { name: '95%', exact: true }).click();
     await shot(page, 'stamina-target-95-' + width + 'x' + height);
     await page.keyboard.press('Escape');
@@ -492,6 +530,8 @@ try {
     await copy.getByRole('button', { name: 'Confirm delete', exact: true }).click();
     check(await build.locator('.saved-build').count() === 1, 'Duplicate and confirmed delete');
     await build.locator('.build-body').evaluate(el => { el.scrollTop = 0; });
+    check((await build.locator('.ballpark-load button').allTextContents()).join('|') === 'Front|Pace|Late|End|Runaway', 'Ballpark labels are short role names');
+    check(await build.locator('.ballpark-load button').evaluateAll(buttons => new Set(buttons.map(b => Math.round(b.getBoundingClientRect().top))).size) === 1, 'Ballpark buttons fit one row');
     await shot(page, 'stamina-presets-' + width + 'x' + height);
     await build.getByRole('button', { name: 'Edit Front kit', exact: true }).click();
     await build.getByRole('button', { name: 'Remove skill 200531', exact: true }).click();
@@ -501,14 +541,14 @@ try {
     await kit.getByRole('option', { name: 'Front Runner Straightaways ◎' }).click();
     await kit.getByRole('heading').scrollIntoViewIfNeeded();
     await shot(page, 'stamina-kit-editor-' + width + 'x' + height);
-    await build.getByRole('button', { name: 'Ballpark Front', exact: true }).click();
+    await build.getByRole('button', { name: 'Load ballpark Front build', exact: true }).click();
     check(await build.getByRole('spinbutton', { name: 'Speed', exact: true }).inputValue() === '1600', 'Ballpark stats');
     check(await build.getByRole('spinbutton', { name: 'Stamina', exact: true }).inputValue() === '1120', 'Ballpark keeps stamina');
     check(await build.locator('.skill-level').count() === 0, 'Ballpark clears user unique');
     check(await build.getByRole('button', { name: 'Remove skill 201241', exact: true }).count() === 1, 'Ballpark applies edited role kit');
     await shot(page, 'stamina-ballpark-' + width + 'x' + height);
     await build.getByRole('tab', { name: 'Presets', exact: true }).click();
-    await build.getByRole('button', { name: 'Ballpark Runaway', exact: true }).click();
+    await build.getByRole('button', { name: 'Load ballpark Runaway build', exact: true }).click();
     check(await build.getByRole('group', { name: 'Strategy', exact: true }).getByRole('button', { name: 'Runaway', exact: true }).getAttribute('aria-pressed') === 'true', 'Runaway strategy derived from skill');
     check(await build.getByRole('button', { name: 'Remove skill 202051', exact: true }).count() === 1, 'Runaway skill included');
     await shot(page, 'stamina-runaway-' + width + 'x' + height);
@@ -525,7 +565,7 @@ try {
     await build.getByRole('spinbutton', { name: 'Default speed', exact: true }).fill('1550');
     await build.getByRole('combobox', { name: 'Default mood', exact: true }).selectOption('4');
     await build.getByRole('combobox', { name: 'Default Long aptitude', exact: true }).selectOption('8');
-    await build.getByRole('button', { name: 'Ballpark Pace', exact: true }).click();
+    await build.getByRole('button', { name: 'Load ballpark Pace build', exact: true }).click();
     check(await build.getByRole('spinbutton', { name: 'Speed', exact: true }).inputValue() === '1550', 'Edited ballpark speed applied');
     await build.getByRole('tab', { name: 'Race settings', exact: true }).click();
     check(await build.getByRole('combobox', { name: 'Mood', exact: true }).inputValue() === '4', 'Edited ballpark mood applied');
@@ -638,7 +678,8 @@ try {
     await shot(page, `stamina-draft-cancelled-${width}x${height}`);
     await page.getByRole('group', { name: 'Course mode', exact: true }).getByRole('button', { name: 'Any course', exact: true }).click();
     check((await page.getByRole('button', { name: 'Race', exact: true }).innerText()).includes('Hanshin 3200'), 'Draft never overwrites any-course race');
-    await page.getByRole('button', { name: 'Race settings', exact: true }).click();
+    if (await page.getByRole('button', { name: 'Expand build panel', exact: true }).count()) await page.getByRole('button', { name: 'Expand build panel', exact: true }).click();
+    await page.getByRole('tab', { name: 'Race settings', exact: true }).click();
     check(await page.getByRole('group', { name: 'Target', exact: true }).getByRole('button', { name: '95%', exact: true }).getAttribute('aria-pressed') === 'true', 'Target remembered independently');
     }
     await page.close();
@@ -708,6 +749,10 @@ try {
   const compact = await open('lobby', 440, 860);
   check((await compact.locator('.team-heading .num').first().innerText()).replaceAll(',', '').includes('1688'), 'Compact and shared cards use the same conservative team rating');
   await shot(compact, 'compact-lobby-440x860');
+  await tooltipOnTop(compact.locator('.compact-player-row').nth(2).locator('.discord-name'), '.discord-name-tooltip', 'Compact row shows Discord username');
+  await compact.locator('.compact-player-row').nth(2).locator('.discord-name').click();
+  await compact.locator('.arena-player-drawer').waitFor();
+  await compact.keyboard.press('Escape');
   await compact.getByRole('button', { name: 'Open details for Replay Player 1', exact: true }).click();
   await compact.getByText('Replay Champion', { exact: true }).waitFor();
   check(await compact.locator('.player-drawer .iconbtn').evaluate(button => button.getBoundingClientRect().width === 40), 'Compact drawer close button uses shared styling');

@@ -45,6 +45,7 @@ interface LeaderboardLookup {
 }
 
 export interface SeasonLeaderboardEntry {
+  discordUsername?: string;
   rank: number;
   userId: string;
   displayName?: string;
@@ -383,6 +384,7 @@ export async function getSeasonLeaderboard(signal: AbortSignal): Promise<SeasonL
     entries: Array.from(lookup.ranksByDiscordId, ([userId, entry]) => ({
       rank: entry.rank, userId,
       ...(typeof entry.displayName === 'string' ? { displayName: entry.displayName } : {}),
+      ...(typeof entry.discordUsername === 'string' ? { discordUsername: entry.discordUsername } : {}),
       ...(entry.rating !== undefined ? { rating: entry.rating } : {}),
       ...(entry.rd !== undefined ? { rd: entry.rd } : {}),
       ...(entry.wins !== undefined ? { wins: entry.wins } : {}),

@@ -105,6 +105,7 @@ export function parseHistoricalMatch(value: unknown, requestedCode: string): His
     if (seen.has(id)) continue;
     seen.add(id);
     const player = { ...lookupPlayer(id, text(participant.displayDiscordUsername) ?? text(participant.displayName) ?? id),
+      discordUsername: text(participant.displayDiscordUsername),
       team, isCaptain: participant.isCaptain === true || participant.role === 'captain' };
     roster.players.push(player);
     roster.teams![team].players.push(player);
