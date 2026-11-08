@@ -31,14 +31,3 @@ export function mergeProfileScopes(previous: PlayerProfileSummary | undefined, n
       recentHistoryStatus: selected.recentHistoryStatus, historyTotal: selected.historyTotal,
       historySummary: selected.historySummary } : {}) };
 }
-
-export function recentHistoryEmptyMessage(profile: PlayerProfileSummary | undefined): string | undefined {
-  if ((profile?.recentMatches?.length ?? 0) > 0) return undefined;
-  if (profile?.recentHistoryStatus === 'private') return 'Match history is private.';
-  if (profile?.recentHistoryStatus === 'loaded') return 'No recent match history found.';
-  if (profile?.recentHistoryStatus === 'loading') return 'Loading recent match history.';
-  if (profile?.recentHistoryStatus === 'unavailable') return 'Recent match history is unavailable for this scope.';
-  if (profile?.statsPrivate) return 'Match history is private.';
-  if (!profile || profile.isPartial) return 'Loading recent match history.';
-  return 'Recent match history is unavailable for this scope.';
-}

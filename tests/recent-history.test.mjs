@@ -113,9 +113,6 @@ test('privacy denial clears history and unavailable history never claims a genui
   const denied={...profile('allTime',[]),statsPrivate:true,recentHistoryStatus:'private'}; denied.allTimeStats.recentHistoryStatus='private';
   const c=harness(), result=c.mergeProfileScopes(old,denied);
   assert.equal(result.recentMatches.length,0);
-  assert.equal(c.recentHistoryEmptyMessage(result),'Match history is private.');
-  const unavailable=profile('allTime',[]);unavailable.recentHistoryStatus='unavailable';
-  assert.match(c.recentHistoryEmptyMessage(unavailable),/unavailable/);
 });
 test('new season and another player cannot inherit previous scoped history; loaded matches render',async()=>{
   const c=harness(), old=profile('currentSeason');
@@ -154,14 +151,6 @@ test('history privacy denial also invalidates cached history in the unrequested 
   assert.equal(c.getDisplayedProfileStats(result,'currentSeason').recentMatches.length,0);
   assert.equal(result.scopeFetchedAt.currentSeason,undefined);
   assert.equal(c.mergeProfileCache({[old.discordId]:old},{[old.discordId]:next},Date.now())[old.discordId].currentSeasonStats.recentMatches.length,0);
-});
-
-test('history transport status takes precedence over hidden stats',()=>{
-  const c=harness();
-  for (const [status,message] of [['loading','Loading recent match history.'],['unavailable','Recent match history is unavailable for this scope.'],['loaded','No recent match history found.'],['private','Match history is private.']]) {
-    assert.equal(c.recentHistoryEmptyMessage({...profile('allTime',[]),statsPrivate:true,recentHistoryStatus:status}),message);
-  }
-  assert.equal(c.recentHistoryEmptyMessage(c.getDisplayedProfileStats(profile(),'currentSeason')),'Recent match history is unavailable for this scope.');
 });
 
 
