@@ -209,10 +209,11 @@ test('selected-scope requests never reconstruct hidden stats',async()=>{
 
 test('season leaderboard carries the active season display name from the one cached /api/seasons response',async()=>{
   const seasons=[{id:'S0',name:'Season 1 (Trackblazer)',active:false},{id:'S1',name:' Season 2 (Grand Concert) ',active:true}];
-  const h=apiHarness({responder:url=>url.pathname==='/api/seasons'?{body:seasons}:url.pathname==='/api/leaderboard'?{body:{entries:[{userId:'1',rating:1834,rd:123}]}}:undefined});
+  const h=apiHarness({responder:url=>url.pathname==='/api/seasons'?{body:seasons}:url.pathname==='/api/leaderboard'?{body:{entries:[{userId:'1',rating:1834,rd:123,discordUsername:'fixture.account'}]}}:undefined});
   const board=await h.c.getSeasonLeaderboard(new AbortController().signal);
   assert.equal(board.activeSeasonId,'S1');
   assert.equal(board.activeSeasonName,'Season 2 (Grand Concert)');
+  assert.equal(board.entries[0].discordUsername,'fixture.account');
   assert.deepEqual(h.calls,['/api/seasons','/api/leaderboard?season=S1'],'no extra requests to learn the season name');
 });
 

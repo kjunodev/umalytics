@@ -204,3 +204,5 @@
 .stamina-layout .build-body .toggle-row { flex-direction: row; align-items: center; }
 .stamina-layout .build-body .toggle-row input { width: 16px; min-height: 16px; height: 16px; }
 .stamina-layout .build-body .aptitude-ground { grid-template-columns: repeat(2,minmax(0,1fr)); }
+
+.stamina-layout .ballpark-load { grid-template-columns: repeat(5, auto); }

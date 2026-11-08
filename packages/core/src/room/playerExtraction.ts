@@ -192,6 +192,8 @@ function dedupePrematchPlayers(players: PrematchPlayer[]): PrematchPlayer[] {
 
 function readOptionalPlayerFields(value: Record<string, unknown>): Partial<PrematchPlayer> {
   const fields: Partial<PrematchPlayer> = {};
+  const discordUsername = readOptionalString(value.discordUsername);
+  if (discordUsername !== undefined) fields.discordUsername = discordUsername;
   // An explicit null current team means the player has left the slots.
   const team = value.team === null ? undefined :
     readOptionalTeamId(value.team) ?? readOptionalTeamId(value.finalTeam) ?? readOptionalTeamId(value.initialTeam);

@@ -6,6 +6,15 @@ import { loadModule } from './support/harness.mjs';
 const load = loadModule;
 
 const fixture = JSON.parse(fs.readFileSync(new URL('./fixtures/completed-match.json', import.meta.url)));
+
+test('historical Discord usernames come from the saved displayDiscordUsername field', () => {
+  const match = structuredClone(fixture);
+  match.report.participants[0].displayDiscordUsername = 'fixture.account';
+  match.report.participants[0].discordUsername = 'ignored.other.field';
+  const player = harness().parseHistoricalMatch(match, 'FX1A2B').roster.players[0];
+  assert.equal(player.discordUsername, 'fixture.account');
+  assert.equal(player.displayName, match.report.participants[0].displayDiscordUsername);
+});
 function harness(globals = {}) {
   const context = vm.createContext({ URL, URLSearchParams, Error, console, AbortController, setTimeout, clearTimeout,
     getUmaDisplayName: (id, name) => name, getUmaPortraitUrl: id => `portrait:${id}`, normalizeUmaOutfitId: id => id, resolveDrafterImageUrl: x => x,

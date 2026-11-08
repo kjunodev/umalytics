@@ -18,6 +18,12 @@ function playersDataContext() {
 
 const entry = (rank, userId, displayName, rating, wins, losses) => ({ rank, userId, displayName, rating, wins, losses });
 
+test('leaderboard player conversion preserves a distinct Discord username', () => {
+  const player = playersDataContext().leaderboardEntryToPlayer({ ...entry(1, '123456789012345678', 'Nickname', 1500, 10, 2), discordUsername: 'account.name' });
+  assert.equal(player.displayName, 'Nickname');
+  assert.equal(player.discordUsername, 'account.name');
+});
+
 test('classifyPlayerQuery filters by plain text', () => {
   const c = playersDataContext();
   const result = c.classifyPlayerQuery('Simon');

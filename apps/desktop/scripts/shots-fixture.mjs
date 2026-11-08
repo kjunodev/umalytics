@@ -6,7 +6,7 @@ import fixture from '../../../tests/fixtures/casual-room-replay.json' with { typ
 // These synthetic records exist only in the local screenshot harness.
 export const players = Array.from({ length: 10 }, (_, i) => ({
   userId: `fixture-${i}`, discordId: String(100000000000000301n + BigInt(i)),
-  displayName: `Replay Player ${i + 1}`, team: i < 5 ? 'team1' : 'team2', role: 'player'
+  displayName: `Replay Player ${i + 1}`, discordUsername: i === 2 ? 'replay.racer' : i === 1 ? 'Replay Player 2' : undefined, team: i < 5 ? 'team1' : 'team2', role: 'player'
 }));
 const uma = id => ({ id, name: `Fixture Uma ${id}` });
 const side = (offset, picked) => ({ pickedUmas: Array.from({ length: picked }, (_, i) => uma(String(100101 + offset + i * 100))),
@@ -37,7 +37,7 @@ export function apiResponse(url, scene) {
   if (parsed.pathname === '/api/esports/teams/fixture-team') return { team: { id: 'fixture-team', name: 'Replay Racing League', logoUrl: 'https://drafter.uma.guide/fixture-team.png', roster: players.map(p => ({ discordId: p.discordId })) } };
   if (parsed.pathname === '/api/seasons') return [{ id: 'replay-season', active: true, name: 'Replay Season' }];
   if (parsed.pathname === '/api/leaderboard') {
-    const entries = players.map((p, i) => ({ userId: p.discordId, displayName: p.displayName, rating: 1800 - i * 31, rd: 50, wins: i === 0 ? 212 : 12, losses: i === 0 ? 119 : 8 }));
+    const entries = players.map((p, i) => ({ userId: p.discordId, displayName: p.displayName, discordUsername: p.discordUsername, rating: 1800 - i * 31, rd: 50, wins: i === 0 ? 212 : 12, losses: i === 0 ? 119 : 8 }));
     entries.splice(5, 0, ...Array.from({ length: 13 }, (_, i) => ({ userId: String(100000000000001001n + BigInt(i)), displayName: `Leaderboard fixture ${i + 1}`, rating: 1675 - i, rd: 50, wins: 12, losses: 8 })));
     if (scene === 'badge-layout') return { entries: entries.filter(e => e.userId !== players[4].discordId) };
     return { entries };
@@ -52,7 +52,7 @@ export function apiResponse(url, scene) {
   if (parsed.pathname === '/api/matches/ABC123') {
     const savedSide = (offset) => ({ ...side(offset, 5), bannedMaps: [],
       pickedMaps: [{ id: `fixture-course-${offset}`, name: `Replay track ${offset + 1}`, track: `Replay track ${offset + 1}`, distance: 2400, surface: 'Turf' }] });
-    return { id: 'ABC123', status: 'completed', report: { reportedAt: '2026-10-20T12:00:00Z', participants: players,
+    return { id: 'ABC123', status: 'completed', report: { reportedAt: '2026-10-20T12:00:00Z', participants: players.map(p => ({ ...p, displayDiscordUsername: p.discordUsername ?? p.displayName })),
       draftSnapshot: { phase: 'complete', team1: savedSide(0), team2: savedSide(1),
         draftActionHistory: [0, 1].map(offset => ({ action: 'map-pick', actorTeam: `team${offset + 1}`, map: { id: `fixture-course-${offset}` } })),
         multiplayer: { team1Name: 'Replay Blue', team2Name: 'Replay Orange' },

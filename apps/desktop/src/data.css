@@ -188,3 +188,9 @@
 .drawer-badges > .style { background: var(--tone-style-bg); border-color: #4cc38a; color: var(--tone-style-fg); }
 .drawer-badges > .private { background: var(--border-default); border-color: var(--border-strong); color: var(--text-secondary); }
 .arena-drawer-banner:has(.rank-top25) .drawer-badges > .rank { background: #141D2A; border-color: var(--silver); color: var(--silver); }
+
+.discord-name { position: relative; min-width: 0; overflow-wrap: anywhere; }
+.arena-card-name .discord-name { z-index: var(--layer-control); cursor: pointer; pointer-events: auto; }
+.discord-name-tooltip { display: none; position: fixed; z-index: var(--layer-tooltip); width: max-content; padding: 7px 9px; border: 1px solid var(--line); border-radius: 7px; background: var(--s3); color: var(--tx); box-shadow: var(--shadow-overlay); font: 500 12px/1.4 var(--font-body); text-align: left; white-space: normal; overflow-wrap: anywhere; pointer-events: none; }
+.discord-name:is(:hover, :focus-within) > .discord-name-tooltip { display: block; }
+.desktop-shell .arena-card-name:has(.discord-name:hover), .drawer-identity:has(.discord-name:is(:hover, :focus-within)) { z-index: var(--layer-tooltip); }

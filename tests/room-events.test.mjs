@@ -145,9 +145,10 @@ test('initial empty assignment for either side cannot clear ranked membership',(
 });
 
 test('room nickname maps override old display names without changing account identity',()=>{
-  const {c}=roomHarness();const p={...players(1)[0],actorUserId:'actor-one',userId:'actor-one',displayName:'Original'};
+  const {c}=roomHarness();const p={...players(1)[0],actorUserId:'actor-one',userId:'actor-one',displayName:'Original',discordUsername:'original.account'};
   const result=c.normalizePrematchPlayer(p,{participantNicknames:{'actor-one':'New nickname'}});
   assert.equal(result.displayName,'New nickname');assert.equal(result.discordId,p.discordId);
+  assert.equal(result.discordUsername,'original.account');
 });
 
 test('room-state Umas keep the drafter imageUrl so the right outfit art is shown',()=>{

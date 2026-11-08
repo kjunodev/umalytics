@@ -1,3 +1,4 @@
+import { DiscordName } from './DiscordName';
 import { useEffect, useState } from 'react';
 import { useUiServices } from '@umalytics/ui';
 import type { EsportsTeamIconMap, PrematchPlayer, PlayerStatsScope } from '@umalytics/shared';
@@ -43,7 +44,7 @@ export function Players({ onOpenMatch, teamIcons, scope, onScopeChange }: { scop
       {!board && !error && <p role="status">Loading leaderboard…</p>}
       {classification.mode === 'lookup' ? <button onClick={() => setSelected(lookupPlayer(classification.id))}>Open profile</button> : <>
       <table className="quiet-table" aria-label="Season leaderboard"><thead><tr>{['Rank', 'Player', 'Rating', 'W–L', 'Win %'].map(t => <th key={t}>{t}</th>)}</tr></thead><tbody>{rows.map(e => {
-        return <tr key={e.userId} onClick={() => setSelected(leaderboardEntryToPlayer(e))}><td>#{e.rank}</td><th scope="row"><span className="leaderboard-player"><DesktopTeamIcon icon={teamIcons[e.userId]}/><button className="table-player" onClick={() => setSelected(leaderboardEntryToPlayer(e))}>{e.displayName ?? 'Player'}</button></span></th><td>{formatNumber(leaderboardDisplayRating(e))}</td><td>{formatLeaderboardRecord(e)}</td><td>{formatLeaderboardWinRate(e)}</td></tr>;
+        return <tr key={e.userId} onClick={() => setSelected(leaderboardEntryToPlayer(e))}><td>#{e.rank}</td><th scope="row"><span className="leaderboard-player"><DesktopTeamIcon icon={teamIcons[e.userId]}/><button className="table-player" onClick={() => setSelected(leaderboardEntryToPlayer(e))}><DiscordName name={e.displayName ?? 'Player'} username={e.discordUsername}/></button></span></th><td>{formatNumber(leaderboardDisplayRating(e))}</td><td>{formatLeaderboardRecord(e)}</td><td>{formatLeaderboardWinRate(e)}</td></tr>;
       })}</tbody></table>
       {!rows.length && board && <div className="data-empty"><p>No ranked players match this search.</p><button disabled={searching} onClick={() => { setError(''); setSearching(true); }}>{searching ? 'Searching…' : 'Search all players'}</button>{directory?.map(p => <button key={p.discordId} onClick={() => setSelected(p)}>{p.displayName}</button>)}</div>}
       <nav className="data-pager" aria-label="Leaderboard pages"><button aria-label="Previous players" disabled={page <= 1} onClick={() => setPage(page - 1)}>‹</button><span>Page {page} of {Math.max(1, Math.ceil(filtered.length / 20))}</span><button aria-label="Next players" disabled={page * 20 >= filtered.length} onClick={() => setPage(page + 1)}>›</button></nav>
