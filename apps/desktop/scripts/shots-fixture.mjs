@@ -8,6 +8,7 @@ export const players = Array.from({ length: 10 }, (_, i) => ({
   userId: `fixture-${i}`, discordId: String(100000000000000301n + BigInt(i)),
   displayName: `Replay Player ${i + 1}`, discordUsername: i === 2 ? 'replay.racer' : i === 1 ? 'Replay Player 2' : undefined, team: i < 5 ? 'team1' : 'team2', role: 'player'
 }));
+const longUmaIds = ['100902', '106802', '101303', '101302', '103202', '105302', '100402', '102302', '101502', '105202', '100602', '100802', '100202', '104802'];
 const uma = id => ({ id, name: `Fixture Uma ${id}` });
 const side = (offset, picked) => ({ pickedUmas: Array.from({ length: picked }, (_, i) => uma(String(100101 + offset + i * 100))),
   preBannedUmas: [uma(String(101001 + offset))], bannedUmas: [],
@@ -39,16 +40,22 @@ export function apiResponse(url, scene) {
   if (parsed.pathname === '/api/leaderboard') {
     const entries = players.map((p, i) => ({ userId: p.discordId, displayName: p.displayName, discordUsername: p.discordUsername, rating: 1800 - i * 31, rd: 50, wins: i === 0 ? 212 : 12, losses: i === 0 ? 119 : 8 }));
     entries.splice(5, 0, ...Array.from({ length: 13 }, (_, i) => ({ userId: String(100000000000001001n + BigInt(i)), displayName: `Leaderboard fixture ${i + 1}`, rating: 1675 - i, rd: 50, wins: 12, losses: 8 })));
+    if (scene === 'profile-worst') return { entries: entries.filter(e => e.userId !== players[0].discordId) };
     if (scene === 'badge-layout') return { entries: entries.filter(e => e.userId !== players[4].discordId) };
     return { entries };
   }
   if (parsed.pathname === '/api/players/directory-search') return { players: players.map(p => ({ discordId: p.discordId, discordUsername: p.displayName })) };
   if (/^\/api\/stats\/players\/\d+\/profile$/.test(parsed.pathname)) return { title: 'Replay Champion' };
-  if (/^\/api\/stats\/players\/\d+\/history$/.test(parsed.pathname)) return { total: 6, playerHistory: Array.from({ length: 6 }, (_, i) => ({
-    matchId: 'ABC123', verificationState: 'confirmed', isWinner: i % 2 === 0, pointsScored: 12 - i,
-    reportedAt: '2026-10-20T12:00:00Z', mode: 'ranked', selectedUmaId: '100101',
-    podiumPlacements: 2, isMvp: i === 0, eloDelta: i % 2 === 0 ? 12 : -8, eloPlacement: false
-  })) };
+  if (/^\/api\/stats\/players\/\d+\/history$/.test(parsed.pathname)) {
+    const total = scene.startsWith('profile-') ? (parsed.searchParams.has('season') ? 55 : 63) : 25;
+    const start = (Number(parsed.searchParams.get('page') ?? 1) - 1) * 20;
+    return { total, playerHistory: Array.from({ length: Math.min(20, total - start) }, (_, offset) => {
+      const i = start + offset;
+      return { matchId: i === 0 ? 'ABC123' : `PD${String(i).padStart(4, '0')}`, verificationState: 'confirmed', isWinner: i % 2 === 0, pointsScored: i % 15,
+        reportedAt: `2026-11-${String(7 - i % 7).padStart(2, '0')}T12:00:00Z`, mode: 'ranked', selectedUmaId: scene === 'profile-worst' ? longUmaIds[i % longUmaIds.length] : String(100101 + i % 8 * 100),
+        podiumPlacements: 2, isMvp: i % 3 === 0, eloDelta: i % 2 === 0 ? 12 : -8, eloPlacement: false };
+    }) };
+  }
   if (parsed.pathname === '/api/matches/ABC123') {
     const savedSide = (offset) => ({ ...side(offset, 5), bannedMaps: [],
       pickedMaps: [{ id: `fixture-course-${offset}`, name: `Replay track ${offset + 1}`, track: `Replay track ${offset + 1}`, distance: 2400, surface: 'Turf' }] });
@@ -60,6 +67,11 @@ export function apiResponse(url, scene) {
   }
   const player = parsed.pathname.match(/^\/api\/stats\/players\/(\d+)\/stats$/)?.[1];
   if (player) {
+    if (scene.startsWith('profile-')) {
+      const multiplier = parsed.searchParams.has('season') ? 1 : 2;
+      const entries = Array.from({ length: 14 }, (_, i) => ({ umaId: scene === 'profile-worst' ? longUmaIds[i] : i === 0 ? '100402' : String(100101 + i * 100), matches: (i >= 11 ? 2 : i === 0 ? 80 : 30 - i) * multiplier, wins: (i >= 11 ? 1 : i === 0 ? 29 : 18) * multiplier, losses: (i >= 11 ? 1 : i === 0 ? 51 : 12 - i) * multiplier, pointsScored: (i >= 11 ? 2 : i === 0 ? 80 : 30 - i) * multiplier * 8, podiumPlacements: 5, mvpMatches: 2 }));
+      return { summary: { matchesIncluded: 331 * multiplier, totalPointsScored: 2648 * multiplier, totalPodiumPlacements: 993 * multiplier, totalMvpMatches: 108 * multiplier }, umaEntries: entries };
+    }
     if (scene === 'usability') {
       const entries = Array.from({ length: 12 }, (_, i) => ({ umaId: String(100101 + i * 100), matches: i === 11 ? 2 : 20 - i, wins: i === 11 ? 1 : 10, losses: i === 11 ? 1 : 10 - i, pointsScored: (i === 11 ? 2 : 20 - i) * 7, podiumPlacements: 5, mvpMatches: 1 }));
       const games = entries.reduce((sum, entry) => sum + entry.matches, 0);

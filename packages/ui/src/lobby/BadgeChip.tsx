@@ -97,6 +97,13 @@ function BadgeChip({ badge }: { badge: NotableBadge }) {
 
 export function BadgeIcon({ kind }: { kind: NotableBadgeKind }) {
   switch (kind) {
+    case 'top10':
+    case 'top25':
+      return (
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+          <path d="M4.4 1.8h5.2v3.5a2.6 2.6 0 0 1-5.2 0V1.8ZM4.4 2.7H1.8v1.7a2.6 2.6 0 0 0 2.6 2.6M9.6 2.7h2.6v1.7a2.6 2.6 0 0 1-2.6 2.6M7 7.9v3.5M4.4 12.3h5.2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      );
     case 'mvpMenace':
       return (
         <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">

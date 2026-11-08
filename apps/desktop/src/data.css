@@ -82,29 +82,6 @@
 .arena-drawer-layer { position: fixed; inset: 0; z-index: var(--layer-dialog); font: 400 13px/1.35 var(--font-body); }
 .arena-backdrop { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: color-mix(in srgb,var(--chrome) 70%,transparent); }
 .desktop-shell .arena-player-drawer { position: absolute; top: 0; right: 0; bottom: 0; width: min(600px,100%); padding: 0; display: flex; flex-direction: column; border: 0; border-left: 1px solid var(--line); background: var(--s1); box-shadow: var(--shadow-overlay); overflow: hidden; animation: none; }
-.arena-drawer-banner { position: relative; flex-shrink: 0; display: flex; align-items: end; padding: 16px 18px; min-height: 132px; overflow: hidden; background: linear-gradient(110deg,var(--s1) 40%,var(--s3)); }
-.drawer-identity { position: relative; z-index: var(--layer-hit); min-width: 0; width: 75%; display: flex; flex-direction: column; gap: 6px; }
-.drawer-identity h2 { font: 700 26px/1.1 var(--font-display); letter-spacing: .03em; text-transform: uppercase; overflow-wrap: anywhere; }
-.drawer-identity p { font-size: 12px; }
-.drawer-banner-art { position: absolute; right: 0; top: -12px; opacity: .5; mask-image: linear-gradient(90deg,transparent,var(--bg) 35%); }
-.drawer-banner-art .best-uma-portrait { width: 190px; height: 190px; border-radius: 0; }
-.drawer-banner-art img { width: 100%; height: 100%; object-fit: cover; }
-.drawer-rank, .drawer-badges { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
-.drawer-rank { color: var(--tx2); font-size: 12px; }
-.drawer-rank .rank { padding: 1px 7px; background: var(--s3); color: var(--tx); border-radius: 5px; }
-.drawer-rank .rank-top10 { background: var(--gold); color: var(--bg); }
-.drawer-rank .rank-top25 { background: var(--silver); color: var(--bg); }
-.drawer-badges > span { padding: 3px 8px; border-radius: 5px; background: var(--s3); font-size: 11px; color: var(--tx2); }
-.arena-player-drawer .drawer-close { position: absolute; z-index: var(--layer-control); right: 12px; top: 12px; width: 40px; height: 40px; padding: 0; font-size: 24px; }
-.arena-drawer-body { overflow-y: auto; min-height: 0; display: flex; flex-direction: column; gap: 18px; padding: 16px 18px 18px; }
-.arena-player-drawer .drawer-fixed-pager { flex-shrink: 0; margin: auto 0 0; padding: 10px 18px; border-top: 1px solid var(--line); background: var(--s1); }
-.drawer-stat-strip { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); background: var(--s2); border-radius: 8px; }
-.drawer-stat-strip > div { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; }
-.drawer-stat-strip b { font: 700 20px var(--font-display); }
-.drawer-stat-strip span { color: var(--tx3); font: 600 10px var(--font-body); letter-spacing: .08em; text-transform: uppercase; }
-.low-games { margin: 8px 0 0; justify-content: space-between; }
-.low-games button { font-size: 11px; min-height: 28px; padding: 3px 8px; }
-.drawer-history-fixed { min-height: 242px; }
 .compact .compact-player-row { grid-template-columns: 30px minmax(0,1fr) 54px 58px 30px; }
 .compact-player-row .best-uma-portrait, .compact-portrait-empty { width: 30px; height: 30px; border-radius: 50%; background: var(--s3); }
 .compact-stamina-strip { display: flex; flex-direction: column; gap: 8px; flex-shrink: 0; margin: 0; padding: 10px; border: 0; border-top: 1px solid var(--line); background: var(--s1); color: var(--tx2); font: 400 12px var(--font-body); text-align: left; cursor: pointer; }
@@ -146,29 +123,6 @@
 .umas-back { margin-bottom: 10px; }
 .desktop-shell .arena-backdrop, .desktop-shell .arena-backdrop:is(:hover,:active,:focus,:focus-visible) { background: color-mix(in srgb,var(--chrome) 70%,transparent); cursor: default; outline: none; box-shadow: none; }
 .desktop-shell .arena-player-drawer { gap: 0; }
-.arena-drawer-banner { min-height: 104px; padding: 10px 18px; }
-.drawer-identity { gap: 3px; width: 82%; }
-.drawer-identity h2 { font-size: 24px; }
-.drawer-subtitle, .drawer-esports-team { display: flex; flex-wrap: wrap; gap: 5px 8px; align-items: center; font-size: 12px; min-width: 0; }
-.drawer-esports-team { color: var(--tx2); }
-.arena-drawer-banner { overflow: visible; }
-.drawer-banner-art { top: 0; height: 100%; overflow: hidden; }
-.arena-drawer-body { gap: 10px; padding: 8px 18px; }
-.arena-drawer-body .data-heading { margin-bottom: 5px; gap: 6px; }
-.drawer-stat-strip > div { padding: 3px 8px; }
-.drawer-stat-strip b { font-size: 19px; }
-.arena-player-drawer .quiet-table :is(th,td) { padding-block: 4px; }
-.arena-player-drawer .quiet-table thead th { padding-top: 0; }
-.arena-player-drawer .table-identity { min-height: 26px; }
-.arena-player-drawer .quiet-table .text-link { min-height: 24px; }
-.drawer-umas-table { min-height: 191px; }
-.drawer-history-fixed { min-height: 191px; }
-.arena-drawer-body .low-games { margin: 4px 0 0; }
-.low-games small { font-size: 11px; }
-.uma-section-pager { display: flex; align-items: center; gap: 5px; }
-.arena-player-drawer .uma-section-pager button { padding: 0; width: 26px; min-height: 26px; }
-.uma-section-pager span { font: 11px var(--font-mono); }
-.arena-player-drawer .drawer-fixed-pager { padding-block: 6px; }
 .desktop-team-icon { display: inline-flex; flex-shrink: 0; position: relative; z-index: var(--layer-control); }
 .desktop-team-icon .team-icon { width: 18px; height: 18px; }
 .desktop-team-icon img { width: 100%; height: 100%; object-fit: contain; }
@@ -187,10 +141,80 @@
 .drawer-badges > .sample { background: #13261f; border-color: #4cc38a; color: var(--tone-style-fg); }
 .drawer-badges > .style { background: var(--tone-style-bg); border-color: #4cc38a; color: var(--tone-style-fg); }
 .drawer-badges > .private { background: var(--border-default); border-color: var(--border-strong); color: var(--text-secondary); }
-.arena-drawer-banner:has(.rank-top25) .drawer-badges > .rank { background: #141D2A; border-color: var(--silver); color: var(--silver); }
+.arena-player-drawer:has(.rank-top25) .drawer-badges > .rank { background: #141D2A; border-color: var(--silver); color: var(--silver); }
 
 .discord-name { position: relative; min-width: 0; overflow-wrap: anywhere; }
 .arena-card-name .discord-name { z-index: var(--layer-control); cursor: pointer; pointer-events: auto; }
 .discord-name-tooltip { display: none; position: fixed; z-index: var(--layer-tooltip); width: max-content; padding: 7px 9px; border: 1px solid var(--line); border-radius: 7px; background: var(--s3); color: var(--tx); box-shadow: var(--shadow-overlay); font: 500 12px/1.4 var(--font-body); text-align: left; white-space: normal; overflow-wrap: anywhere; pointer-events: none; }
 .discord-name:is(:hover, :focus-within) > .discord-name-tooltip { display: block; }
 .desktop-shell .arena-card-name:has(.discord-name:hover), .drawer-identity:has(.discord-name:is(:hover, :focus-within)) { z-index: var(--layer-tooltip); }
+
+/* The profile sheet keeps its identity, tabs and footer outside the scrolling panel. */
+.arena-player-drawer { container: profile-drawer / inline-size; }
+.arena-drawer-banner { position: relative; flex-shrink: 0; display: grid; grid-template-columns: 72px minmax(0,1fr); gap: 14px; padding: 16px 58px 12px 18px; background: linear-gradient(110deg,var(--s1) 45%,var(--s3)); }
+.drawer-portrait, .drawer-portrait .best-uma-portrait { width: 72px; height: 72px; border-radius: 12px; background: var(--s3); }
+.drawer-portrait { overflow: hidden; }
+.drawer-portrait.rank-top10 { box-shadow: 0 0 0 2px var(--gold); }
+.drawer-portrait.rank-top25 { box-shadow: 0 0 0 2px var(--silver); }
+.drawer-portrait img { width: 100%; height: 100%; object-fit: cover; }
+.drawer-identity { position: relative; z-index: var(--layer-hit); min-width: 0; display: grid; align-content: center; gap: 3px; }
+.drawer-identity h2 { font: 700 26px/1.05 var(--font-display); letter-spacing: .02em; text-transform: uppercase; overflow-wrap: anywhere; }
+.drawer-subtitle, .drawer-esports-team { display: flex; align-items: center; gap: 3px 8px; min-width: 0; font-size: 12px; color: var(--tx2); }
+.drawer-subtitle { flex-wrap: wrap; overflow-wrap: anywhere; }
+.drawer-esports-team > span:last-child { min-width: 0; }
+.arena-player-drawer .drawer-close { position: absolute; z-index: var(--layer-control); right: 12px; top: 12px; width: 40px; height: 40px; padding: 0; font-size: 24px; }
+.drawer-stat-band { flex-shrink: 0; display: grid; grid-template-columns: .8fr 1fr 1.25fr .8fr .8fr .8fr; border-block: 1px solid var(--line); background: var(--s1); }
+.drawer-stat-band > div { display: grid; gap: 1px; min-width: 0; padding: 8px 8px 8px 12px; border-left: 1px solid var(--line); }
+.drawer-stat-band > div:first-child { border-left: 0; padding-left: 18px; }
+.drawer-stat-band span { color: var(--tx3); font: 600 10px var(--font-body); letter-spacing: .08em; text-transform: uppercase; }
+.drawer-stat-band b { font: 700 20px/1.1 var(--font-display); white-space: nowrap; }
+.drawer-stat-band .rank-top10 { color: var(--gold); }.drawer-stat-band .rank-top25 { color: var(--silver); }
+.drawer-badges { flex-shrink: 0; display: flex; flex-wrap: wrap; gap: 5px; padding: 10px 18px 0; }
+.drawer-badges:empty { display: none; }
+.drawer-badges > span { display: inline-flex; align-items: center; gap: 5px; min-height: 24px; padding: 0 8px 0 6px; border-radius: 5px; font-size: 11.5px; font-weight: 700; white-space: nowrap; }
+.drawer-badges svg { flex-shrink: 0; }
+.profile-drawer-tabs-row { flex-shrink: 0; display: flex; align-items: center; gap: 18px; padding: 8px 18px 0; border-bottom: 1px solid var(--line); }
+.profile-drawer-tabs { display: flex; gap: 18px; }
+.profile-drawer-tabs button { position: relative; min-height: 38px; padding: 0 2px; border: 0; border-radius: 0; background: transparent; color: var(--tx3); font-size: 14px; font-weight: 700; }
+.profile-drawer-tabs small { margin-left: 4px; color: var(--tx3); font: 500 11.5px var(--font-mono); }
+.profile-drawer-tabs [aria-selected=true] { color: var(--tx); }
+.profile-drawer-tabs [aria-selected=true]::after { content: ''; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: var(--acc); }
+.profile-drawer-tabs-row .seg { margin-left: auto; margin-bottom: 6px; flex-shrink: 0; }
+.profile-drawer-tabs-row .seg button { min-height: 26px; padding: 0 10px; font-size: 12px; }
+.arena-drawer-body { flex: 1; overflow-y: auto; min-height: 0; padding: 10px 18px 0; }
+.arena-drawer-body > p { margin-bottom: 8px; }
+.arena-player-drawer .quiet-table :is(th,td) { padding: 0 0 0 6px; }
+.arena-player-drawer .quiet-table :is(th,td):first-child { padding-left: 0; }
+.arena-player-drawer .quiet-table thead th { height: 28px; padding-bottom: 6px; }
+.arena-player-drawer .quiet-table tbody tr { height: 40px; }
+.arena-player-drawer .quiet-table tbody :is(th,td) { height: 40px; }
+.arena-player-drawer .quiet-table tbody tr:last-child :is(th,td) { border-bottom: 0; }
+.arena-player-drawer .quiet-table[aria-label] th { width: auto; }
+.arena-player-drawer .quiet-table[aria-label="Player match history"] th:nth-child(2) { text-align: left; }
+.arena-player-drawer .table-identity { font: 500 13px/1.15 var(--font-body); color: var(--tx); }
+.arena-player-drawer .quiet-table .text-link { min-height: 0; font-size: 12px; }
+.drawer-win-bar { display: block; height: 3px; margin-top: 3px; border-radius: 2px; overflow: hidden; background: var(--s3); }
+.drawer-win-bar > span { display: block; height: 100%; background: var(--acc); }
+.drawer-match-date { display: block; font: 400 11px/1.2 var(--font-body); color: var(--tx3); }
+.drawer-match-portrait { display: grid; place-items: center; flex: 0 0 22px; width: 22px; height: 22px; border-radius: 50%; background: var(--s3); overflow: hidden; font-size: 9px; }
+.drawer-match-portrait img { width: 100%; height: 100%; object-fit: cover; }
+.drawer-mvp { color: var(--gold); }
+.profile-drawer-footer { flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 50px; padding: 9px 18px; border-top: 1px solid var(--line); background: var(--s1); color: var(--tx3); font-size: 12px; }
+.profile-drawer-footer-note { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.profile-drawer-footer button { min-height: 28px; padding: 0 10px; font-size: 12px; }
+.uma-section-pager { display: flex; align-items: center; gap: 5px; flex-shrink: 0; }
+.profile-drawer-footer .uma-section-pager button { width: 28px; padding: 0; }
+.uma-section-pager span { font: 11px var(--font-mono); }
+.profile-drawer-footer .drawer-fixed-pager { flex-wrap: nowrap; gap: 4px; margin: 0; min-height: 0; }
+.profile-drawer-footer .drawer-fixed-pager button { min-width: 28px; padding: 0 6px; }
+.profile-drawer-footer .data-pager > span:last-child { margin-left: 0; }
+@container profile-drawer (width < 480px) {
+  .drawer-stat-band { grid-template-columns: repeat(3,minmax(0,1fr)); }
+  .drawer-stat-band > div:nth-child(4) { border-left: 0; padding-left: 18px; }
+  .drawer-stat-band > div:nth-child(n+4) { border-top: 1px solid var(--line); }
+  .profile-drawer-tabs-row { flex-wrap: wrap; gap: 4px 12px; }
+  .profile-drawer-tabs-row .seg { margin-left: 0; }
+  .profile-drawer-footer { padding-inline: 12px; gap: 6px; }
+  .profile-drawer-footer-note { gap: 5px; font-size: 11px; }
+  .profile-drawer-footer-note button { padding-inline: 7px; flex-shrink: 0; }
+}

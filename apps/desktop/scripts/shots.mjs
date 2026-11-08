@@ -16,6 +16,7 @@ let browser;
 let checks = 0;
 const check = (condition, message) => { assert(condition, message); checks++; };
 const failures = [];
+const drawerOnly = process.env.DESKTOP_SHOTS_SCENES === 'drawer';
 const updatesOnly = process.env.DESKTOP_SHOTS_SCENES === 'updates';
 const staminaOnly = process.env.DESKTOP_SHOTS_SCENES === 'stamina';
 const arenaOnly = process.env.DESKTOP_SHOTS_SCENES === 'arena';
@@ -113,7 +114,8 @@ try {
     check(errors.length === 0, `${name}: ${errors.join('; ')}`);
     console.log(`PASS ${name}`);
   }
-  if (updatesOnly) await (await import('./shots-updater.mjs')).runUpdateShots({ open, nav, shot, check });
+  if (drawerOnly) await (await import('./shots-player-drawer.mjs')).runPlayerDrawerShots({ open, nav, shot, check });
+  else if (updatesOnly) await (await import('./shots-updater.mjs')).runUpdateShots({ open, nav, shot, check });
   else {
   if (!staminaOnly && !arenaOnly && !dataOnly && !usabilityOnly) {
     const page = await open('lobby', 1280, 800);
@@ -195,6 +197,7 @@ try {
     await tooltipOnTop(page.locator('.drawer-identity .team-icon'), '.team-icon-tooltip', 'Drawer team tooltip paints over the stat strip');
     await shot(page, 'drawer-team-tooltip-1000x700', true);
     await page.mouse.move(992, 8);
+    await page.getByRole('tab', { name: /^Matches/ }).click();
     await page.locator('.drawer-history .recent-match-code').first().waitFor();
     await shot(page, 'drawer-five-badges-1000x700');
     await page.keyboard.press('Escape');
@@ -206,10 +209,11 @@ try {
     check(await page.locator('.page-header [aria-label="Stats scope"]').count() === 1, 'Players has the scope toggle');
     await page.mouse.move(992, 8);
     await page.getByRole('button', { name: 'Replay Player 3', exact: true }).click();
-    await page.waitForFunction(() => document.querySelector('.drawer-stat-strip')?.textContent.includes('12-8'));
+    await page.waitForFunction(() => document.querySelector('.drawer-stat-band')?.textContent.includes('12–8'));
     await page.locator('.arena-player-drawer').getByRole('button', { name: 'All-time', exact: true }).click();
-    await page.waitForFunction(() => document.querySelector('.drawer-stat-strip')?.textContent.includes('32-28'));
+    await page.waitForFunction(() => document.querySelector('.drawer-stat-band')?.textContent.includes('32–28'));
     check(await page.getByRole('heading', { name: 'Season leaderboard', exact: true }).count() === 1, 'Leaderboard remains labelled Season leaderboard');
+    await page.getByRole('tab', { name: /^Matches/ }).click();
     await page.locator('.drawer-history .recent-match-code').first().waitFor();
     await shot(page, 'players-scope-drawer-1000x700');
     await page.locator('.drawer-history .recent-match-code').first().click();
@@ -231,21 +235,24 @@ try {
     await page.getByRole('button', { name: 'Open details for Replay Player 1', exact: true }).click();
     await page.getByText('Replay Champion', { exact: true }).waitFor();
     check(await page.locator('.player-drawer .iconbtn').evaluate(button => button.getBoundingClientRect().width === 40), 'Drawer close button uses shared styling');
+    await page.getByRole('tab', { name: /^Matches/ }).click();
     await page.locator('.drawer-history .recent-match-code').first().waitFor();
-    check(await page.locator('.drawer-history .recent-match-code').count() === 5, 'Drawer loads core history pages');
+    check(await page.locator('.drawer-history .recent-match-code').count() === 8, 'Drawer loads eight history rows');
     check(await page.locator('.drawer-badges').getByText('Podium regular', { exact: true }).isVisible(), 'Drawer badges use full labels');
     await shot(page, `drawer-${width}x${height}`);
     check(await page.locator('.arena-player-drawer').evaluate(el => el.getBoundingClientRect().width === 600), 'Drawer is 600 CSS pixels');
     const pagerTop = await page.locator('.data-pager').evaluate(el => el.getBoundingClientRect().top);
-    await page.getByRole('button', { name: 'Page 2', exact: true }).click();
-    check(await page.locator('.drawer-history .recent-match-code').count() === 1, 'History page 2 has the remaining match');
+    await page.getByRole('button', { name: 'Page 4', exact: true }).click();
+    await page.waitForFunction(() => document.querySelectorAll('.drawer-history .recent-match-code').length === 1);
+    check(await page.locator('.drawer-history .recent-match-code').count() === 1, 'History page 4 has the remaining match');
     check(await page.locator('.data-pager').evaluate(el => el.getBoundingClientRect().top) === pagerTop, 'Pager stays fixed on a short history page');
     await shot(page, `drawer-page2-${width}x${height}`);
     await page.getByRole('button', { name: 'Page 1', exact: true }).click();
+    await page.getByRole('tab', { name: /^Umas/ }).click();
     await page.getByRole('button', { name: 'Show all', exact: true }).click();
     check(await page.locator('[aria-label="Player Uma stats"] tbody tr').count() === 4, 'Low-game Uma toggle reveals the fourth Uma');
     await shot(page, `drawer-low-games-${width}x${height}`);
-    await page.getByRole('button', { name: 'Hide <3 games', exact: true }).click();
+    await page.getByRole('button', { name: 'Hide', exact: true }).click();
     await page.keyboard.press('Escape');
     await nav(page, 'Draft');
     check(await page.locator('.draft-columns > *').count() === 3, 'Full draft has team / races / team panels');
@@ -262,8 +269,8 @@ try {
     await page.getByRole('button', { name: 'Search all players', exact: true }).click();
     await page.locator('.data-empty').getByRole('button', { name: 'Replay Player 1', exact: true }).click();
     await page.getByText('Replay Champion', { exact: true }).waitFor();
-    await page.waitForFunction(() => document.querySelector('.player-drawer .drawer-stat-strip')?.textContent.includes('212-119'));
-    check((await page.locator('.player-drawer .drawer-stat-strip').innerText()).includes('212-119'), 'Season leaderboard drawer uses season stats');
+    await page.waitForFunction(() => document.querySelector('.player-drawer .drawer-stat-band')?.textContent.includes('212–119'));
+    check((await page.locator('.player-drawer .drawer-stat-band').innerText()).includes('212–119'), 'Season leaderboard drawer uses season stats');
     await page.keyboard.press('Escape');
     await page.getByRole('button', { name: 'History', exact: true }).click();
     await shot(page, `history-list-${width}x${height}`);
@@ -310,7 +317,8 @@ try {
         await nav(page, 'Lobby');
         await shot(page, `lobby-large-${width}x${height}`);
         await page.getByRole('button', { name: 'Open details for Replay Player 1', exact: true }).click();
-        await page.locator('.drawer-history .recent-match-code').first().waitFor();
+        await page.getByRole('tab', { name: /^Matches/ }).click();
+    await page.locator('.drawer-history .recent-match-code').first().waitFor();
         await shot(page, `drawer-large-${width}x${height}`);
         await page.keyboard.press('Escape');
         await page.locator('.sidebar').getByRole('button', { name: 'Settings', exact: true }).click();
@@ -750,13 +758,13 @@ try {
     await privatePlayer.locator('.arena-card[data-state="private"]').waitFor();
     await privatePlayer.getByRole('button', { name: 'Open details for Replay Player 2', exact: true }).click();
     await privatePlayer.locator('.drawer-history .recent-match-code').first().waitFor();
-    check((await privatePlayer.locator('.drawer-stat-strip b').allTextContents()).every(value => value === '-'), 'Private drawer never derives stats from visible history');
+    check((await privatePlayer.locator('.drawer-stat-band b').allTextContents()).every(value => value === '—'), 'Private drawer never derives stats from visible history');
     check(await privatePlayer.locator('[aria-label="Player Uma stats"] tbody tr').count() === 0 && await privatePlayer.locator('.drawer-badges > span').count() === 0, 'Private history never creates Uma stats or badges');
-    await privatePlayer.locator('.arena-player-drawer [tabindex="0"]').first().focus();
+    await privatePlayer.getByRole('button', { name: 'Close details', exact: true }).focus();
     await privatePlayer.keyboard.press('Shift+Tab');
     check(await privatePlayer.getByRole('button', { name: 'Next page', exact: true }).evaluate(el => el === document.activeElement), 'Drawer traps reverse keyboard focus');
     await privatePlayer.keyboard.press('Tab');
-    check(await privatePlayer.locator('.arena-player-drawer [tabindex="0"]').first().evaluate(el => el === document.activeElement && getComputedStyle(el).outlineStyle !== 'none'), 'Drawer close focus is visible and trapped');
+    check(await privatePlayer.getByRole('button', { name: 'Close details', exact: true }).evaluate(el => el === document.activeElement && getComputedStyle(el).outlineStyle !== 'none'), 'Drawer close focus is visible and trapped');
     await shot(privatePlayer, `drawer-private-${width}x${height}`);
     await privatePlayer.locator('.recent-match-code').first().click();
     await privatePlayer.locator('.match-code').waitFor();
@@ -782,6 +790,7 @@ try {
   await compact.getByRole('button', { name: 'Open details for Replay Player 1', exact: true }).click();
   await compact.getByText('Replay Champion', { exact: true }).waitFor();
   check(await compact.locator('.player-drawer .iconbtn').evaluate(button => button.getBoundingClientRect().width === 40), 'Compact drawer close button uses shared styling');
+  await compact.getByRole('tab', { name: /^Matches/ }).click();
   await compact.locator('.drawer-history .recent-match-code').first().waitFor();
   check(await compact.locator('.player-drawer').evaluate(element => element.getBoundingClientRect().width === innerWidth), 'Compact drawer is full width');
   await shot(compact, 'compact-drawer-440x860');
@@ -932,6 +941,7 @@ try {
     await shot(focus, 'lobby-keyboard-focus-1000x700');
     await focus.close();
   }
+  if (!staminaOnly && !arenaOnly && !statesOnly && !dataOnly && !usabilityOnly) await (await import('./shots-player-drawer.mjs')).runPlayerDrawerShots({ open, nav, shot, check });
   if (!staminaOnly && !arenaOnly && !statesOnly && !dataOnly) await (await import('./shots-usability.mjs')).runUsabilityShots({ open, nav, shot, check });
   if (!staminaOnly && !arenaOnly && !statesOnly && !dataOnly && !usabilityOnly) await (await import('./shots-updater.mjs')).runUpdateShots({ open, nav, shot, check });
   }

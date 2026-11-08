@@ -43,7 +43,15 @@ mockIPC(async (command, args) => {
   if (command === 'plugin:window|scale_factor') return 1.25;
   if (command === 'plugin:window|set_size') { await window.__resizeShot__(args.value.toJSON().Logical); return; }
   if (command === 'start_feed') {
-    if (!['empty', 'port-in-use', 'draft-loading', 'feed-error'].includes(scene)) setTimeout(async () => { for (const message of messages) await emit('feed-message', message); window.__SHOT_CONTROL__.feedReady = true; }, 0);
+    if (!['empty', 'port-in-use', 'draft-loading', 'feed-error'].includes(scene)) setTimeout(async () => {
+      for (const original of messages) {
+        const serialized = JSON.stringify(original);
+        const message = scene === 'profile-worst' ? JSON.parse(serialized.replaceAll('Replay Player 1', 'BEWARE OF CRYPTO SCAMMER ISHI'))
+          : scene === 'profile-unlinked' ? JSON.parse(serialized.replaceAll('100000000000000301', 'unlinked')) : original;
+        await emit('feed-message', message);
+      }
+      window.__SHOT_CONTROL__.feedReady = true;
+    }, 0);
     else window.__SHOT_CONTROL__.feedReady = true;
     return { state: scene === 'empty' ? 'listening' : scene === 'port-in-use' ? 'port-in-use' : scene === 'feed-error' ? 'error' : 'connected', accepted: scene === 'empty' ? 0 : messages.length, rejected: 0 };
   }
@@ -70,6 +78,8 @@ mockIPC(async (command, args) => {
   if (command === 'plugin:http|fetch') { const rid = ++id; requests.set(rid, { url: args.clientConfig.url, body: apiResponse(args.clientConfig.url, scene) }); return rid; }
   if (command === 'plugin:http|fetch_send') {
     if (scene === 'loading' && /\/stats\?/.test(requests.get(args.rid).url)) return new Promise(() => {});
+    const failHistory = window.__SHOT_CONTROL__.failNextHistory && /\/history\?/.test(requests.get(args.rid).url);
+    if (failHistory) { window.__SHOT_CONTROL__.failNextHistory = false; throw new Error('Fixture history network failure'); }
     const fail = scene === 'profile-error' && /\/100000000000000301\/stats\?/.test(requests.get(args.rid).url);
     const privateStats = scene === 'private' && /\/100000000000000302\/stats\?/.test(requests.get(args.rid).url);
     return { status: privateStats ? 403 : fail ? 503 : 200, statusText: privateStats ? 'Forbidden' : fail ? 'Unavailable' : 'OK', url: requests.get(args.rid).url, headers: [['content-type', 'application/json']], rid: args.rid };
