@@ -21,6 +21,7 @@ import { Draft } from './Draft';
 import { RailIcon } from './RailIcon';
 import { preferences, savePreferences, liveTabs, phaseLiveTab, type LiveTab, type Page } from './preferences';
 import { loadDesktopTeamIcons } from './sessionData';
+import { profileRosterKey } from './profileRosterKey';
 
 function Logo() {
   return <svg width="24" height="24" viewBox="0 0 26 26" fill="none" aria-hidden="true"><rect x="1" y="1" width="24" height="24" rx="7" stroke="var(--accent-blue)" strokeWidth="2"/><path d="M8 17V9m5 8v-5m5 5v-8" stroke="var(--accent-orange)" strokeWidth="2.2" strokeLinecap="round"/></svg>;
@@ -61,7 +62,7 @@ export function App() {
   const compact = compactMode || narrow;
   const displayedPage = compact ? 'Live' : page;
   const profileRoster = room.current.state.roster ?? room.current.lastState?.roster;
-  const rosterKey = JSON.stringify([room.current.state.matchCode ?? room.current.lastState?.matchCode, profileRoster?.players]);
+  const rosterKey = profileRosterKey(room.current.state.matchCode ?? room.current.lastState?.matchCode, profileRoster);
   const feedLabel = status?.state === 'port-in-use' ? 'Port 38917 in use' : status?.state === 'error' ? 'Feed unavailable' :
     status?.state === 'connected' ? 'Live' : status?.state === 'disconnected' ? 'Disconnected' : 'Waiting for Uma Drafter';
   const feedBlocked = status?.state === 'port-in-use';

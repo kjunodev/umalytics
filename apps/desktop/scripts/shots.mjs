@@ -115,6 +115,32 @@ try {
   }
   if (updatesOnly) await (await import('./shots-updater.mjs')).runUpdateShots({ open, nav, shot, check });
   else {
+  if (!staminaOnly && !arenaOnly && !dataOnly && !usabilityOnly) {
+    const page = await open('lobby', 1280, 800);
+    await page.waitForFunction(() => document.querySelectorAll('.arena-card[data-state=loaded]').length === 10);
+    const initialLoads = await page.evaluate(() => window.__SHOT_CONTROL__.profileLoads);
+    await page.evaluate(async () => {
+      const c = window.__SHOT_CONTROL__, message = structuredClone(c.messages.at(-1));
+      message.event.version = 1000;
+      message.event.state.multiplayer.rankedQueueRoster[0].isCaptain = true;
+      await c.emit('feed-message', message);
+    });
+    await page.locator('.team-1 .arena-card').first().getByLabel('Captain', { exact: true }).waitFor();
+    await page.evaluate(async () => {
+      const c = window.__SHOT_CONTROL__, message = structuredClone(c.messages.at(-1));
+      message.event.version = 1001;
+      const players = message.event.state.multiplayer.rankedQueueRoster;
+      players[0].team = 'team2'; players[0].isCaptain = true; players[5].team = 'team1';
+      await c.emit('feed-message', message);
+    });
+    await page.locator('.team-2 .arena-card').filter({ hasText: 'Replay Player 1' }).getByLabel('Captain', { exact: true }).waitFor();
+    check(await page.locator('.team-1 .arena-card').filter({ hasText: 'Replay Player 6' }).count() === 1, 'Team changes update the displayed roster');
+    const finalLoads = await page.evaluate(() => window.__SHOT_CONTROL__.profileLoads);
+    console.log(`PROFILE_METADATA initial_loads=${initialLoads} final_loads=${finalLoads}`);
+    check(finalLoads === initialLoads, 'Captain and team changes do not reload profiles');
+    await shot(page, 'lobby-metadata-without-profile-reload');
+    await page.close();
+  }
   async function tooltipOnTop(owner, tooltipSelector, label) {
     await owner.page().mouse.move(owner.page().viewportSize().width - 8, 8);
     await owner.hover();
