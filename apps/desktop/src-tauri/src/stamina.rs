@@ -244,8 +244,8 @@ fn load_engine_from(data_dir: &Path) -> Result<Engine, String> {
             }
         }
     }
-    let local_skill_data = skill_data::enrich(&mut skills);
-    let (local_skill_path, local_skill_count, local_icon_count) = skill_data::status();
+    let (local_skill_data, local_skill_path, local_skill_count, local_icon_count) =
+        skill_data::enrich(&mut skills);
     skills.sort_by_key(|s| (s.name.clone(), s.id));
     Ok(Engine {
         data,
