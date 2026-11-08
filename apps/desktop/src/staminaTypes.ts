@@ -19,9 +19,6 @@ export type StaminaField = 'pacemaker' | 'average_lobby' | 'mirror';
 export interface StaminaInput {
   request_id: string; target: 90 | 95 | 99; build: StaminaBuild; race: RaceSelection; field: StaminaField; seeds: number | null; assume_skills_activate: boolean; rushed: boolean; spot_struggle: boolean; dueling: boolean; lane_movement: boolean;
 }
-export interface StaminaRacesInput {
-  request_id: string; target: 90 | 95 | 99; build: StaminaBuild; races: RaceSelection[]; field: StaminaField; seeds: number | null; assume_skills_activate: boolean; rushed: boolean; spot_struggle: boolean; dueling: boolean; lane_movement: boolean;
-}
 export interface StaminaRates {
   joint_percent: number;
   survival_percent: number; full_spurt_percent: number; full_spurt_at_entry_percent: number; avg_min_hp: number;
