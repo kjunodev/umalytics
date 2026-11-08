@@ -372,11 +372,3 @@ export function getRosterPlayersForHitScope(roster: PrematchRoster, hitScope: Um
 
   return getDraftRosterPlayersForTeam(roster, hitScope);
 }
-
-export function getHitScopeLabel(hitScope: UmaCatalogHitScope): string {
-  if (hitScope === 'all') {
-    return 'All';
-  }
-
-  return hitScope === 'team1' ? 'Team 1' : 'Team 2';
-}
