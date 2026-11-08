@@ -1,7 +1,56 @@
 import test from './support/clock-test.mjs';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
+import { createHash } from 'node:crypto';
 import { tick, waitUntil, players, roster, apiHarness, backgroundHarness, summaryFor } from './support/helpers.mjs';
+
+test('ten concurrent player loads coalesce queued publications and preserve the final snapshot', async () => {
+  const h = backgroundHarness();
+  const requests = [];
+  const summaries = {};
+  h.c.fetchPlayerProfileSummaries = async (players, options) => {
+    await Promise.all(players.map(async player => {
+      await options.onStart(player);
+      await options.onStage(player, 'Seasonal stats');
+      requests.push(`/api/stats/players/${player.discordId}/stats?scope=${options.scope}`);
+      const summary = summaryFor(player, { fetchedAt: h.now, matches: 40,
+        currentSeasonStats: { matches: 40 }, allTimeStats: { matches: 40 } });
+      summaries[player.discordId] = summary;
+      await options.onProgress(summary);
+      await options.onSummary(summary);
+    }));
+    return summaries;
+  };
+  await h.c.enrichRosterProfiles(roster('ROOM01', 10));
+  assert.deepEqual(requests, players(10).map(p => `/api/stats/players/${p.discordId}/stats?scope=currentSeason`));
+  const snapshot = h.snapshots.at(-1);
+  for (const player of players(10)) {
+    assert.equal(snapshot.profiles[player.discordId].matches, 40);
+    assert.equal(snapshot.profiles[player.discordId].fetchedAt, h.now);
+  }
+  assert.deepEqual(snapshot.loadingDiscordIds, []);
+  const digest = createHash('sha256').update(JSON.stringify(snapshot)).digest('hex');
+  assert.equal(digest, 'e9b1b96ddcbe974b27f845ccf37f41c755084f6e5dbd19efe854f8b6ec4c8f48');
+  console.log(`TEN_PLAYER_LOAD writes=${h.snapshots.length} requests=${requests.length} snapshot_sha256=${digest}`);
+  assert(h.snapshots.length <= 8, `queued publications should be shared: ${h.snapshots.length} writes`);
+});
+
+test('a stale publication already queued behind storage cannot write', async () => {
+  const h = backgroundHarness();
+  let release;
+  h.c.storageGate = new Promise(resolve => { release = resolve; });
+  vm.runInContext('profileWrites = storageGate;', h.c);
+  const old = h.c.enrichRosterProfiles(roster('OLD', 10));
+  await tick();
+  const fresh = h.c.enrichRosterProfiles(roster('NEW', 10));
+  await tick();
+  release();
+  await waitUntil(() => h.fetches.length === 2);
+  for (const fetch of h.fetches) fetch.gate.resolve();
+  await Promise.all([old, fresh]);
+  assert(h.snapshots.length > 0);
+  assert(h.snapshots.every(snapshot => snapshot.matchCode === 'NEW'));
+});
 
 test('scout window opens before profiles resolve and rapid clicks create one window',async()=>{
   const h=backgroundHarness();await Promise.all([h.c.openScoutWindow(),h.c.openScoutWindow()]);

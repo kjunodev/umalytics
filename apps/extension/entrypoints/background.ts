@@ -419,12 +419,16 @@ async function performRosterEnrichment(
   const missingPlayers = roster.players.filter((player) => missingDiscordIds.includes(player.discordId));
   const profilesByDiscordId: Record<string, PlayerProfileSummary> = { ...retainedProfiles };
   const profileStates = buildProfileLoadStates(retainedProfiles, missingPlayers, now);
+  let queuedPublish: Promise<void> | undefined;
   const publish = () => {
+    if (queuedPublish !== undefined) return queuedPublish;
     // Serialize writes and check generation at commit time, including the initial queued snapshot.
     const write = profileWrites.then(async () => {
+      queuedPublish = undefined;
       if (signal.aborted || runId !== enrichmentRunId) return;
       await writeProfileSnapshot(roster.matchCode, profilesByDiscordId, profileStates, runId, now);
     });
+    queuedPublish = write;
     profileWrites = write.catch(reportEnrichmentError);
     return write;
   };
