@@ -25,6 +25,25 @@ fn engine_data_dir() -> &'static Path {
 struct Names {
     track: HashMap<i32, String>,
     skill: HashMap<i32, Vec<serde_json::Value>>,
+    chara: HashMap<i32, String>,
+    card: HashMap<i32, CardNames>,
+}
+#[derive(Deserialize)]
+struct CardNames {
+    title: String,
+    chara_id: i32,
+    unique_skill_id: i32,
+    _default_stars: serde::de::IgnoredAny,
+    sprint: u8,
+    mile: u8,
+    medium: u8,
+    long: u8,
+    front: u8,
+    pace: u8,
+    late: u8,
+    end: u8,
+    turf: u8,
+    dirt: u8,
 }
 #[derive(Deserialize)]
 struct Pool {
@@ -65,9 +84,24 @@ pub struct Skill {
     icon_path: Option<String>,
 }
 #[derive(Clone, Serialize)]
+struct UmaAptitudes {
+    distance: [u8; 4],
+    style: [u8; 4],
+    ground: [u8; 2],
+}
+#[derive(Clone, Serialize)]
+struct Uma {
+    card_id: i32,
+    name: String,
+    title: String,
+    unique_skill_id: i32,
+    aptitudes: UmaAptitudes,
+}
+#[derive(Clone, Serialize)]
 pub struct Catalog {
     courses: Vec<Course>,
     skills: Vec<Skill>,
+    umas: Vec<Uma>,
     local_skill_data: bool,
     local_skill_path: String,
     local_skill_count: usize,
@@ -76,6 +110,31 @@ pub struct Catalog {
 struct Engine {
     data: GameData,
     catalog: Catalog,
+}
+
+fn catalog_umas(names: &Names, data: &GameData) -> Vec<Uma> {
+    let mut umas: Vec<_> = names
+        .card
+        .iter()
+        .filter_map(|(&card_id, card)| {
+            if !data.skills.contains_key(&card.unique_skill_id) {
+                return None;
+            }
+            Some(Uma {
+                card_id,
+                name: names.chara.get(&card.chara_id)?.clone(),
+                title: card.title.clone(),
+                unique_skill_id: card.unique_skill_id,
+                aptitudes: UmaAptitudes {
+                    distance: [card.sprint, card.mile, card.medium, card.long],
+                    style: [card.front, card.pace, card.late, card.end],
+                    ground: [card.turf, card.dirt],
+                },
+            })
+        })
+        .collect();
+    umas.sort_by(|a, b| (&a.name, &a.title, a.card_id).cmp(&(&b.name, &b.title, b.card_id)));
+    umas
 }
 
 fn guarded<T>(f: impl FnOnce() -> Result<T, String>) -> Result<T, String> {
@@ -247,11 +306,13 @@ fn load_engine_from(data_dir: &Path) -> Result<Engine, String> {
     let (local_skill_data, local_skill_path, local_skill_count, local_icon_count) =
         skill_data::enrich(&mut skills);
     skills.sort_by_key(|s| (s.name.clone(), s.id));
+    let umas = catalog_umas(&names, &data);
     Ok(Engine {
         data,
         catalog: Catalog {
             courses,
             skills,
+            umas,
             local_skill_data,
             local_skill_path,
             local_skill_count,

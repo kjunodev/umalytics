@@ -1,6 +1,48 @@
 use super::*;
 
 #[test]
+fn uma_catalog_contains_card_names_uniques_and_base_aptitudes() {
+    let catalog = &engine().unwrap().catalog;
+    let special_week = catalog
+        .umas
+        .iter()
+        .find(|uma| uma.card_id == 100101)
+        .unwrap();
+    assert_eq!(special_week.name, "Special Week");
+    assert_eq!(special_week.title, "[Special Dreamer]");
+    assert_eq!(special_week.unique_skill_id, 100011);
+    assert_eq!(special_week.aptitudes.distance, [2, 5, 7, 7]);
+    assert_eq!(special_week.aptitudes.style, [1, 7, 7, 5]);
+    assert_eq!(special_week.aptitudes.ground, [7, 1]);
+
+    let ines = catalog
+        .umas
+        .iter()
+        .find(|uma| uma.card_id == 103102)
+        .unwrap();
+    assert_eq!(ines.name, "Ines Fujin");
+    assert_eq!(ines.title, "[Melt Your Heart]");
+    assert_eq!(ines.unique_skill_id, 110311);
+    assert!(catalog.skills.iter().any(|skill| skill.id == 110311));
+    assert!(catalog
+        .umas
+        .windows(2)
+        .all(|pair| { (&pair[0].name, &pair[0].title) <= (&pair[1].name, &pair[1].title) }));
+}
+
+#[test]
+fn uma_catalog_skips_cards_with_unknown_uniques() {
+    let mut names: Names = serde_json::from_str(
+        &std::fs::read_to_string(engine_data_dir().join("names.json")).unwrap(),
+    )
+    .unwrap();
+    names.card.get_mut(&100101).unwrap().unique_skill_id = -1;
+    let umas = catalog_umas(&names, &engine().unwrap().data);
+    assert!(!umas.iter().any(|uma| uma.card_id == 100101));
+    assert!(umas.iter().any(|uma| uma.card_id == 103102));
+}
+
+#[test]
 fn bundled_role_kits_only_reference_catalog_skills() {
     let e = engine().unwrap();
     let kits: serde_json::Value =
