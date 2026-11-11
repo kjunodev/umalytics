@@ -4,7 +4,14 @@ export interface Course {
   race_id: number; grade: number; time: number; month: number; instance_reason: string; unavailable_reason: string | null;
 }
 export interface CatalogSkill { id: number; name: string; hp_recovery: boolean; rarity: 'white' | 'gold' | 'unique'; icon_path: string | null }
-export interface Catalog { courses: Course[]; skills: CatalogSkill[]; local_skill_data: boolean; local_skill_path?: string; local_skill_count?: number; local_icon_count?: number; engine_data_version?: string }
+export interface CatalogUma {
+  card_id: number;
+  name: string;
+  title: string;
+  unique_skill_id: number;
+  aptitudes: Pick<StaminaBuild, 'distance' | 'style' | 'ground'>;
+}
+export interface Catalog { courses: Course[]; skills: CatalogSkill[]; umas: CatalogUma[]; local_skill_data: boolean; local_skill_path?: string; local_skill_count?: number; local_icon_count?: number; engine_data_version?: string }
 export interface StaminaBuild {
   running_style: number;
   stats: { speed: number; stamina: number; pow: number; guts: number; wiz: number };
@@ -18,6 +25,13 @@ export interface RaceSelection { map_id: string; ground_condition: number; weath
 export type StaminaField = 'pacemaker' | 'average_lobby' | 'mirror';
 export interface StaminaInput {
   request_id: string; target: 90 | 95 | 99; build: StaminaBuild; race: RaceSelection; field: StaminaField; seeds: number | null; assume_skills_activate: boolean; rushed: boolean; spot_struggle: boolean; dueling: boolean; lane_movement: boolean;
+}
+export interface StaminaEditorBuild extends StaminaBuild { umaCardId?: number }
+export interface StaminaEditorInput extends StaminaInput { build: StaminaEditorBuild }
+
+export function staminaEngineInput(input: StaminaEditorInput): StaminaInput {
+  const { umaCardId: _umaCardId, ...build } = input.build;
+  return { ...input, build };
 }
 export interface StaminaRates {
   joint_percent: number;

@@ -1,15 +1,24 @@
 import { load } from '@tauri-apps/plugin-store';
-import { defaultStaminaInput, type Catalog, type StaminaInput } from './staminaTypes';
+import { defaultStaminaInput, type Catalog, type CatalogUma, type StaminaEditorBuild, type StaminaEditorInput, type StaminaInput } from './staminaTypes';
 import type { CourseChoices } from './staminaDraft';
 
 export type BuildTab = 'build' | 'presets' | 'race-settings';
-export interface StaminaMemory { mechanicsDefaults?: number; input: StaminaInput; draftInput?: StaminaInput; recent: number[]; buildCollapsed: boolean; buildTab?: BuildTab; buildCustomized?: boolean; courseChoices?: CourseChoices }
+export interface StaminaMemory { mechanicsDefaults?: number; input: StaminaEditorInput; draftInput?: StaminaEditorInput; recent: number[]; buildCollapsed: boolean; buildTab?: BuildTab; buildCustomized?: boolean; courseChoices?: CourseChoices }
 const object = (value: unknown): Record<string, unknown> => value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 const integer = (value: unknown, low: number, high: number): value is number => typeof value === 'number' && Number.isInteger(value) && value >= low && value <= high;
 
+export function selectUma(build: StaminaEditorBuild, uma: CatalogUma | undefined, catalog: Catalog): StaminaEditorBuild {
+  const uniqueIds = new Set(catalog.skills.filter(skill => skill.rarity === 'unique').map(skill => skill.id));
+  for (const card of catalog.umas) uniqueIds.add(card.unique_skill_id);
+  const previous = build.skills.find(skill => skill.id === uma?.unique_skill_id) ?? build.skills.find(skill => uniqueIds.has(skill.id));
+  const ordinary = build.skills.filter(skill => !uniqueIds.has(skill.id) && skill.id !== uma?.unique_skill_id);
+  const skills = uma ? [...ordinary.slice(0, 99), { id: uma.unique_skill_id, level: previous?.level ?? 4 }] : ordinary;
+  return { ...build, umaCardId: uma?.card_id, skills };
+}
+
 export function restoreStaminaMemory(value: unknown, catalog: Catalog, defaultTarget: StaminaInput['target'] = 90): StaminaMemory {
   const saved = object(value), raw = object(saved.input), race = object(raw.race), build = object(raw.build);
-  const input = structuredClone(defaultStaminaInput);
+  const input: StaminaEditorInput = structuredClone(defaultStaminaInput);
   input.target = defaultTarget;
   if (catalog.courses.some(c => c.id === race.map_id)) input.race.map_id = race.map_id as string;
   for (const key of ['ground_condition', 'weather', 'season'] as const) if (integer(race[key], 1, 4)) input.race[key] = race[key];
@@ -21,13 +30,23 @@ export function restoreStaminaMemory(value: unknown, catalog: Catalog, defaultTa
     const values = build[key];
     if (Array.isArray(values) && values.length === input.build[key].length && values.every(v => integer(v, 1, 8))) values.forEach((grade: number, i: number) => { input.build[key][i] = grade; });
   }
+  const selectedUma = catalog.umas?.find(uma => uma.card_id === build.umaCardId);
   const ids = new Set<number>();
   if (Array.isArray(build.skills)) for (const entry of build.skills.slice(0, 100)) {
     const skill = object(entry), known = catalog.skills.find(s => s.id === skill.id);
     if (known && !ids.has(known.id)) {
       ids.add(known.id);
-      input.build.skills.push({ id: known.id, level: known.rarity === 'unique' && integer(skill.level, 1, 6) ? skill.level : 1 });
+      const isSelectedUnique = known.id === selectedUma?.unique_skill_id;
+      const level = (isSelectedUnique || known.rarity === 'unique') && integer(skill.level, 1, 6) ? skill.level : isSelectedUnique ? 4 : 1;
+      input.build.skills.push({ id: known.id, level });
     }
+  }
+  if (build.umaCardId !== undefined) {
+    input.build = selectUma(input.build, selectedUma, catalog);
+  } else {
+    const uniques = input.build.skills.filter(skill => catalog.skills.find(meta => meta.id === skill.id)?.rarity === 'unique');
+    const candidates = uniques.length === 1 ? catalog.umas?.filter(uma => uma.unique_skill_id === uniques[0]!.id) : undefined;
+    if (candidates?.length === 1) input.build.umaCardId = candidates[0]!.card_id;
   }
   if (['average_lobby', 'mirror', 'pacemaker'].includes(String(raw.field))) input.field = raw.field as StaminaInput['field'];
   if (raw.target === 90 || raw.target === 95 || raw.target === 99) input.target = raw.target;

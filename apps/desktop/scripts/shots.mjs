@@ -429,9 +429,40 @@ try {
       await build.locator('.skill-chip img').evaluate(img => img.decode());
       check(await build.locator('.skill-chip img').evaluate(img => img.naturalWidth > 0), 'External local icon loads');
     }
-    await build.getByRole('button', { name: '+ Add skill', exact: true }).last().click();
-    await search.fill('Unique'); await build.getByRole('listbox', { name: 'Matching skills' }).getByRole('option').click();
-    await build.getByRole('combobox', { name: 'Replay Unique level', exact: true }).selectOption('6');
+    const umaTrigger = build.locator('.stamina-uma-trigger');
+    const umaSearch = build.getByRole('combobox', { name: 'Search Umas', exact: true });
+    const baseAptitudes = build.getByRole('button', { name: 'Use base aptitudes', exact: true });
+    const inesLevel = build.getByRole('combobox', { name: 'Fresh☆Parlor level', exact: true });
+    const umaShot = async state => {
+      await build.locator('.build-body').evaluate(el => { el.scrollTop = 0; });
+      await shot(page, `stamina-uma-${state}-${width}x${height}`);
+    };
+    await umaTrigger.click();
+    await umaSearch.fill('ins fjn');
+    check(await build.getByRole('option', { name: 'Ines Fujin [Melt Your Heart]', exact: true }).count() === 1, 'Uma search accepts a fuzzy subsequence');
+    await umaShot('search');
+    await umaSearch.press('Enter');
+    check(await inesLevel.inputValue() === '4', 'An Uma starts with unique level 4');
+    check(await build.getByRole('combobox', { name: 'Long aptitude', exact: true }).inputValue() === '8', 'Selecting an Uma leaves aptitudes alone');
+    await umaShot('selected');
+    await baseAptitudes.click();
+    check(await build.getByRole('combobox', { name: 'Long aptitude', exact: true }).inputValue() === '5', 'Base distance aptitude applied');
+    check(await build.getByRole('combobox', { name: 'Pace aptitude', exact: true }).inputValue() === '5', 'Base strategy aptitude applied');
+    check(await build.getByRole('combobox', { name: 'Dirt aptitude', exact: true }).inputValue() === '1', 'Base ground aptitude applied');
+    await umaShot('base-aptitudes');
+    await umaTrigger.click();
+    await build.getByRole('option', { name: 'No Uma', exact: true }).click();
+    check(await inesLevel.count() === 0 && await baseAptitudes.isDisabled(), 'No Uma clears the unique and disables base aptitudes');
+    await umaShot('none');
+    await umaTrigger.click();
+    await umaSearch.fill('clippety');
+    await umaSearch.press('Enter');
+    await umaShot('long-name');
+    await umaTrigger.click();
+    await umaSearch.fill('Melt Your Heart');
+    await umaSearch.press('Enter');
+    await inesLevel.selectOption('6');
+    await build.getByRole('combobox', { name: 'Long aptitude', exact: true }).selectOption('8');
     check(await build.locator('.skill-level').count() === 1, 'Only unique has a level control');
     await build.getByRole('button', { name: '+ Add skill', exact: true }).first().click();
     await search.fill('Straightaways ◎'); check(await build.getByRole('listbox', { name: 'Matching skills' }).getByRole('option').count() === 1, 'Double circle skill visible without source metadata');
@@ -530,7 +561,7 @@ try {
     await page.getByRole('complementary', { name: 'Build editor', exact: true }).getByRole('tab', { name: 'Build', exact: true }).click();
     check(await build.getByRole('spinbutton', { name: 'Stamina', exact: true }).inputValue() === '1120', 'Stats restored');
     check(await build.getByRole('combobox', { name: 'Long aptitude', exact: true }).inputValue() === '8', 'Aptitudes restored');
-    check(await build.getByRole('combobox', { name: 'Replay Unique level', exact: true }).inputValue() === '6', 'Skills and unique levels restored');
+    check(await inesLevel.inputValue() === '6' && (await umaTrigger.innerText()).includes('Ines Fujin'), 'Uma and unique level restored');
     check(await build.getByRole('checkbox', { name: 'Show all regions', exact: true }).count() === 0, 'Region filter removed');
     await build.getByRole('button', { name: 'Collapse build panel', exact: true }).click();
     check((await page.getByRole('button', { name: 'Race', exact: true }).innerText()).includes('Hanshin 3200'), 'Race restored');
@@ -578,7 +609,7 @@ try {
     await build.getByRole('button', { name: 'Load ballpark Front build', exact: true }).click();
     check(await build.getByRole('spinbutton', { name: 'Speed', exact: true }).inputValue() === '1600', 'Ballpark stats');
     check(await build.getByRole('spinbutton', { name: 'Stamina', exact: true }).inputValue() === '1120', 'Ballpark keeps stamina');
-    check(await build.locator('.skill-level').count() === 0, 'Ballpark clears user unique');
+    check(await inesLevel.inputValue() === '6' && (await umaTrigger.innerText()).includes('Ines Fujin'), 'Ballpark keeps the Uma and unique level');
     check(await build.getByRole('button', { name: 'Remove skill 201241', exact: true }).count() === 1, 'Ballpark applies edited role kit');
     await shot(page, 'stamina-ballpark-' + width + 'x' + height);
     await build.getByRole('tab', { name: 'Presets', exact: true }).click();
@@ -593,7 +624,7 @@ try {
     await page.keyboard.press('Escape');
     await build.getByRole('tab', { name: 'Presets', exact: true }).click();
     await build.getByRole('button', { name: 'Load Saved front', exact: true }).click();
-    check(await build.getByRole('combobox', { name: 'Replay Unique level', exact: true }).inputValue() === '6', 'Preset load restores user unique');
+    check(await inesLevel.inputValue() === '6' && (await umaTrigger.innerText()).includes('Ines Fujin'), 'Preset load restores Uma and unique level');
     await build.getByRole('tab', { name: 'Presets', exact: true }).click();
     await build.locator('.ballpark-defaults summary').click();
     await build.getByRole('spinbutton', { name: 'Default speed', exact: true }).fill('1550');
@@ -719,6 +750,31 @@ try {
     await page.close();
   }
   if (!arenaOnly && !statesOnly && !dataOnly && !usabilityOnly) {
+  const narrowEditor = await open('lobby', 440, 860, { compactThreshold: 440 });
+  await nav(narrowEditor, 'Stamina');
+  await narrowEditor.locator('.stamina-uma-trigger').click();
+  await narrowEditor.getByRole('combobox', { name: 'Search Umas' }).fill('clippety');
+  await narrowEditor.getByRole('option', { name: 'Matikanetannhauser [Clippety-Tippety-Clop]' }).click();
+  await shot(narrowEditor, 'stamina-uma-long-name-440x860');
+  await narrowEditor.close();
+  const compactUma = await open('lobby', 1000, 700);
+  await nav(compactUma, 'Stamina');
+  await compactUma.evaluate(async () => { const c = window.__SHOT_CONTROL__; await c.emit('feed-message', c.draftMessage(true)); });
+  await compactUma.getByRole('group', { name: 'Course mode' }).getByRole('button', { name: 'Draft', exact: true }).click();
+  await compactUma.locator('.stamina-uma-trigger').click();
+  await compactUma.getByRole('option', { name: 'Matikanetannhauser [Clippety-Tippety-Clop]' }).click();
+  await compactUma.getByRole('button', { name: 'Run 1 races', exact: true }).click();
+  await compactUma.waitForFunction(() => document.querySelectorAll('.draft-races > div > button:enabled').length === 1);
+  check(await compactUma.evaluate(() => window.__SHOT_CONTROL__.calls.filter(c => c.command === 'stamina_check_races').at(-1).args.input.build.skills.some(s => s.id === 100621)), 'Draft IPC includes the selected Uma’s unique');
+  await nav(compactUma, 'Draft');
+  await compactUma.getByRole('button', { name: 'Compact', exact: true }).click();
+  const staminaStrip = compactUma.getByRole('button', { name: 'Open stamina for draft races' });
+  await staminaStrip.waitFor();
+  check(await staminaStrip.locator('.stamina-pips .pending').count() === 6, 'Compact strip shares the draft result');
+  await shot(compactUma, 'stamina-uma-compact-draft-strip-440x860');
+  await staminaStrip.click();
+  check((await compactUma.locator('.stamina-uma-trigger').innerText()).includes('Matikanetannhauser'), 'Opening the compact stamina strip restores the draft Uma');
+  await compactUma.close();
   for (const [width, height] of [[1000, 700], [1280, 800]]) {
   const empty = await open('empty', width, height);
   await empty.getByRole('button', { name: 'Stamina', exact: true }).click();

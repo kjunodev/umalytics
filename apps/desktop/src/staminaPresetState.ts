@@ -1,11 +1,11 @@
 import bundled from '../src-tauri/data/role-kits.json';
 import { getStaminaStore, restoreStaminaMemory } from './staminaState';
-import { defaultStaminaInput, withStrategy, type Catalog, type StaminaBuild } from './staminaTypes';
+import { defaultStaminaInput, withStrategy, type Catalog, type CatalogUma, type StaminaBuild, type StaminaEditorBuild } from './staminaTypes';
 
 export const roles = ['front', 'pace', 'late', 'end', 'runaway'] as const;
 export type Role = typeof roles[number];
 export const defaultKits = bundled;
-export interface BuildPreset { id: string; name: string; build: StaminaBuild }
+export interface BuildPreset { id: string; name: string; build: StaminaEditorBuild }
 export interface PresetMemory { builds: BuildPreset[]; kits: Partial<Record<Role, number[]>>; defaults: StaminaBuild }
 export const ballparkDefaults: StaminaBuild = { ...structuredClone(defaultStaminaInput.build),
   stats: { speed: 1600, stamina: 800, pow: 1200, guts: 600, wiz: 1200 } };
@@ -28,9 +28,12 @@ export function restorePresets(value: unknown, catalog: Catalog): PresetMemory {
   for (const role of roles) if (Array.isArray(kits[role])) memory.kits[role] = [...new Set((kits[role] as unknown[]).filter((id): id is number => typeof id === 'number' && catalog.skills.some(s => s.id === id && s.rarity !== 'unique')))].slice(0, role === 'runaway' ? 99 : 100);
   return memory;
 }
-export function ballparkBuild(role: Role, memory: PresetMemory, current: StaminaBuild): StaminaBuild {
-  const skills = (memory.kits[role] ?? bundled[role]).map(id => ({ id, level: 1 }));
-  return withStrategy({ ...structuredClone(memory.defaults), stats: { ...memory.defaults.stats, stamina: current.stats.stamina }, skills }, roles.indexOf(role) + 1);
+export function ballparkBuild(role: Role, memory: PresetMemory, current: StaminaEditorBuild, uma?: CatalogUma): StaminaEditorBuild {
+  const unique = current.skills.find(skill => skill.id === uma?.unique_skill_id);
+  const limit = 100 - Number(role === 'runaway') - Number(!!uma);
+  const skills = (memory.kits[role] ?? bundled[role]).filter(id => id !== 202051).slice(0, limit).map(id => ({ id, level: 1 }));
+  if (uma) skills.push(unique ?? { id: uma.unique_skill_id, level: 4 });
+  return { ...withStrategy({ ...structuredClone(memory.defaults), stats: { ...memory.defaults.stats, stamina: current.stats.stamina }, skills }, roles.indexOf(role) + 1), umaCardId: uma?.card_id };
 }
 export async function loadPresets(catalog: Catalog): Promise<PresetMemory> { return restorePresets(await (await getStaminaStore()).get('presets-v1'), catalog); }
 let saving = Promise.resolve();

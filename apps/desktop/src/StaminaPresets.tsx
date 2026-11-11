@@ -2,17 +2,18 @@ import { NumberField } from './NumberField';
 import { useState } from 'react';
 import { SkillPicker } from './SkillPicker';
 import { ballparkBuild, ballparkDefaults, defaultKits, roles, type PresetMemory, type Role } from './staminaPresetState';
-import { roleNames, strategy, type Catalog, type StaminaBuild } from './staminaTypes';
+import { roleNames, strategy, type Catalog, type StaminaBuild, type StaminaEditorBuild } from './staminaTypes';
 
 export function StaminaPresets({ catalog, memory, onChange, build, onLoad, recent, onRecent }: {
-  catalog: Catalog; memory: PresetMemory; onChange: (value: PresetMemory) => void; build: StaminaBuild; onLoad: (build: StaminaBuild) => void;
+  catalog: Catalog; memory: PresetMemory; onChange: (value: PresetMemory) => void; build: StaminaEditorBuild; onLoad: (build: StaminaEditorBuild) => void;
   recent: number[]; onRecent: (ids: number[]) => void;
 }) {
   const [name, setName] = useState(''), [editing, setEditing] = useState<Role>(), [renaming, setRenaming] = useState<string>(), [rename, setRename] = useState(''), [deleting, setDeleting] = useState<string>();
   const update = (defaults: StaminaBuild) => onChange({ ...memory, defaults });
+  const uma = catalog.umas.find(card => card.card_id === build.umaCardId);
   return <div className="presets-content">
-    <section aria-label="Ballpark builds"><h3>Ballpark builds</h3><p className="muted">Loads defaults and the role kit. Keeps your stamina; your unique starts empty.</p>
-      <div className="ballpark-actions ballpark-load">{roles.map((role, i) => <button type="button" key={role} aria-label={`Load ballpark ${roleNames[i]} build`} onClick={() => onLoad(ballparkBuild(role, memory, build))}>{roleNames[i]}</button>)}</div>
+    <section aria-label="Ballpark builds"><h3>Ballpark builds</h3><p className="muted">Loads defaults and the role kit. Keeps your stamina, Uma and unique skill level.</p>
+      <div className="ballpark-actions ballpark-load">{roles.map((role, i) => <button type="button" key={role} aria-label={`Load ballpark ${roleNames[i]} build`} onClick={() => onLoad(ballparkBuild(role, memory, build, uma))}>{roleNames[i]}</button>)}</div>
     </section>
     <section aria-label="Saved builds"><h3>Saved builds</h3><form className="preset-save" onSubmit={e => { e.preventDefault(); if (!name.trim() || memory.builds.length >= 100) return; onChange({ ...memory, builds: [...memory.builds, { id: crypto.randomUUID(), name: name.trim(), build: structuredClone(build) }] }); setName(''); }}>
       <label>Preset name<input aria-label="Preset name" required maxLength={80} value={name} onChange={e => setName(e.target.value)}/></label><button type="submit" disabled={!name.trim() || memory.builds.length >= 100}>Save current build</button>
@@ -30,7 +31,7 @@ export function StaminaPresets({ catalog, memory, onChange, build, onLoad, recen
     </section>
     <section aria-label="Role kits"><h3>Role kits</h3><div className="ballpark-actions">{roles.map((role, i) => <button type="button" key={role} aria-pressed={editing === role} onClick={() => setEditing(editing === role ? undefined : role)}>Edit {roleNames[i]} kit</button>)}</div>
       {editing && <div className="kit-editor" aria-label={`${editing} kit editor`}><h4>{roleNames[roles.indexOf(editing)]} kit</h4>
-        <SkillPicker catalog={catalog} kind="ordinary" limit={editing === 'runaway' ? 99 : 100} skills={(memory.kits[editing] ?? defaultKits[editing]).map(id => ({ id, level: 1 }))} onChange={skills => onChange({ ...memory, kits: { ...memory.kits, [editing]: skills.map(s => s.id) } })} recent={recent} onRecent={onRecent}/>
+        <SkillPicker catalog={catalog} limit={editing === 'runaway' ? 99 : 100} skills={(memory.kits[editing] ?? defaultKits[editing]).map(id => ({ id, level: 1 }))} onChange={skills => onChange({ ...memory, kits: { ...memory.kits, [editing]: skills.map(s => s.id) } })} recent={recent} onRecent={onRecent}/>
         <button type="button" onClick={() => { const kits = { ...memory.kits }; delete kits[editing]; onChange({ ...memory, kits }); }}>Reset {roleNames[roles.indexOf(editing)]} kit to default</button>
       </div>}
       <small className="muted kit-source">{defaultKits.source}</small>

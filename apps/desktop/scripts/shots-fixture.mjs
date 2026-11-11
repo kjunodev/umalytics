@@ -27,9 +27,14 @@ export const catalog = {
     grade: 100, time: 2, month: 4, instance_reason: 'Screenshot fixture on exact course', unavailable_reason: null })),
   local_skill_data: true,
   local_skill_path: 'C:\\Users\\Player\\Documents\\UmaLytics-GameData\\gametora', local_skill_count: 1204, local_icon_count: 312,
+  umas: [
+    { card_id: 103102, name: 'Ines Fujin', title: '[Melt Your Heart]', unique_skill_id: 110311, aptitudes: { distance: [1, 7, 7, 5], style: [7, 5, 1, 1], ground: [7, 1] } },
+    { card_id: 106201, name: 'Matikanetannhauser', title: '[Clippety-Tippety-Clop]', unique_skill_id: 100621, aptitudes: { distance: [1, 4, 7, 7], style: [2, 7, 7, 3], ground: [7, 1] } },
+  ],
   skills: [{ id: 1, name: 'Replay Recovery', hp_recovery: true, rarity: 'gold', icon_path: 'fixture-heal.webp' },
     { id: 2, name: 'Replay Recovery II', hp_recovery: true, rarity: 'white', icon_path: 'fixture-heal.webp' },
-    { id: 3, name: 'Replay Unique', hp_recovery: false, rarity: 'unique', icon_path: 'fixture-heal.webp' },
+    { id: 110311, name: 'Fresh☆Parlor', hp_recovery: false, rarity: 'unique', icon_path: 'fixture-heal.webp' },
+    { id: 100621, name: 'Go Go Mun!', hp_recovery: false, rarity: 'unique', icon_path: 'fixture-heal.webp' },
     { id: 201241, name: 'Front Runner Straightaways ◎', hp_recovery: false, rarity: 'white', icon_path: 'fixture-heal.webp' }, ...[...new Set([...Object.values(kits).filter(Array.isArray).flat(), 202051, 210052])].map(id => ({ id, name: id === 202051 ? 'Runaway' : id === 210052 ? 'Ignited Spirit WIT' : `Fixture kit skill ${id}`, hp_recovery: false, rarity: 'white', icon_path: null }))]
 };
 export function apiResponse(url, scene) {
