@@ -14,6 +14,7 @@
 .data-heading { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; margin-bottom: 12px; min-width: 0; }
 .data-heading > :first-child { margin-right: auto; }
 .data-heading :is(span,small) { color: var(--tx3); font-size: 12px; }
+.leaderboard-refresh { min-width: 112px; font-variant-numeric: tabular-nums; }
 .data-controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
 .data-controls > .data-search { flex: 1; min-width: 150px; }
 .quiet-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
@@ -146,8 +147,11 @@
 .discord-name { position: relative; min-width: 0; overflow-wrap: anywhere; }
 .arena-card-name .discord-name { z-index: var(--layer-control); cursor: pointer; pointer-events: auto; }
 .discord-name-tooltip { display: none; position: fixed; z-index: var(--layer-tooltip); width: max-content; padding: 7px 9px; border: 1px solid var(--line); border-radius: 7px; background: var(--s3); color: var(--tx); box-shadow: var(--shadow-overlay); font: 500 12px/1.4 var(--font-body); text-align: left; white-space: normal; overflow-wrap: anywhere; pointer-events: none; }
-.discord-name:is(:hover, :focus-within) > .discord-name-tooltip { display: block; }
-.desktop-shell .arena-card-name:has(.discord-name:hover), .drawer-identity:has(.discord-name:is(:hover, :focus-within)) { z-index: var(--layer-tooltip); }
+.discord-name:is(:hover, :focus-visible) > .discord-name-tooltip { display: block; }
+.desktop-shell .arena-card-name:has(.discord-name:hover), .drawer-identity:has(.discord-name:is(:hover, :focus-visible)) { z-index: var(--layer-tooltip); }
+/* An open drawer owns the pointer: nothing behind it may stay raised above the backdrop or keep a tooltip open. */
+.desktop-shell:has(.arena-drawer-layer) :is(.discord-name-tooltip, .team-icon-tooltip, .rail-tooltip):not(.arena-player-drawer *) { display: none; }
+.desktop-shell:has(.arena-drawer-layer) :is(.desktop-team-icon, .arena-card-name, .card-badges, .sidebar, .sidebar .nav-item):not(.arena-player-drawer *) { z-index: auto; }
 
 /* The profile sheet keeps its identity, tabs and footer outside the scrolling panel. */
 .arena-player-drawer { container: profile-drawer / inline-size; }

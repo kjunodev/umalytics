@@ -1,10 +1,13 @@
 import type { EsportsTeamIconMap } from '@umalytics/shared';
 import type { SeasonLeaderboard } from '@umalytics/core/profiles/playerProfileApi';
 import { fetchTeamIconMap } from '@umalytics/core/profiles/esportsTeamApi';
+import { dropSharedResponses } from '@umalytics/core/profiles/apiClient';
 import { getCoreStorage } from '@umalytics/core/platform';
 import { desktopUiServices } from './services';
 
 const LEADERBOARD_TTL = 10 * 60 * 1000;
+/** Manual refreshes are spaced to spare the drafter API; the button shows the wait. */
+export const LEADERBOARD_REFRESH_COOLDOWN = 60 * 1000;
 const TEAM_ICON_TTL = 24 * 60 * 60 * 1000;
 const TEAM_ICON_KEY = 'esportsTeamIconMapV1';
 export interface LeaderboardSnapshot { data: SeasonLeaderboard; fetchedAt: number }
@@ -14,7 +17,9 @@ let teamRequest: Promise<EsportsTeamIconMap> | undefined;
 export const cachedLeaderboard = () => leaderboard;
 export function loadDesktopLeaderboard(force = false): Promise<LeaderboardSnapshot> {
   if (!force && leaderboard && Date.now() - leaderboard.fetchedAt < LEADERBOARD_TTL) return Promise.resolve(leaderboard);
-  return leaderboardRequest ??= desktopUiServices.loadSeasonLeaderboard(new AbortController().signal)
+  // A manual refresh must skip the shared API response cache too, or it silently returns the same data.
+  return leaderboardRequest ??= (force ? dropSharedResponses() : Promise.resolve())
+    .then(() => desktopUiServices.loadSeasonLeaderboard(new AbortController().signal))
     .then(data => leaderboard = { data, fetchedAt: Date.now() })
     .finally(() => { leaderboardRequest = undefined; });
 }
