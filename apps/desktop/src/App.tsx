@@ -69,7 +69,7 @@ export function App() {
   const disconnected = status?.state === 'disconnected' && !!(roster?.players.length || draft);
   const liveView = displayedPage === 'Live';
   const roomActive = roomIsActive(status?.state, room.current.state.matchCode);
-  const updates = useUpdater(prefs.automaticUpdates, roomActive);
+  const updates = useUpdater(prefs.automaticUpdates);
 
   useEffect(() => { let disposed = false; void loadDesktopTeamIcons().then(map => { if (!disposed) setTeamIcons(map); }); return () => { disposed = true; }; }, []);
   useEffect(() => {

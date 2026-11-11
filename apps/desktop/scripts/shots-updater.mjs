@@ -24,10 +24,21 @@ export async function runUpdateShots({ open, nav, shot, check }) {
     await shot(page, `update-notes-${width}`);
     await page.getByRole('region', { name: "What's new" }).getByRole('button', { name: 'Close' }).click();
     await page.evaluate(async () => { const c = window.__SHOT_CONTROL__; for (const message of c.messages) await c.emit('feed-message', message); await c.emit('feed-status', { state: 'connected', accepted: 10, rejected: 0 }); });
-    await page.getByText('Update ready · it will install after your room', { exact: true }).waitFor();
+    await page.getByRole('button', { name: 'Restart now', exact: true }).waitFor();
     await shot(page, `update-room-${width}`);
-    await page.getByRole('button', { name: 'Dismiss update', exact: true }).click();
-    assert.equal(await page.getByRole('complementary', { name: 'App update' }).count(), 0);
+    await page.evaluate(async () => {
+      const c = window.__SHOT_CONTROL__;
+      await c.emit('feed-message', { v: 1, type: 'left' });
+      await c.emit('feed-status', { state: 'listening', accepted: 10, rejected: 0 });
+    });
+    const restart = page.getByRole('button', { name: 'Update and restart', exact: true });
+    await restart.waitFor();
+    await shot(page, `update-post-room-${width}`);
+    const installs = () => page.evaluate(() => window.__SHOT_CONTROL__.calls.filter(c => c.command === 'plugin:updater|install').length);
+    assert.equal(await installs(), 0);
+    await restart.click();
+    await page.waitForFunction(() => window.__SHOT_CONTROL__.calls.some(c => c.command === 'plugin:process|restart'));
+    assert.equal(await installs(), 1);
     await page.close();
 
     const failed = await open('updates', width, 860, { compactThreshold: 440, automaticUpdates: false });
