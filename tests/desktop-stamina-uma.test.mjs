@@ -3,10 +3,10 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
-import kits from '../src-tauri/data/role-kits.json' with { type: 'json' };
+import kits from '../apps/desktop/src-tauri/data/role-kits.json' with { type: 'json' };
 
 function load(name, imports = {}) {
-  const source = readFileSync(new URL(`../src/${name}.ts`, import.meta.url), 'utf8');
+  const source = readFileSync(new URL(`../apps/desktop/src/${name}.ts`, import.meta.url), 'utf8');
   const compiled = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText;
   const exports = {};
   runInNewContext(compiled, { exports, structuredClone, require: id => imports[id] });
