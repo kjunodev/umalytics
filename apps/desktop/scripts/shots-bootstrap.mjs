@@ -55,7 +55,10 @@ mockIPC(async (command, args) => {
     else window.__SHOT_CONTROL__.feedReady = true;
     return { state: scene === 'empty' ? 'listening' : scene === 'port-in-use' ? 'port-in-use' : scene === 'feed-error' ? 'error' : 'connected', accepted: scene === 'empty' ? 0 : messages.length, rejected: 0 };
   }
-  if (command === 'engine_catalog') return scene === 'stamina-no-data' ? { ...catalog, local_skill_data: false, local_skill_count: 0, local_icon_count: 0, skills: catalog.skills.map(s => ({ ...s, icon_path: null })) } : catalog;
+  if (command === 'engine_catalog') {
+    if (scene === 'stamina-missing-engine') throw 'UmaLytics engine data is missing at C:\\UmaLytics\\resources\\engine-data.';
+    return scene === 'stamina-no-data' ? { ...catalog, local_skill_data: false, local_skill_count: 0, local_icon_count: 0, skills: catalog.skills.map(s => ({ ...s, icon_path: null })) } : catalog;
+  }
   if (command === 'stamina_check') {
     if (Object.hasOwn(args.input.build, 'umaCardId')) throw new Error('Uma card ID reached single-race IPC');
     if (window.__SHOT_CONTROL__.failNext) { window.__SHOT_CONTROL__.failNext = false; throw new Error('Engine could not complete this check.'); }

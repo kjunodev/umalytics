@@ -17,10 +17,6 @@ use uma_race_sim::{
 };
 mod skill_data;
 
-fn engine_data_dir() -> &'static Path {
-    crate::resources::engine_dir()
-}
-
 #[derive(Deserialize)]
 struct Names {
     track: HashMap<i32, String>,
@@ -159,7 +155,7 @@ fn inout(variant: Option<&str>) -> Result<i32, String> {
     }
 }
 fn load_engine() -> Result<Engine, String> {
-    load_engine_from(engine_data_dir())
+    load_engine_from(crate::resources::engine_dir()?)
 }
 fn load_engine_from(data_dir: &Path) -> Result<Engine, String> {
     let data = GameData::load(data_dir, DataEra::current())?;

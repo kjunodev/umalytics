@@ -1,5 +1,9 @@
 use super::*;
 
+fn engine_data_dir() -> &'static Path {
+    crate::resources::engine_dir().unwrap()
+}
+
 #[test]
 fn uma_catalog_contains_card_names_uniques_and_base_aptitudes() {
     let catalog = &engine().unwrap().catalog;

@@ -40,6 +40,7 @@ export function App() {
   const [prefs, setPrefs] = useState({ ...preferences });
   const [draftRun, setDraftRun] = useState<DraftRun>();
   const [openStaminaDraft, setOpenStaminaDraft] = useState(0);
+  const [showRaceDataError, setShowRaceDataError] = useState(false);
   const [shellError, setShellError] = useState('');
   const room = useRef(new DesktopRoom());
   const [revision, setRevision] = useState(0);
@@ -60,7 +61,7 @@ export function App() {
   const code = viewState.matchCode;
   const pickOrder = viewState === room.current.lastState ? room.current.lastPickOrder : room.current.pickOrder;
   const compact = compactMode || narrow;
-  const displayedPage = compact ? 'Live' : page;
+  const displayedPage = showRaceDataError ? 'Stamina' : compact ? 'Live' : page;
   const profileRoster = room.current.state.roster ?? room.current.lastState?.roster;
   const rosterKey = profileRosterKey(room.current.state.matchCode ?? room.current.lastState?.matchCode, profileRoster);
   const feedLabel = status?.state === 'port-in-use' ? 'Port 38917 in use' : status?.state === 'error' ? 'Feed unavailable' :
@@ -142,8 +143,8 @@ export function App() {
     setPrefs(previous => ({ ...previous, ...patch }));
     void savePreferences(patch).catch(() => setShellError('Unable to save preferences.'));
   };
-  const navigate = (next: Page) => { setPage(next); persist({ page: next }); };
-  const selectLiveTab = (tab: LiveTab) => { setLiveTab(tab); if (compact) setPage('Live'); persist({ liveTab: tab, ...(compact ? { page: 'Live' } : {}) }); };
+  const navigate = (next: Page) => { setShowRaceDataError(false); setPage(next); persist({ page: next }); };
+  const selectLiveTab = (tab: LiveTab) => { setShowRaceDataError(false); setLiveTab(tab); if (compact) setPage('Live'); persist({ liveTab: tab, ...(compact ? { page: 'Live' } : {}) }); };
   const openMatch = (code: string) => {
     setRequestedMatch({ code, nonce: Date.now() });
     navigate('History');
@@ -181,7 +182,7 @@ export function App() {
     catch { setCopyStatus('Unable to copy diagnostics.'); }
   };
   const feedBox = <div className={`feed-status ${status?.state === 'connected' ? 'connected' : ''}`} role="status"><i className={status?.state === 'connected' ? 'live-dot' : 'idle-dot'}/><span>{feedLabel}{code && <> · Room <b className="num">{code}</b></>}</span></div>;
-  const navItem = (name: Page) => <button key={name} className="nav-item" aria-label={name} title={name} aria-current={page === name ? 'page' : undefined} onClick={() => navigate(name)}><RailIcon page={name}/><span>{name}</span>{name === 'Live' && <span className="rail-live-status" role="status" aria-label={feedLabel}><i className={status?.state === 'connected' ? 'live-dot' : 'idle-dot'}/></span>}<span className="rail-tooltip" role="tooltip">{name}</span></button>;
+  const navItem = (name: Page) => <button key={name} className="nav-item" aria-label={name} title={name} aria-current={displayedPage === name ? 'page' : undefined} onClick={() => navigate(name)}><RailIcon page={name}/><span>{name}</span>{name === 'Live' && <span className="rail-live-status" role="status" aria-label={feedLabel}><i className={status?.state === 'connected' ? 'live-dot' : 'idle-dot'}/></span>}<span className="rail-tooltip" role="tooltip">{name}</span></button>;
   const tabs = <div className="seg live-tabs" role="group" aria-label="Live view">{liveTabs.map(tab => <button key={tab} aria-pressed={liveTab === tab} onClick={() => selectLiveTab(tab)}>{tab}</button>)}</div>;
   const currentRun = draftRun?.matchCode === draft?.matchCode ? draftRun : undefined;
   const openStamina = async () => { setOpenStaminaDraft(v => v + 1); navigate('Stamina'); if (compact) await toggleMode(); };
@@ -197,8 +198,8 @@ export function App() {
         <span className="compact-room num" title={feedLabel}><i className={status?.state === 'connected' ? 'live-dot' : 'idle-dot'}/>{code ?? 'No room'}</span>
         <button className="icon-button" aria-label="Pin on top" aria-pressed={pinned} disabled={windowBusy} onClick={() => { void togglePin(); }}><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 2h4l-.5 4 2.5 2v1H4V8l2.5-2L6 2zM8 9v5"/></svg></button>
         <button className="icon-button" aria-label="Expand to full mode" disabled={windowBusy} onClick={() => { void toggleMode(); }}><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M9.5 2.5h4v4M6.5 13.5h-4v-4M13.5 2.5 9 7M2.5 13.5 7 9"/></svg></button>
-      </header> : <header className="page-header"><h1>{page === 'Stamina' ? 'Stamina check' : page}</h1>{page === 'Live' ? tabs : <span className="subtitle">{page === 'Stamina' ? 'Full spurt and survival' : ''}</span>}
-        <div className="page-actions">{feedBox}{['Live', 'History', 'Players'].includes(page) && <div className="seg" role="group" aria-label="Stats scope">{(['currentSeason', 'allTime'] as const).map(value => <button key={value} aria-pressed={scope === value} onClick={() => setScope(value)}>{value === 'currentSeason' ? 'Season' : 'All-time'}</button>)}</div>}
+      </header> : <header className="page-header"><h1>{displayedPage === 'Stamina' ? 'Stamina check' : displayedPage}</h1>{displayedPage === 'Live' ? tabs : <span className="subtitle">{displayedPage === 'Stamina' && !showRaceDataError ? 'Full spurt and survival' : ''}</span>}
+        <div className="page-actions">{feedBox}{['Live', 'History', 'Players'].includes(displayedPage) && <div className="seg" role="group" aria-label="Stats scope">{(['currentSeason', 'allTime'] as const).map(value => <button key={value} aria-pressed={scope === value} onClick={() => setScope(value)}>{value === 'currentSeason' ? 'Season' : 'All-time'}</button>)}</div>}
         <button disabled={windowBusy} onClick={() => { void toggleMode(); }}>Compact</button></div></header>}
       <UpdateBanner updates={updates} roomActive={roomActive}/>
       <main className={`content ${liveView && liveTab === 'Umas' ? 'live-umas-content' : ''}`}>
@@ -213,7 +214,7 @@ export function App() {
             {liveTab === 'Umas' && <Umas roster={roster ?? { players: [] }} profiles={profiles} scope={scope} compact={compact}/>}
           </div>
         </>}
-        <div className="desktop-tool" hidden={displayedPage !== 'Stamina'}><Stamina draft={draft} openDraft={openStaminaDraft} onDraftRunChange={setDraftRun}/></div>
+        <div className="desktop-tool" hidden={displayedPage !== 'Stamina'}><Stamina draft={draft} openDraft={openStaminaDraft} onDraftRunChange={setDraftRun} onDataError={setShowRaceDataError}/></div>
         {displayedPage === 'Players' && <Players onScopeChange={setScope} scope={scope} teamIcons={teamIcons} onOpenMatch={openMatch}/>}
         <div hidden={displayedPage !== 'History'}><History onScopeChange={setScope} scope={scope} requestedMatch={requestedMatch} teamIcons={teamIcons} onOpenMatch={openMatch}/></div>
         {displayedPage === 'Settings' && <Settings updates={updates} prefs={prefs} update={persist} pinned={pinned} busy={windowBusy} togglePin={() => { void togglePin(); }} copyDiagnostics={() => { void copyDiagnostics(); }} copyStatus={copyStatus}/>}

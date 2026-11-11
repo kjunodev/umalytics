@@ -24,7 +24,7 @@ fn main() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .setup(|app| {
-            resources::initialize(app.path().resource_dir()?).map_err(std::io::Error::other)?;
+            resources::initialize(app.path().resource_dir().map_err(|error| error.to_string()));
             Ok(())
         })
         .manage(Feed::default())

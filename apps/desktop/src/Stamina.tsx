@@ -29,7 +29,7 @@ function Segments({ label, value, options, onChange }: { label: string; value: n
   return <div className="field"><span>{label}</span><div className="seg" role="group" aria-label={label}>{options.map((name, i) => <button type="button" key={name} aria-pressed={value === i + 1} onClick={() => onChange(i + 1)}>{name}</button>)}</div></div>;
 }
 
-export function Stamina({ draft, openDraft = 0, onDraftRunChange }: { draft?: DraftSnapshot; openDraft?: number; onDraftRunChange?: (run: DraftRun | undefined) => void }) {
+export function Stamina({ draft, openDraft = 0, onDraftRunChange, onDataError }: { draft?: DraftSnapshot; openDraft?: number; onDraftRunChange?: (run: DraftRun | undefined) => void; onDataError: (failed: boolean) => void }) {
   const [catalog, setCatalog] = useState<Catalog>();
   const [anyInput, setAnyInput] = useState<StaminaEditorInput>(defaultStaminaInput);
   const [draftInput, setDraftInput] = useState<StaminaEditorInput>(structuredClone(defaultStaminaInput));
@@ -57,6 +57,8 @@ export function Stamina({ draft, openDraft = 0, onDraftRunChange }: { draft?: Dr
   const popupTrigger = useRef<HTMLButtonElement | null>(null), drawer = useRef<HTMLElement>(null);
   const focusBuildToggle = useRef(false);
   const [copyStatus, setCopyStatus] = useState('');
+  const [dataError, setDataError] = useState<{ details: string }>();
+  const [dataCopyStatus, setDataCopyStatus] = useState('');
   useEffect(() => { onDraftRunChange?.(draftRun); }, [draftRun, onDraftRunChange]);
   useEffect(() => { if (openDraft) { setMode('draft'); setDetail(undefined); setPopover(undefined); } }, [openDraft]);
 
@@ -73,7 +75,12 @@ export function Stamina({ draft, openDraft = 0, onDraftRunChange }: { draft?: Dr
         if (index !== undefined) setDraftRun(previous => { if (!previous) return previous; const results = [...previous.results]; results[index] = payload.result; return { ...previous, results }; });
       });
       if (disposed) { stopResult(); return; } stops.push(stopResult);
-      const data = await invoke<Catalog>('engine_catalog');
+      let data: Catalog;
+      try { data = await invoke<Catalog>('engine_catalog'); }
+      catch (reason) {
+        if (!disposed) { setDataError({ details: String(reason) }); onDataError(true); }
+        return;
+      }
       let memory;
       try { memory = await loadStaminaMemory(data); }
       catch { if (!disposed) setSaveError('Remembered inputs could not be loaded. Using defaults.'); }
@@ -157,6 +164,16 @@ export function Stamina({ draft, openDraft = 0, onDraftRunChange }: { draft?: Dr
   const available = finished.map(r => Math.round(r.effective_stamina));
   const short = finished.filter(r => !passes(r)).length;
   const changePresets = (next: PresetMemory) => { setPresets(next); if (presetWritable) void savePresets(next).then(() => setPresetError('')).catch(() => setPresetError('Presets could not be saved. Your edits are still available until reload.')); };
+  if (dataError) return <section className="panel stamina-data-error" role="alert">
+    <h2>UmaLytics could not load its race data.</h2>
+    <p>Reinstall UmaLytics from the latest release.</p>
+    <pre>{dataError.details}</pre>
+    <button type="button" onClick={async () => {
+      try { await navigator.clipboard.writeText(dataError.details); setDataCopyStatus('Details copied'); }
+      catch { setDataCopyStatus('Unable to copy details.'); }
+    }}>Copy details</button>
+    <p role="status">{dataCopyStatus}</p>
+  </section>;
   return <section aria-label="Stamina check" className="stamina-layout">
     <div className="stamina-toolbar panel" ref={toolbar}>
       <div className="mode-switch"><div className="seg" role="group" aria-label="Course mode"><button type="button" aria-pressed={mode === 'draft'} disabled={running} onClick={() => { setMode('draft'); setPopover(undefined); }}>Draft</button><button type="button" disabled={running} aria-pressed={mode === 'any'} onClick={() => { setMode('any'); setPopover(undefined); }}>Any course</button></div></div>
