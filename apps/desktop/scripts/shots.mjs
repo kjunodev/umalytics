@@ -827,6 +827,7 @@ try {
     await privatePlayer.locator('.arena-card[data-state="private"]').waitFor();
     await privatePlayer.getByRole('button', { name: 'Open details for Replay Player 2', exact: true }).click();
     await privatePlayer.locator('.drawer-history .recent-match-code').first().waitFor();
+    await privatePlayer.locator('.drawer-identity .team-icon').waitFor();
     check((await privatePlayer.locator('.drawer-stat-band b').allTextContents()).every(value => value === '—'), 'Private drawer never derives stats from visible history');
     check(await privatePlayer.locator('[aria-label="Player Uma stats"] tbody tr').count() === 0 && await privatePlayer.locator('.drawer-badges > span').count() === 0, 'Private history never creates Uma stats or badges');
     await privatePlayer.getByRole('button', { name: 'Close details', exact: true }).focus();

@@ -121,9 +121,9 @@ export function PlayerDrawer({ player, profile, scope, loading, onClose, onOpenM
     <button className="arena-backdrop" aria-label="Close player details" tabIndex={-1} onClick={onClose}/>
     <aside className="arena-player-drawer player-drawer" role="dialog" aria-modal="true" aria-label="Player details" ref={drawer}>
       <header className="arena-drawer-banner">
+        <button className="iconbtn drawer-close" aria-label="Close details" ref={close} onClick={onClose}>×</button>
         <div className={`drawer-portrait ${rankTier}`}>{banner && <BestUmaPortrait uma={banner}/>}</div>
         <div className="drawer-identity"><h2><DiscordName name={profile?.displayName ?? player.displayName} username={player.discordUsername}/></h2><div className="drawer-subtitle"><span className="muted">{profile?.title ?? title}</span>{teamIcon && <span className="drawer-esports-team"><DesktopTeamIcon icon={teamIcon}/><span>{teamIcon.teamName}</span></span>}</div></div>
-        <button className="iconbtn drawer-close" aria-label="Close details" ref={close} onClick={onClose}>×</button>
       </header>
       <div className="drawer-stat-band">{stats.map(([label, stat]) => <div key={label}><span>{label}</span><b className={label === 'Rank' ? rankTier : undefined}>{stat}</b></div>)}</div>
       <div className="drawer-badges">{getNotableBadges(p).map(b => <span key={b.kind} className={`player-tag notable-tag ${b.tone}`} style={{ ...badgeToneStyle(b.kind), borderColor: badgeToneStyle(b.kind)?.color }} title={b.title}>{b.kind !== 'private' && <BadgeIcon kind={b.kind}/>}<span>{b.label}</span></span>)}</div>
