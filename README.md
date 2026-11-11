@@ -9,12 +9,12 @@ A scouting companion for [Uma Drafter](https://drafter.uma.guide): a browser ext
 
 ## Download
 
-Latest release: v0.5.4. Each release has a Chromium and a Firefox ZIP and a `SHA256SUMS.txt` for checking them.
+Latest release: v0.5.5. Each release has a Chromium and a Firefox ZIP and a `SHA256SUMS.txt` for checking them.
 
 | Browser | Package |
 | --- | --- |
-| Chrome, Edge, Brave, Opera GX | [Chromium ZIP](https://github.com/kjunodev/umalytics/releases/tag/v0.5.4), loaded as an unpacked extension |
-| Firefox 128 or later, LibreWolf | [Firefox ZIP](https://github.com/kjunodev/umalytics/releases/tag/v0.5.4), loaded as a temporary add-on (unsigned, so load it again after a browser restart) |
+| Chrome, Edge, Brave, Opera GX | [Chromium ZIP](https://github.com/kjunodev/umalytics/releases/tag/v0.5.5), loaded as an unpacked extension |
+| Firefox 128 or later, LibreWolf | [Firefox ZIP](https://github.com/kjunodev/umalytics/releases/tag/v0.5.5), loaded as a temporary add-on (unsigned, so load it again after a browser restart) |
 
 Step-by-step instructions: [Install or update UmaLytics](docs/INSTALL.md). Release history: [CHANGELOG](CHANGELOG.md).
 
