@@ -51,15 +51,27 @@ function applyApiCooldown(value: ApiCooldown): void {
   requestQueue.setStartInterval(requestStartIntervalMs);
 }
 
+function isSharedResponse(path: string): boolean {
+  return path === '/api/seasons' || path.startsWith('/api/leaderboard?');
+}
+
 function cacheTtl(path: string): number {
-  if (path === '/api/seasons' || path.startsWith('/api/leaderboard?')) return SHARED_CACHE_TTL_MS;
+  if (isSharedResponse(path)) return SHARED_CACHE_TTL_MS;
   if (path.includes('/history?')) return HISTORY_RESPONSE_TTL_MS;
   if (path.endsWith('/profile')) return PROFILE_RESPONSE_TTL_MS;
   return STATS_RESPONSE_TTL_MS;
 }
 
 function isPersistentResponse(path: string): boolean {
-  return path === '/api/seasons' || path.startsWith('/api/leaderboard?') || path.endsWith('/profile');
+  return isSharedResponse(path) || path.endsWith('/profile');
+}
+
+/** Drops cached season and leaderboard responses so a manual refresh reaches the API. */
+export async function dropSharedResponses(): Promise<void> {
+  await loadPersistentResponses();
+  let dropped = false;
+  for (const path of [...responseCache.keys()]) if (isSharedResponse(path)) { responseCache.delete(path); dropped = true; }
+  if (dropped) persistResponses();
 }
 
 function loadPersistentResponses(): Promise<void> {

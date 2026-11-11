@@ -207,6 +207,28 @@ try {
     await tooltipOnTop(page.locator('.table-player').filter({ hasText: 'Replay Player 3' }).locator('.discord-name'), '.discord-name-tooltip', 'Leaderboard names retain Discord usernames');
     await tooltipOnTop(page.locator('.leaderboard-player .team-icon').first(), '.team-icon-tooltip', 'Leaderboard team tooltip paints above adjacent rows');
     check(await page.locator('.page-header [aria-label="Stats scope"]').count() === 1, 'Players has the scope toggle');
+    const openTooltips = () => page.evaluate(() => [...document.querySelectorAll('.discord-name-tooltip, .team-icon-tooltip, .rail-tooltip')]
+      .filter(tip => !tip.closest('.arena-player-drawer') && getComputedStyle(tip).display !== 'none').length);
+    for (const opener of [page.locator('.leaderboard-player .team-icon').first(), page.locator('.table-player').filter({ hasText: 'Replay Player 3' }).locator('.discord-name')]) {
+      await opener.hover();
+      await opener.click();
+      await page.locator('.arena-player-drawer').waitFor();
+      check(await openTooltips() === 0, 'Tooltips behind an open drawer close without moving the mouse');
+      await page.getByRole('button', { name: 'Close details', exact: true }).click();
+      await page.locator('.arena-player-drawer').waitFor({ state: 'detached' });
+      await page.mouse.move(992, 8);
+      check(await openTooltips() === 0, 'Closing the drawer with the mouse leaves no tooltip open');
+    }
+    const refresh = page.locator('.leaderboard-refresh');
+    check(await refresh.isDisabled() && /^Refresh in \d+s$/.test(await refresh.innerText()), 'Refresh shows its cooldown instead of looking broken');
+    await page.clock.install();
+    await page.clock.fastForward(61_000);
+    await page.waitForFunction(() => document.querySelector('.leaderboard-refresh')?.textContent === 'Refresh');
+    const leaderboardCalls = () => page.evaluate(() => window.__SHOT_CONTROL__.calls.filter(call => JSON.stringify(call.args ?? '').includes('/api/leaderboard?')).length);
+    const before = await leaderboardCalls();
+    await refresh.click();
+    await page.waitForFunction(() => /^Refresh in \d+s$/.test(document.querySelector('.leaderboard-refresh')?.textContent ?? ''));
+    check(await leaderboardCalls() === before + 1, 'Refresh bypasses the shared response cache');
     await page.mouse.move(992, 8);
     await page.getByRole('button', { name: 'Replay Player 3', exact: true }).click();
     await page.waitForFunction(() => document.querySelector('.drawer-stat-band')?.textContent.includes('12–8'));

@@ -7,7 +7,7 @@ import { lookupPlayer } from '@umalytics/core/explorer/explorerData';
 import { formatNumber } from '@umalytics/ui/common/format';
 import { PlayerDrawer, usePlayerProfile } from './PlayerDrawer';
 import { DesktopTeamIcon } from './TeamIcon';
-import { cachedLeaderboard, loadDesktopLeaderboard } from './sessionData';
+import { cachedLeaderboard, LEADERBOARD_REFRESH_COOLDOWN, loadDesktopLeaderboard } from './sessionData';
 
 export function Players({ onOpenMatch, teamIcons, scope, onScopeChange }: { scope: PlayerStatsScope; onScopeChange: (scope: PlayerStatsScope) => void; onOpenMatch: (code: string) => void; teamIcons: EsportsTeamIconMap }) {
   const services = useUiServices();
@@ -22,6 +22,14 @@ export function Players({ onOpenMatch, teamIcons, scope, onScopeChange }: { scop
   const [directory, setDirectory] = useState<PrematchPlayer[]>();
   const [searching, setSearching] = useState(false);
   const { profile, loading } = usePlayerProfile(selected, scope);
+  const [now, setNow] = useState(Date.now);
+  const refreshWait = snapshot ? Math.max(0, snapshot.fetchedAt + LEADERBOARD_REFRESH_COOLDOWN - now) : 0;
+  useEffect(() => {
+    if (refreshWait <= 0) return;
+    const timer = setTimeout(() => setNow(Date.now()), Math.min(1000, refreshWait));
+    return () => clearTimeout(timer);
+  }, [now, refreshWait]);
+  useEffect(() => { setNow(Date.now()); }, [snapshot]);
   useEffect(() => {
     let disposed = false; setError(''); setRefreshing(true);
     void loadDesktopLeaderboard(attempt > 0).then(data => { if (!disposed) setSnapshot(data); }).catch(e => { if (!disposed) setError(String(e)); }).finally(() => { if (!disposed) setRefreshing(false); });
@@ -39,7 +47,7 @@ export function Players({ onOpenMatch, teamIcons, scope, onScopeChange }: { scop
   }, [searching, query]);
   return <section className="arena-data" aria-label="Players">
     <input className="data-search" type="search" aria-label="Search players" placeholder="Search the leaderboard, or paste a profile URL or Discord ID" value={query} maxLength={300} onChange={e => setQuery(e.target.value)}/>
-    <section className="data-box"><div className="data-heading"><h2>Season leaderboard</h2><span>{board?.activeSeasonName ?? 'Current season'} · {filtered.length} players</span><small>{snapshot ? `Updated ${new Date(snapshot.fetchedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'Not loaded yet'}</small><button disabled={refreshing} onClick={() => setAttempt(v => v + 1)}>{refreshing ? 'Refreshing…' : 'Refresh'}</button></div>
+    <section className="data-box"><div className="data-heading"><h2>Season leaderboard</h2><span>{board?.activeSeasonName ?? 'Current season'} · {filtered.length} players</span><small>{snapshot ? `Updated ${new Date(snapshot.fetchedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'Not loaded yet'}</small><button className="leaderboard-refresh" disabled={refreshing || refreshWait > 0} title={refreshWait > 0 ? 'The leaderboard can be refreshed once a minute.' : undefined} onClick={() => setAttempt(v => v + 1)}>{refreshing ? 'Refreshing…' : refreshWait > 0 ? `Refresh in ${Math.ceil(refreshWait / 1000)}s` : 'Refresh'}</button></div>
       {error && <p role="alert">{error} <button onClick={() => setAttempt(v => v + 1)}>Retry</button></p>}
       {!board && !error && <p role="status">Loading leaderboard…</p>}
       {classification.mode === 'lookup' ? <button onClick={() => setSelected(lookupPlayer(classification.id))}>Open profile</button> : <>

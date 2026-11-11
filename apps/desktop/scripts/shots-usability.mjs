@@ -61,8 +61,7 @@ export async function runUsabilityShots({ open, nav, shot, check }) {
     await nav(page, 'Stamina'); await nav(page, 'Players');
     check(await page.locator('.table-player').count() === 20, 'Cached rows render immediately on revisit');
     await shot(page, `usability-players-cached-${width}x${height}`);
-    await page.getByRole('button', { name: 'Refresh', exact: true }).click();
-    await page.getByRole('button', { name: 'Refresh', exact: true }).waitFor();
+    check(await page.locator('.leaderboard-refresh').isDisabled(), 'Refresh waits out its cooldown after a fresh load');
     await nav(page, 'Stamina');
     await page.getByText('Using the default Pace build', { exact: false }).waitFor();
     await shot(page, `usability-stamina-toolbar-${width}x${height}`);

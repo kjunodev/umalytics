@@ -24,16 +24,18 @@ test('Live migration preserves all legacy tabs and manual choice lasts until a p
   assert.equal(p.phaseLiveTab('Draft', 'complete', 'lobby'), 'Lobby');
 });
 
-test('leaderboard session cache coalesces requests, survives revisits, refreshes and expires after ten minutes', async () => {
-  let now = 1000, calls = 0;
+test('leaderboard session cache coalesces requests, survives revisits, refreshes past the API cache and expires after ten minutes', async () => {
+  let now = 1000, calls = 0, drops = 0;
   const m = moduleWithMocks('../apps/desktop/src/sessionData.ts', {
     './services': { desktopUiServices: { loadSeasonLeaderboard: async () => { calls++; return { entries: [calls] }; } } },
-    '@umalytics/core/platform': {}, '@umalytics/core/profiles/esportsTeamApi': {}
+    '@umalytics/core/platform': {}, '@umalytics/core/profiles/esportsTeamApi': {},
+    '@umalytics/core/profiles/apiClient': { dropSharedResponses: async () => { drops++; } }
   }, { Date: { now: () => now } });
   await Promise.all([m.loadDesktopLeaderboard(), m.loadDesktopLeaderboard()]); assert.equal(calls, 1);
   assert.equal(m.cachedLeaderboard().fetchedAt, now);
   await m.loadDesktopLeaderboard(); assert.equal(calls, 1);
   await m.loadDesktopLeaderboard(true); assert.equal(calls, 2);
+  assert.equal(drops, 1, 'a manual refresh drops the shared API response cache');
   now += 10 * 60 * 1000; await m.loadDesktopLeaderboard(); assert.equal(calls, 3);
 });
 

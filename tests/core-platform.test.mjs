@@ -94,6 +94,13 @@ test('real core imports restore unchanged caches, use global fetch, and initiali
     }
     assert.deepEqual(session.profileApiResponsesV1['/api/players/123456789012345678/profile'].value, { displayName: 'Network' });
   } finally { globalThis.fetch = originalFetch; }
+  // A manual refresh drops the cached shared responses, so the next read reaches the network.
+  assert.deepEqual(await api.fetchJson('/api/seasons'), [{ id: 'saved' }]);
+  await api.dropSharedResponses();
+  try {
+    globalThis.fetch = async () => new Response(JSON.stringify([{ id: 'fresh' }]));
+    assert.deepEqual(await api.fetchJson('/api/seasons'), [{ id: 'fresh' }]);
+  } finally { globalThis.fetch = originalFetch; }
   const cooldown = { until: Date.now() + 5000, status: 429, path: '/api/seasons', startIntervalMs: 700 };
   api.restoreApiCooldown(cooldown);
   assert.deepEqual(api.getApiCooldown(), cooldown);
