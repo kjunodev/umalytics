@@ -12,7 +12,7 @@ function module(file, imports = {}) {
   return exports;
 }
 const stateModule = module('updateState');
-const { updateState, updateBanner, roomIsActive, installAfterRoom } = stateModule;
+const { updateState, updateBanner, roomIsActive } = stateModule;
 const { createUpdateController, scheduleUpdateChecks } = module('updateController', { './updateState': stateModule });
 const found = (version = '0.2.0') => ({ type: 'found', version, notes: 'Release notes', at: 1000 });
 const ready = () => updateState(updateState({ phase: 'idle' }, found()), { type: 'downloaded' });
@@ -27,12 +27,10 @@ test('download, ready, room deferral, install and error banner states', () => {
   state = updateState(state, { type: 'downloaded' });
   assert.equal(updateBanner(state, false), 'ready');
   assert.equal(updateBanner(state, true), 'deferred');
-  assert(installAfterRoom(state, true, false));
-  assert(!installAfterRoom(state, false, false));
-  assert(!installAfterRoom(state, true, true));
+  assert.equal(updateBanner(state, false), 'ready');
+  assert.equal(state.phase, 'ready');
   state = updateState(state, { type: 'install' });
   assert.equal(updateBanner(state, false), 'installing');
-  assert(!installAfterRoom(state, true, false));
   state = updateState(state, { type: 'failed', error: 'offline' });
   assert.equal(updateBanner(state, false), 'error');
 });

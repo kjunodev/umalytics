@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
 static RESOURCE_DIR: OnceLock<PathBuf> = OnceLock::new();
-static ENGINE_DIR: OnceLock<PathBuf> = OnceLock::new();
+static ENGINE_DIR: OnceLock<Result<PathBuf, String>> = OnceLock::new();
 
 fn engine_path(resources: &Path, debug: bool, development: &Path) -> Result<PathBuf, String> {
     let path = if debug {
@@ -16,12 +16,8 @@ fn engine_path(resources: &Path, debug: bool, development: &Path) -> Result<Path
     Ok(path)
 }
 
-pub fn initialize(resources: PathBuf) -> Result<(), String> {
-    let engine = engine_path(
-        &resources,
-        cfg!(debug_assertions),
-        Path::new(uma_race_sim::data::DATA_DIR),
-    )?;
+fn load_engine_path(resources: &Path, debug: bool, development: &Path) -> Result<PathBuf, String> {
+    let engine = engine_path(resources, debug, development)?;
     // Validate the complete data set before any lazy engine command can run.
     uma_race_sim::data::GameData::load(&engine, uma_race_sim::data::DataEra::current()).map_err(
         |error| {
@@ -31,26 +27,29 @@ pub fn initialize(resources: PathBuf) -> Result<(), String> {
             )
         },
     )?;
-    RESOURCE_DIR
-        .set(resources)
-        .map_err(|_| "Resource directory already initialized")?;
-    ENGINE_DIR
-        .set(engine)
-        .map_err(|_| "Engine directory already initialized")?;
-    Ok(())
+    Ok(engine)
 }
 
-pub fn engine_dir() -> &'static Path {
-    ENGINE_DIR.get().map(PathBuf::as_path).unwrap_or_else(|| {
-        #[cfg(any(debug_assertions, test))]
-        {
-            Path::new(uma_race_sim::data::DATA_DIR)
-        }
-        #[cfg(not(any(debug_assertions, test)))]
-        {
-            panic!("UmaLytics engine resource path was not initialized at startup")
-        }
-    })
+pub fn initialize(resources: Result<PathBuf, String>) {
+    ENGINE_DIR.get_or_init(|| {
+        let resources = resources?;
+        let engine = load_engine_path(&resources, cfg!(debug_assertions), Path::new(uma_race_sim::data::DATA_DIR));
+        RESOURCE_DIR.get_or_init(|| resources);
+        engine
+    });
+}
+
+fn initialized_engine(state: &OnceLock<Result<PathBuf, String>>) -> Result<&Path, String> {
+    state.get().ok_or_else(|| "UmaLytics race data was not initialized.".to_string())?
+        .as_deref().map_err(Clone::clone)
+}
+
+pub fn engine_dir() -> Result<&'static Path, String> {
+    #[cfg(test)]
+    if ENGINE_DIR.get().is_none() {
+        return Ok(Path::new(uma_race_sim::data::DATA_DIR));
+    }
+    initialized_engine(&ENGINE_DIR)
 }
 
 pub fn skill_path(
@@ -86,6 +85,15 @@ pub fn skill_dir() -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn missing_engine_data_surfaces_startup_error() {
+        let state = OnceLock::new();
+        let resources = Path::new("missing-race-data-fixture");
+        state.get_or_init(|| load_engine_path(resources, false, Path::new("unused")));
+        let error = initialized_engine(&state).unwrap_err();
+        assert!(error.contains("missing-race-data-fixture") && error.contains("Reinstall"));
+    }
 
     #[test]
     fn release_requires_bundled_engine_and_debug_uses_checkout() {

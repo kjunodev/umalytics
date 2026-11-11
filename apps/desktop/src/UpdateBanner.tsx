@@ -9,8 +9,8 @@ export function UpdateBanner({ updates, roomActive }: { updates: UpdateControls;
   return <div className="update-slot">
     {mode !== 'hidden' && <aside className={`update-banner ${mode}`} aria-label="App update" role="status">
       {mode === 'downloading' && <span>UmaLytics {state.version} is downloading…</span>}
-      {mode === 'ready' && <><span>UmaLytics {state.version} is ready</span><span aria-hidden="true">·</span><button onClick={() => setNotes(!notes)} aria-expanded={notes}>What's new</button><span aria-hidden="true">·</span><button onClick={updates.install}>Update and restart</button></>}
-      {mode === 'deferred' && <><span>Update ready · it will install after your room</span><button onClick={updates.install}>Restart now</button></>}
+      {mode === 'ready' && <><span>UmaLytics {state.version} is ready</span><span aria-hidden="true">·</span><button onClick={updates.install}>Update and restart</button><button onClick={() => setNotes(!notes)} aria-expanded={notes}>What's new</button></>}
+      {mode === 'deferred' && <><span>UmaLytics {state.version} is ready · Live room active</span><button onClick={updates.install}>Restart now</button></>}
       {mode === 'error' && <><span>Update failed</span><span aria-hidden="true">·</span><button onClick={updates.check}>Retry</button></>}
       {mode === 'installing' && <span>Installing update…</span>}
       {mode !== 'installing' && <button className="update-dismiss" aria-label="Dismiss update" onClick={() => { setNotes(false); updates.dismiss(); }}>×</button>}

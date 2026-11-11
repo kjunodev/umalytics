@@ -54,7 +54,7 @@ try {
     await page.goto(origin);
     await page.locator('.app-shell').waitFor();
     await page.waitForFunction(() => window.__SHOT_CONTROL__.feedReady);
-    await nav(page, 'Lobby');
+    if (scene !== 'stamina-missing-engine') await nav(page, 'Lobby');
     await page.evaluate(() => document.fonts.ready);
     if (scene === 'lobby' || scene === 'stamina-no-data') {
       try { await page.waitForFunction(() => document.querySelectorAll('.rank').length === 10 && [...document.querySelectorAll('.rank')].every(chip => chip.textContent.startsWith('#'))); }
@@ -796,6 +796,19 @@ try {
   await engineError.getByRole('spinbutton', { name: 'Speed', exact: true }).focus();
   check(await engineError.getByRole('spinbutton', { name: 'Speed', exact: true }).evaluate(el => getComputedStyle(el).outlineStyle !== 'none'), 'Stamina input keyboard focus is visible');
   await engineError.close();
+  if (width === 1000) {
+    const missingEngine = await open('stamina-missing-engine', width, height);
+    await missingEngine.getByRole('heading', { name: 'UmaLytics could not load its race data.' }).waitFor();
+    check(await missingEngine.getByRole('button', { name: 'Run check', exact: true }).count() === 0, 'Missing engine blocks stamina checks');
+    await shot(missingEngine, 'stamina-missing-engine-1000x700');
+    await missingEngine.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+    await missingEngine.getByRole('button', { name: 'Copy details', exact: true }).click();
+    await missingEngine.getByText('Details copied', { exact: true }).waitFor();
+    check((await missingEngine.evaluate(() => navigator.clipboard.readText())).includes('engine-data'), 'Copy details includes the IPC error');
+    for (const page of ['Players', 'History', 'Lobby']) await nav(missingEngine, page);
+    check(await missingEngine.getByRole('heading', { name: 'UmaLytics could not load its race data.' }).count() === 0, 'Other pages remain available');
+    await missingEngine.close();
+  }
   const noData = await open('stamina-no-data', width, height);
   await noData.getByRole('button', { name: 'Stamina', exact: true }).click();
   await noData.getByRole('complementary', { name: 'Build editor' }).waitFor();
@@ -814,6 +827,7 @@ try {
     await privatePlayer.locator('.arena-card[data-state="private"]').waitFor();
     await privatePlayer.getByRole('button', { name: 'Open details for Replay Player 2', exact: true }).click();
     await privatePlayer.locator('.drawer-history .recent-match-code').first().waitFor();
+    await privatePlayer.locator('.drawer-identity .team-icon').waitFor();
     check((await privatePlayer.locator('.drawer-stat-band b').allTextContents()).every(value => value === '—'), 'Private drawer never derives stats from visible history');
     check(await privatePlayer.locator('[aria-label="Player Uma stats"] tbody tr').count() === 0 && await privatePlayer.locator('.drawer-badges > span').count() === 0, 'Private history never creates Uma stats or badges');
     await privatePlayer.getByRole('button', { name: 'Close details', exact: true }).focus();

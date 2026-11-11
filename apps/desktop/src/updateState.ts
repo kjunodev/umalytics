@@ -39,7 +39,3 @@ export function updateBanner(state: UpdateState, roomActive: boolean): 'hidden' 
 export function roomIsActive(feedState: string | undefined, roomCode: string | undefined): boolean {
   return feedState === 'connected' && !!roomCode;
 }
-
-export function installAfterRoom(state: UpdateState, wasActive: boolean, active: boolean): boolean {
-  return state.phase === 'ready' && wasActive && !active;
-}

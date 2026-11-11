@@ -250,7 +250,7 @@ Never commit the private key. The public key in `tauri.conf.json` is safe to com
    manifest from a temporary HTTPS endpoint, and use a test-only build of that
    previous version whose updater endpoint targets it (keep the production public
    key). Check background download, release notes, Update and restart, and room
-   deferral. Do not change the permanent feed for this test or commit the endpoint.
+   behavior. Do not change the permanent feed for this test or commit the endpoint.
 5. After Sean has tested the draft, run **Publish desktop update** on `main` with
    the exact version. It publishes `desktop-v<version>` as non-latest, validates
    versioned NSIS URLs and signature assets, then copies `latest.json` with
@@ -274,6 +274,6 @@ Automatic checks default on, run 10 seconds after launch and every six hours,
 and can be disabled in Settings → About. Manual checks remain available. Failed
 automatic checks are silent; Settings shows the last check or error. Found
 updates download immediately. A ready update stays pending until Update and
-restart is selected, or installs when an active connected room ends. Restart now
-overrides the room delay. Dismissal hides that version until the next launch or
+restart is selected. During a live room, the same action is labeled Restart now.
+Dismissal hides that version until the next launch or
 a newer version. Release notes are displayed as text from the release feed.
