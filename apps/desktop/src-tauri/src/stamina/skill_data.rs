@@ -146,6 +146,21 @@ fn enrich_from(skills: &mut [Skill], dir: &Path) -> (bool, String, usize, usize)
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn bundled_fresh_parlor_has_an_icon() {
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("resources/skill-data");
+        let mut skills = [Skill {
+            id: 110311,
+            name: "Fresh☆Parlor".into(),
+            hp_recovery: true,
+            rarity: "unique".into(),
+            icon_path: None,
+        }];
+        assert!(enrich_from(&mut skills, &dir).0);
+        assert!(skills[0].icon_path.is_some());
+    }
+
     #[test]
     fn local_metadata_maps_inherited_and_rarity_without_filtering_sources() {
         let make = |id| Skill {

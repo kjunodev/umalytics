@@ -112,9 +112,10 @@ A aptitudes, Great mood, no skills and the same 2/3/2/1 strategy distribution.
 Their stamina stays fixed at the submitted value throughout the search.
 
 The toolbar opens race and condition pickers. The build panel stays beside the
-results and collapses to a rail; Race settings is a tab in that panel. Escape
-closes the active picker. The
-last race, conditions, build, skills and analysis options are saved in the
+results and collapses to a rail. Choose an Uma in the Build tab to set its
+unique skill. Use **Use base aptitudes** to apply the card's distance, strategy
+and ground grades. Escape closes the active picker. The last race, conditions,
+build, skills and analysis options are saved in the
 Tauri store (`stamina.json`, `last-inputs-v1`) and validated on restore.
 
 Bundled GameTora metadata is read from the installed `skill-data/` resource folder.
@@ -196,6 +197,32 @@ The opt-in `measure_field_strength` native test compares the seven round-1
 fixtures against Average, Mirror and Weak (1200/900/900/500/900) fields with
 the default 256/512 seed banks and emits raw/effective thresholds. Weak is a
 measurement fixture, not a toolbar choice. Average remains the default.
+
+## Updating game data
+
+1. In a checkout of the engine fork, fetch upstream and rebase
+   `umalytics/analysis-options` onto the desired upstream Global data commit.
+   Run `cargo test --locked` in the fork.
+2. Check the fork against the saved Hachimi races before adopting the revision.
+   Require every race and frame to match.
+
+   ```powershell
+   cargo run --locked --release --bin compare -- --corpus "<path to Hachimi race logs>"
+   ```
+
+3. Once the tested fork SHA is available on the fork, run the updater from the
+   UmaLytics root.
+
+   ```powershell
+   node apps/desktop/scripts/update-engine-data.mjs <fork-sha>
+   ```
+
+   The script updates the Cargo pin and lockfile, prepares the bundled engine
+   resources, and lists skill and card changes. Add `--refresh-gametora` to
+   update the bundled skill metadata, icons, and source credits.
+4. Run the desktop checks, including `pnpm --filter @umalytics/desktop test`,
+   and verify the new card and unique in the Build tab. Follow the desktop
+   release procedure when the data update is scheduled for release.
 
 ## Releasing
 
