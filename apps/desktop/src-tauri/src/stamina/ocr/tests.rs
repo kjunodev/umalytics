@@ -3,6 +3,62 @@ use crate::stamina::{engine, skill_data, Skill, UmaAptitudes};
 use matcher::{Mark, Match};
 use std::{collections::HashMap, fs, path::Path, time::Instant};
 
+#[test]
+fn engine_effect_types_are_accounted_for() {
+    let mut unknown = BTreeMap::<i32, Vec<i32>>::new();
+    for (&id, skill) in &engine().unwrap().data.skills {
+        for ability in skill.details.iter().flat_map(|detail| &detail.abilities) {
+            let kind = ability.ability_type;
+            // Zero is an unused slot. These three Carnival Bonus skills only affect event points.
+            let non_race =
+                kind == 0 || matches!((id, kind), (1000011, 501) | (1000012 | 1000013, 502 | 503));
+            if !matcher::is_race_effect(kind) && !non_race {
+                unknown.entry(kind).or_default().push(id);
+            }
+        }
+    }
+    assert!(
+        unknown.is_empty(),
+        "Unclassified engine effects (type → skill IDs): {unknown:?}"
+    );
+}
+
+#[test]
+fn import_catalog_uses_shipped_prices_and_engine_tiers() {
+    let skills = &engine().unwrap().catalog.screenshot_skills;
+    assert_eq!(skills[&200501].cost, Some(120));
+    assert_eq!(skills[&200502].cost, Some(120));
+    assert_eq!(skills[&910311].cost, Some(200));
+    assert_eq!(skills[&110311].cost, None);
+    assert!(!skills.contains_key(&1000011));
+    for (first, second) in [(200502, 200501), (200012, 200011)] {
+        let first = skills[&first].tier.as_ref().unwrap();
+        let second = skills[&second].tier.as_ref().unwrap();
+        assert_eq!(first.group, second.group);
+        assert_eq!((first.rank, second.rank), (1, 2));
+    }
+    assert!(
+        skills[&200013].tier.is_none(),
+        "A negative skill is independent"
+    );
+}
+
+#[test]
+fn screenshot_ipc_accepts_binary_and_tauri_post_message_fallback() {
+    use tauri::ipc::InvokeBody;
+    let png_signature = vec![137, 80, 78, 71, 13, 10, 26, 10];
+    assert_eq!(
+        screenshot_bytes(&InvokeBody::Raw(png_signature.clone())).unwrap(),
+        png_signature
+    );
+    assert_eq!(
+        screenshot_bytes(&InvokeBody::Json(serde_json::json!(png_signature))).unwrap(),
+        png_signature
+    );
+    assert!(screenshot_bytes(&InvokeBody::Raw(Vec::new())).is_err());
+    assert!(screenshot_bytes(&InvokeBody::Json(serde_json::json!([256]))).is_err());
+}
+
 #[derive(Deserialize, Debug)]
 enum ExpectedResult {
     #[serde(rename = "ignored: no race effect")]

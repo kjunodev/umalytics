@@ -1,5 +1,5 @@
 import { NumberField } from './NumberField';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import type { DraftSnapshot } from '@umalytics/shared';
@@ -9,6 +9,9 @@ import { draftRaces, draftFingerprint, unknownCourseDiagnostics, passes, type Dr
 import { StaminaResults } from './StaminaResults';
 import { StaminaUmaPicker } from './StaminaUmaPicker';
 import { SkillPicker } from './SkillPicker';
+import { StaminaScreenshotImport } from './StaminaScreenshotImport';
+import { StaminaScreenshotSkills } from './StaminaScreenshotSkills';
+import { purchasePlan, tierChains, type ScreenshotImport } from './staminaScreenshot';
 import { loadStaminaMemory, saveStaminaMemory, selectUma, type BuildTab } from './staminaState';
 import { RaceSettings } from './RaceSettings';
 import { courseLabel, defaultStaminaInput, groundNames, weatherNames, seasonNames, staminaEngineInput, type Catalog, type StaminaEditorBuild, type StaminaEditorInput, type StaminaInput, type StaminaProgress, type StaminaResult, type StaminaRaceResult, roleNames, strategy, withStrategy } from './staminaTypes';
@@ -35,6 +38,10 @@ export function Stamina({ draft, openDraft = 0, onDraftRunChange, onDataError }:
   const [draftInput, setDraftInput] = useState<StaminaEditorInput>(structuredClone(defaultStaminaInput));
   const [mode, setMode] = useState<'draft' | 'any'>('any');
   const input = mode === 'draft' ? draftInput : anyInput, setInput = mode === 'draft' ? setDraftInput : setAnyInput;
+  const [importOpen, setImportOpen] = useState(false);
+  const screenshotImport = input.screenshotImport;
+  const screenshotSkills = catalog?.screenshot_skills;
+  const importedChains = useMemo(() => screenshotImport && screenshotSkills ? tierChains(screenshotImport.observations, screenshotSkills) : [], [screenshotImport, screenshotSkills]);
   const [buildTab, setBuildTab] = useState<BuildTab>('build');
   const [buildCustomized, setBuildCustomized] = useState(false);
   const [presets, setPresets] = useState<PresetMemory>();
@@ -112,8 +119,20 @@ export function Stamina({ draft, openDraft = 0, onDraftRunChange, onDataError }:
   useEffect(() => { if (popover) toolbar.current?.querySelector<HTMLElement>(popover === 'draft-course' ? '.draft-course-query' : '.stamina-popover button, .stamina-popover select')?.focus(); }, [popover]);
   useEffect(() => { setPopover(current => current === 'draft-course' ? undefined : current); }, [draft?.matchCode]);
 
-  const patch = (next: Partial<StaminaInput>) => setInput(previous => ({ ...previous, ...next }));
+  const patch = (next: Partial<StaminaEditorInput>) => setInput(previous => ({ ...previous, ...next }));
   const patchBuild = (next: Partial<StaminaEditorBuild>) => { setBuildCustomized(true); setInput(previous => ({ ...previous, build: { ...previous.build, ...next } })); };
+  const changeImport = (scan: ScreenshotImport, build?: Partial<StaminaEditorBuild>) => {
+    if (!screenshotSkills) return;
+    const plan = purchasePlan(tierChains(scan.observations, screenshotSkills), scan.selected, scan.points);
+    if (plan.skills.length > 100) return;
+    setBuildCustomized(true);
+    setInput(previous => ({ ...previous, screenshotImport: scan, build: { ...previous.build, ...build, skills: plan.skills } }));
+  };
+  const changeUniqueLevel = (id: number, level: number) => {
+    if (screenshotImport) {
+      changeImport({ ...screenshotImport, observations: screenshotImport.observations.map(row => row.owned && row.id === id ? { ...row, level } : row) });
+    } else patchBuild({ skills: input.build.skills.map(skill => skill.id === id ? { id, level } : skill) });
+  };
   const toggleBuild = (collapsed: boolean) => { focusBuildToggle.current = true; setBuildCollapsed(collapsed); };
   const openBuild = (tab: BuildTab) => { if (buildCollapsed) toggleBuild(false); setBuildTab(tab); setPopover(undefined); };
   const copyCourseDiagnostics = async (slot: DraftRace, raceNumber: number) => {
@@ -204,6 +223,8 @@ export function Stamina({ draft, openDraft = 0, onDraftRunChange, onDataError }:
     <div className={`stamina-workspace has-build${buildCollapsed ? " build-collapsed" : ""}`}>
     <section className={`stamina-results${running && mode === "any" && result ? " previous-result" : ""}`} aria-label="Result">
       {ready && !buildCustomized && <p className="default-build-prompt">Using the default Pace build — <button type="button" aria-label="Edit default build" onClick={() => openBuild('build')}>Edit build</button></p>}
+      {screenshotImport && catalog && <StaminaScreenshotSkills scan={screenshotImport} chains={importedChains} skills={catalog.skills}
+        running={running} onChange={selected => changeImport({ ...screenshotImport, selected })}/>}
       {mode === 'draft' ? !draft && !draftRun ? <div className="panel result-empty"><h2>No draft available</h2><p>Share a live room from Uma Drafter to check its races, or choose Any course.</p></div> : <>
         {draftRun && fingerprint !== draftRun.fingerprint && <p className="stale-notice" role="status">Draft changed since this run</p>}
         {draftRun && canonicalJson(engineInput) !== canonicalJson({ ...draftRun.input, request_id: '' }) && <p className="stale-notice" role="status">Inputs changed since this run; press Run check to update</p>}
@@ -233,12 +254,16 @@ export function Stamina({ draft, openDraft = 0, onDraftRunChange, onDataError }:
       <div className="build-fields">
       <div className="drawer-tabs" role="tablist" aria-label="Build panel"><button type="button" role="tab" disabled={running} aria-selected={buildTab === 'build'} onClick={() => openBuild('build')}>Build</button><button type="button" role="tab" disabled={running} aria-selected={buildTab === 'presets'} onClick={() => openBuild('presets')}>Presets</button><button type="button" role="tab" disabled={running} aria-selected={buildTab === 'race-settings'} onClick={() => openBuild('race-settings')}>Race settings</button></div>
       <div className="build-body" role="tabpanel" aria-label={buildTab === 'build' ? 'Build' : buildTab === 'presets' ? 'Presets' : 'Race settings'}><fieldset disabled={running} className="build-controls">
-        {buildTab === 'race-settings' ? <RaceSettings input={input} onChange={patch} onMood={motivation => patchBuild({ motivation })}/> : buildTab === 'presets' ? <>{presetError && <p role="status">{presetError}</p>}{presets ? <StaminaPresets catalog={catalog} memory={presets} onChange={changePresets} build={input.build} onLoad={build => { patchBuild({ ...build, umaCardId: build.umaCardId }); setBuildTab('build'); }} recent={recent} onRecent={setRecent}/> : <p>Loading presets…</p>}</> : <>
-        <StaminaUmaPicker umas={catalog.umas} selected={selectedUma} uniques={uniques} full={ordinary.length >= 100} onSelect={uma => patchBuild(selectUma(input.build, uma, catalog))} onAptitudes={patchBuild} onLevel={(id, level) => patchBuild({ skills: input.build.skills.map(skill => skill.id === id ? { id, level } : skill) })}/>
-        <Segments label="Strategy" value={strategy(input.build)} options={roleNames} onChange={value => patchBuild(withStrategy(input.build, value))}/>
+        {buildTab === 'race-settings' ? <RaceSettings input={input} onChange={patch} onMood={motivation => patchBuild({ motivation })}/> : buildTab === 'presets' ? <>{presetError && <p role="status">{presetError}</p>}{presets ? <StaminaPresets catalog={catalog} memory={presets} onChange={changePresets} build={input.build} onLoad={build => {
+          setBuildCustomized(true); setInput(previous => ({ ...previous, screenshotImport: undefined, build })); setBuildTab('build');
+        }} recent={recent} onRecent={setRecent}/> : <p>Loading presets…</p>}</> : <>
+        {screenshotSkills && <div className="import-actions"><button type="button" onClick={() => setImportOpen(true)}>Import from screenshots</button>
+          {screenshotImport && <button type="button" onClick={() => patch({ screenshotImport: undefined })}>Remove scan</button>}</div>}
+        <StaminaUmaPicker umas={catalog.umas} selected={selectedUma} uniques={uniques} locked={!!screenshotImport} full={ordinary.length >= 100} onSelect={uma => patchBuild(selectUma(input.build, uma, catalog))} onAptitudes={patchBuild} onLevel={changeUniqueLevel}/>
+        <Segments label="Strategy" value={screenshotImport ? input.build.running_style : strategy(input.build)} options={screenshotImport ? styles : roleNames} onChange={value => patchBuild(screenshotImport ? { running_style: value } : withStrategy(input.build, value))}/>
         <div className="raw-stats">{(['speed', 'stamina', 'pow', 'guts', 'wiz'] as const).map(stat => <label key={stat}>{({ speed: 'Speed', stamina: 'Stamina', pow: 'Power', guts: 'Guts', wiz: 'Wit' })[stat]}<NumberField className={`num ${stat === 'stamina' ? 'stamina-input' : ''}`} aria-label={stat === 'pow' ? 'Power' : stat === 'wiz' ? 'Wit' : stat[0]!.toUpperCase() + stat.slice(1)} required min={1} max={2000} value={input.build.stats[stat]} onChange={value => patchBuild({ stats: { ...input.build.stats, [stat]: value } })}/></label>)}</div>
         <div className="field"><span>Aptitudes</span>{(['distance', 'style', 'ground'] as const).map(group => <div className={`aptitude-grid aptitude-${group}`} key={group}>{({ distance: ['Sprint', 'Mile', 'Medium', 'Long'], style: styles, ground: ['Turf', 'Dirt'] })[group].map((name, i) => aptitude(group, i, `${name} aptitude`))}</div>)}</div>
-        <div className="field"><span>Skills · your uma only</span>{notice && <small className="muted" role="status">Local skill data unavailable. Using engine names without icons.</small>}<SkillPicker catalog={catalog} skills={ordinary} onChange={skills => patchBuild({ skills: [...skills, ...uniques.map(unique => unique.skill)] })} recent={recent} onRecent={setRecent} limit={100 - uniques.length}/></div>
+        {!screenshotImport && <div className="field"><span>Skills · your uma only</span>{notice && <small className="muted" role="status">Local skill data unavailable. Using engine names without icons.</small>}<SkillPicker catalog={catalog} skills={ordinary} onChange={skills => patchBuild({ skills: [...skills, ...uniques.map(unique => unique.skill)] })} recent={recent} onRecent={setRecent} limit={100 - uniques.length}/></div>}
         </>}
       </fieldset></div>
       </div>
@@ -246,5 +271,7 @@ export function Stamina({ draft, openDraft = 0, onDraftRunChange, onDataError }:
     </aside>)}
     </div>
     <p role="status" aria-live="polite">{copyStatus}</p>
+    {importOpen && catalog && <StaminaScreenshotImport catalog={catalog} recent={recent} onRecent={setRecent} onClose={() => setImportOpen(false)}
+      onApply={(build, scan) => { changeImport(scan, build); setImportOpen(false); }}/>}
   </section>;
 }

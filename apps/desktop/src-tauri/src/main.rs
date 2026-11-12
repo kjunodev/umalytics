@@ -32,6 +32,8 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             start_feed,
             stamina::engine_catalog,
+            #[cfg(windows)]
+            stamina::scan_stamina_screenshot,
             stamina::stamina_check,
             stamina::stamina_check_races,
             stamina::cancel_stamina_check

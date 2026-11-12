@@ -1,5 +1,5 @@
 use super::super::{Skill, Uma};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use uma_race_sim::data::SkillData;
 
@@ -80,19 +80,21 @@ struct Entry<'a> {
 
 pub(super) struct Matcher<'a>(Vec<Entry<'a>>);
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize)]
 pub(super) struct Match {
     pub id: i32,
     pub confidence: f32,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub(super) enum Resolution {
     Matched(Match),
     IgnoredNoRaceEffect,
 }
 
 impl Resolution {
+    #[cfg(test)]
     pub fn matched(self) -> Option<Match> {
         match self {
             Self::Matched(matched) => Some(matched),
@@ -101,13 +103,17 @@ impl Resolution {
     }
 }
 
-fn has_race_effect(skill: &SkillData) -> bool {
+pub(super) fn is_race_effect(effect: i32) -> bool {
     // Match the simulator's create_ability arms and the type 6 running-style override.
+    matches!(effect, 1..=14 | 21 | 22 | 27..=32 | 35..=38)
+}
+
+pub(super) fn has_race_effect(skill: &SkillData) -> bool {
     skill
         .details
         .iter()
         .flat_map(|detail| &detail.abilities)
-        .any(|ability| matches!(ability.ability_type, 1..=14 | 21 | 22 | 27..=32 | 35..=38))
+        .any(|ability| is_race_effect(ability.ability_type))
 }
 
 const MIN_CONFIDENCE: f32 = 0.88;

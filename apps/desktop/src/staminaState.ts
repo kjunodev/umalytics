@@ -1,6 +1,7 @@
 import { load } from '@tauri-apps/plugin-store';
 import { defaultStaminaInput, type Catalog, type CatalogUma, type StaminaEditorBuild, type StaminaEditorInput, type StaminaInput } from './staminaTypes';
 import type { CourseChoices } from './staminaDraft';
+import { purchasePlan, restoreScreenshotImport, tierChains } from './staminaScreenshot';
 
 export type BuildTab = 'build' | 'presets' | 'race-settings';
 export interface StaminaMemory { mechanicsDefaults?: number; input: StaminaEditorInput; draftInput?: StaminaEditorInput; recent: number[]; buildCollapsed: boolean; buildTab?: BuildTab; buildCustomized?: boolean; courseChoices?: CourseChoices }
@@ -53,6 +54,14 @@ export function restoreStaminaMemory(value: unknown, catalog: Catalog, defaultTa
   if (integer(raw.seeds, 1, 1000)) input.seeds = raw.seeds;
   for (const key of ['assume_skills_activate', 'rushed', 'lane_movement'] as const) if (typeof raw[key] === 'boolean') input[key] = raw[key];
   if (saved.mechanicsDefaults === 2) for (const key of ['spot_struggle', 'dueling'] as const) if (typeof raw[key] === 'boolean') input[key] = raw[key];
+  const screenshotImport = restoreScreenshotImport(raw.screenshotImport, catalog.screenshot_skills);
+  if (screenshotImport && catalog.screenshot_skills) {
+    const plan = purchasePlan(tierChains(screenshotImport.observations, catalog.screenshot_skills), screenshotImport.selected, screenshotImport.points);
+    if (plan.skills.length <= 100) {
+      input.screenshotImport = screenshotImport;
+      input.build.skills = plan.skills;
+    }
+  }
   const courseChoices: CourseChoices = Object.fromEntries(Object.entries(object(saved.courseChoices)).slice(-100).flatMap(([code, entries]) => {
     if (!code.trim() || code.length > 80) return [];
     const valid = Object.entries(object(entries)).filter((entry): entry is [string, string] => entry[0].length <= 2048 && typeof entry[1] === 'string' && catalog.courses.some(c => c.id === entry[1])).slice(-7);

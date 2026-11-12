@@ -1,4 +1,4 @@
-use std::{fs::File, io::BufReader, marker::PhantomData, path::Path, rc::Rc};
+use std::{io::Cursor, marker::PhantomData, rc::Rc};
 use windows::{
     core::h,
     Globalization::Language,
@@ -53,10 +53,19 @@ pub(super) struct Image {
 }
 
 impl Image {
-    pub fn open(path: &Path) -> Result<Self> {
-        let mut decoder = png::Decoder::new(BufReader::new(File::open(path)?));
+    #[cfg(test)]
+    pub fn open(path: &std::path::Path) -> Result<Self> {
+        Self::from_png(&std::fs::read(path)?)
+    }
+
+    pub fn from_png(bytes: &[u8]) -> Result<Self> {
+        let mut decoder = png::Decoder::new(Cursor::new(bytes));
         decoder.set_transformations(png::Transformations::normalize_to_color8());
         let mut reader = decoder.read_info()?;
+        let max = OcrEngine::MaxImageDimension()?;
+        if reader.info().width > max || reader.info().height > max {
+            return Err(format!("Windows OCR image limit is {max} pixels per side").into());
+        }
         let mut bytes = vec![
             0;
             reader
@@ -85,6 +94,7 @@ impl Image {
         self.pixels[y as usize * self.width as usize + x as usize]
     }
 
+    #[cfg(test)]
     pub fn resize(&self, scale: f32) -> Self {
         self.crop(Rect::new(0, 0, self.width, self.height), scale)
     }
@@ -170,7 +180,7 @@ pub(super) struct Ocr {
 
 impl Ocr {
     pub fn new() -> Result<Self> {
-        // SAFETY: The harness owns the calling thread's apartment until Ocr is dropped.
+        // SAFETY: OCR owns the calling thread's apartment until it is dropped.
         unsafe { RoInitialize(RO_INIT_MULTITHREADED)? };
         let apartment = Apartment(PhantomData);
         let language = Language::CreateLanguage(h!("en-US"))?;

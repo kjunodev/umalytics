@@ -1,3 +1,5 @@
+import type { ImportCatalog, ScreenshotImport } from './staminaScreenshot';
+
 export interface Course {
   id: string; track_name: string; distance: number; surface: number; direction: number;
   variant: string | null; course_set_id: number; race_instance_id: number;
@@ -11,7 +13,7 @@ export interface CatalogUma {
   unique_skill_id: number;
   aptitudes: Pick<StaminaBuild, 'distance' | 'style' | 'ground'>;
 }
-export interface Catalog { courses: Course[]; skills: CatalogSkill[]; umas: CatalogUma[]; local_skill_data: boolean; local_skill_path?: string; local_skill_count?: number; local_icon_count?: number; engine_data_version?: string }
+export interface Catalog { courses: Course[]; skills: CatalogSkill[]; umas: CatalogUma[]; local_skill_data: boolean; local_skill_path?: string; local_skill_count?: number; local_icon_count?: number; engine_data_version?: string; screenshot_skills?: ImportCatalog }
 export interface StaminaBuild {
   running_style: number;
   stats: { speed: number; stamina: number; pow: number; guts: number; wiz: number };
@@ -27,11 +29,12 @@ export interface StaminaInput {
   request_id: string; target: 90 | 95 | 99; build: StaminaBuild; race: RaceSelection; field: StaminaField; seeds: number | null; assume_skills_activate: boolean; rushed: boolean; spot_struggle: boolean; dueling: boolean; lane_movement: boolean;
 }
 export interface StaminaEditorBuild extends StaminaBuild { umaCardId?: number }
-export interface StaminaEditorInput extends StaminaInput { build: StaminaEditorBuild }
+export interface StaminaEditorInput extends StaminaInput { build: StaminaEditorBuild; screenshotImport?: ScreenshotImport }
 
 export function staminaEngineInput(input: StaminaEditorInput): StaminaInput {
   const { umaCardId: _umaCardId, ...build } = input.build;
-  return { ...input, build };
+  const { screenshotImport: _screenshotImport, ...engineInput } = input;
+  return { ...engineInput, build };
 }
 export interface StaminaRates {
   joint_percent: number;

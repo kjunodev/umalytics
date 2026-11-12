@@ -51,8 +51,6 @@
 .stamina-layout .aptitude-grid select { font: 500 12px var(--font-mono); }
 .stamina-layout .build-body .aptitude-grid label { flex-direction: row; align-items: center; justify-content: space-between; gap: 2px; padding: 0 4px; border: 1px solid var(--line); border-radius: 5px; background: var(--s2); }
 .stamina-layout .build-body .aptitude-grid select { appearance: none; width: 18px; min-height: 26px; padding: 0; border: 0; background: transparent; color: var(--acc); text-align: center; }
-.stamina-layout .build-body .aptitude-ground { grid-template-columns: repeat(2, minmax(0, 1fr)) minmax(0, 1.5fr); }
-.stamina-layout .build-body .aptitude-ground select[aria-label="Mood"] { width: 44px; font: 500 11px var(--font-body); }
 .stamina-layout .build-body .field > span { color: var(--tx3); font-size: 10px; text-transform: uppercase; font-weight: 600; letter-spacing: .08em; }
 .stamina-uma-actions { display: grid; grid-template-columns: minmax(0, 1fr) 76px; align-items: stretch; gap: 6px; }
 .stamina-layout .stamina-uma-trigger, .stamina-layout .stamina-uma-options button { display: flex; align-items: center; gap: 7px; text-align: left; white-space: normal; }
@@ -217,3 +215,70 @@
 .stamina-data-error { display: grid; gap: 12px; padding: 20px; }
 .stamina-data-error pre { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 .stamina-data-error button { justify-self: start; }
+
+.import-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.import-actions button { padding: 4px 9px; font-size: 12px; }
+.import-actions button:first-child { color: var(--acc); }
+.stamina-layout .screenshot-dialog {
+  display: none;
+  width: min(700px, calc(100% - 32px));
+  max-height: calc(100dvh - 32px);
+  padding: 0;
+  margin: auto;
+  color: var(--tx);
+  background: var(--s1);
+  overflow: hidden;
+}
+.stamina-layout .screenshot-dialog[open] { display: flex; }
+.screenshot-dialog::backdrop { background: color-mix(in srgb, var(--bg) 78%, transparent); }
+.screenshot-dialog > form { display: flex; flex-direction: column; min-height: 0; }
+.stamina-layout .screenshot-dialog .drawer-heading { border-bottom: 1px solid var(--line); }
+.stamina-layout .screenshot-dialog .drawer-heading h2 { font-size: 18px; }
+.screenshot-dialog .drawer-footer button { flex: none; }
+.import-dialog-body { font-size: 13px; overscroll-behavior: contain; }
+.import-drop { display: grid; justify-items: center; gap: 6px; text-align: center; padding: 16px; background: var(--s2); border: 1px dashed var(--acc); border-radius: var(--radius-md); }
+.import-drop strong { font-size: 16px; }
+.import-drop p { color: var(--tx2); }
+.import-drop button { margin-top: 4px; padding: 0 10px; }
+.import-drop kbd { color: var(--tx); font: 11px var(--font-mono); }
+.import-checklist, .import-sources, .import-ignored { list-style: none; margin: 0; padding: 0; }
+.import-checklist { display: grid; gap: 6px; color: var(--tx2); }
+.import-checklist li { display: flex; align-items: baseline; gap: 8px; }
+.import-checklist li::before { content: '○'; color: var(--tx3); }
+.import-checklist li[data-ready=true]::before { content: '✓'; color: var(--good); }
+.import-sources { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr)); gap: 6px; }
+.import-sources li { display: flex; align-items: center; justify-content: space-between; gap: 6px; border: 1px solid var(--line); border-radius: var(--radius-md); padding: 6px 8px; }
+.import-sources li > div { display: grid; gap: 2px; overflow-wrap: anywhere; }
+.import-sources small { color: var(--tx2); }
+.import-sources button { flex: none; width: 30px; padding: 0; font-size: 16px; }
+.import-review { display: grid; gap: 16px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.import-review > section { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.import-review > section:only-child { grid-column: 1 / -1; }
+.import-review h3, .screenshot-skills h2 { font: 600 16px/1.3 var(--font-body); }
+.stamina-uma-single > button { width: 100%; }
+.import-points { align-self: start; width: 104px; }
+.import-unmatched { display: grid; gap: 6px; padding: 8px; border-radius: var(--radius-md); border: 1px solid var(--line); overflow-wrap: anywhere; }
+.import-ignored { display: grid; gap: 4px; color: var(--tx2); overflow-wrap: anywhere; }
+.stamina-layout .import-apply { padding: 0 12px; border: 0; background: var(--acc); color: var(--acc-ink); }
+.stamina-layout .import-apply:disabled { border: 1px solid var(--line); background: var(--s2); color: var(--tx3); }
+.stamina-layout .screenshot-skills { gap: 8px; font-size: 13px; }
+.screenshot-skills > header { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 6px 14px; align-items: baseline; }
+.screenshot-skills > header > strong, .import-price { font: 500 12px var(--font-mono); white-space: nowrap; }
+.import-warning { color: var(--gold); }
+.import-skill-list { display: grid; max-height: min(44dvh, 410px); overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
+.import-chain { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 8px; border-top: 1px solid var(--line); padding: 6px 6px 6px 0; }
+.import-chain:last-child { border-bottom: 1px solid var(--line); }
+.import-tier { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0 8px; align-items: center; padding: 4px 6px; border-radius: var(--radius-md); min-width: 0; }
+.import-tier[data-selected=true] { background: var(--tone-skill-bg); }
+.import-skill-name { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; min-width: 0; overflow-wrap: anywhere; }
+.import-skill-name small { color: var(--good); font-size: 11px; }
+.import-skill-name .skill-icon { flex: none; }
+.import-owned { color: var(--tx2); font-size: 11px; }
+.import-price-issue { grid-column: 1 / -1; }
+.import-stepper { display: flex; align-items: center; gap: 4px; }
+.import-stepper span { min-width: 31px; text-align: center; font-size: 11px; color: var(--tx2); }
+.stamina-layout .import-stepper button { width: 28px; min-height: 28px; padding: 0; font-size: 15px; }
+.screenshot-skills summary { cursor: pointer; color: var(--tx2); }
+@container desktop-content (max-width: 660px) {
+  .import-review { grid-template-columns: minmax(0, 1fr); }
+}

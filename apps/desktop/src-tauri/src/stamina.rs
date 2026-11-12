@@ -16,8 +16,7 @@ use uma_race_sim::{
     AnalysisOptions, HorseInput, RaceInput, SkillInput, SkillWizCheck,
 };
 mod skill_data;
-// The screenshot spike runs through the native test harness.
-#[cfg(all(windows, test))]
+#[cfg(windows)]
 mod ocr;
 
 #[derive(Deserialize)]
@@ -105,6 +104,8 @@ pub struct Catalog {
     local_skill_path: String,
     local_skill_count: usize,
     local_icon_count: usize,
+    #[cfg(windows)]
+    screenshot_skills: BTreeMap<i32, ocr::ImportSkill>,
 }
 struct Engine {
     data: GameData,
@@ -306,6 +307,8 @@ fn load_engine_from(data_dir: &Path) -> Result<Engine, String> {
         skill_data::enrich(&mut skills);
     skills.sort_by_key(|s| (s.name.clone(), s.id));
     let umas = catalog_umas(&names, &data);
+    #[cfg(windows)]
+    let screenshot_skills = ocr::import_skills(&data.skills, &skills)?;
     Ok(Engine {
         data,
         catalog: Catalog {
@@ -316,6 +319,8 @@ fn load_engine_from(data_dir: &Path) -> Result<Engine, String> {
             local_skill_path,
             local_skill_count,
             local_icon_count,
+            #[cfg(windows)]
+            screenshot_skills,
         },
     })
 }
@@ -1314,6 +1319,14 @@ pub async fn engine_catalog(app: tauri::AppHandle) -> Result<Catalog, String> {
     })
     .await
     .map_err(|_| "Unable to load engine catalog.".to_string())?
+}
+#[cfg(windows)]
+#[tauri::command]
+pub async fn scan_stamina_screenshot(request: tauri::ipc::Request<'_>) -> Result<ocr::Import, String> {
+    let bytes = ocr::screenshot_bytes(request.body())?;
+    tauri::async_runtime::spawn_blocking(move || ocr::scan_png(&bytes))
+        .await
+        .map_err(|_| "The screenshot could not be read.".to_string())?
 }
 #[tauri::command]
 pub async fn stamina_check(

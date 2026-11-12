@@ -19,6 +19,7 @@ const failures = [];
 const drawerOnly = process.env.DESKTOP_SHOTS_SCENES === 'drawer';
 const updatesOnly = process.env.DESKTOP_SHOTS_SCENES === 'updates';
 const staminaOnly = process.env.DESKTOP_SHOTS_SCENES === 'stamina';
+const importOnly = process.env.DESKTOP_SHOTS_SCENES === 'stamina-import';
 const arenaOnly = process.env.DESKTOP_SHOTS_SCENES === 'arena';
 const statesOnly = process.env.DESKTOP_SHOTS_SCENES === 'states';
 const dataOnly = process.env.DESKTOP_SHOTS_SCENES === 'data';
@@ -38,7 +39,7 @@ try {
     } else await page.locator('.sidebar').getByRole('button', { name, exact: true }).click();
   }
   async function open(scene, width, height, prefs = {}) {
-    const page = await browser.newPage({ viewport: { width, height } });
+    const page = await browser.newPage({ viewport: { width, height }, deviceScaleFactor: scene === 'stamina-screenshot-import' ? 1.25 : 1 });
     page.setDefaultTimeout(20000);
     page.on('pageerror', error => failures.push(error.message));
     await page.route('https://**/*', async route => {
@@ -114,9 +115,69 @@ try {
     check(errors.length === 0, `${name}: ${errors.join('; ')}`);
     console.log(`PASS ${name}`);
   }
-  if (drawerOnly) await (await import('./shots-player-drawer.mjs')).runPlayerDrawerShots({ open, nav, shot, check });
+  async function screenshotImportShots() {
+    const page = await open('stamina-screenshot-import', 1120, 900);
+    await nav(page, 'Stamina');
+    await page.getByRole('button', { name: 'Import from screenshots' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Import from screenshots' });
+    await dialog.waitFor();
+    await shot(page, 'stamina-import-empty');
+    const sendImages = (type, count) => dialog.evaluate(async (element, { type, count }) => {
+      const canvas = document.createElement('canvas');
+      const png = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+      const data = new DataTransfer();
+      for (let i = 0; i < count; i++) data.items.add(new File([png], `fixture-${i}.png`, { type: 'image/png' }));
+      const event = type === 'paste' ? new ClipboardEvent(type, { bubbles: true, clipboardData: data })
+        : new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer: data });
+      (type === 'paste' ? element : element.querySelector('.import-drop')).dispatchEvent(event);
+    }, { type, count });
+    await sendImages('paste', 1);
+    await dialog.getByText('Learn', { exact: true }).waitFor();
+    await sendImages('drop', 5);
+    await dialog.getByText('Learned Skills screen', { exact: true }).waitFor();
+    check(await dialog.getByText('Switch to the number view', { exact: true }).count() === 1, 'Chart screenshots request number view');
+    const apply = dialog.getByRole('button', { name: 'Apply to build' });
+    check(await apply.isDisabled(), 'Unknown skills block apply');
+    check(await dialog.getByLabel('Turf aptitude').inputValue() === 'S', 'Review shows scanned aptitude');
+    check(await dialog.getByRole('spinbutton', { name: 'Stamina', exact: true }).inputValue() === '715', 'Review shows scanned stamina');
+    await dialog.getByRole('button', { name: 'Remove screenshot 2' }).click();
+    await dialog.getByRole('button', { name: 'Remove screenshot 6' }).click();
+    await shot(page, 'stamina-import-review-unknown');
+    await dialog.getByRole('button', { name: 'Match skill' }).click();
+    await dialog.getByRole('combobox', { name: 'Search skills' }).fill('Ignited');
+    await dialog.getByRole('option', { name: 'Ignited Spirit WIT' }).click();
+    await dialog.getByRole('spinbutton', { name: 'Stamina', exact: true }).fill('720');
+    await apply.click();
+    const panel = page.getByRole('region', { name: 'Screenshot skills' });
+    const budget = panel.getByRole('status');
+    await budget.getByText('200 / 200 SP left').waitFor();
+    check(await panel.getByText('Owned', { exact: true }).count() === 2, 'Career and Obtained rows are locked and deduplicated');
+    check(await panel.getByText('Price mismatch · Scanned 170 SP', { exact: true }).count() === 1, 'Calculated and scanned prices are both visible on mismatch');
+    await shot(page, 'stamina-import-price-mismatch');
+    const increase = panel.getByRole('button', { name: 'Increase tier for Go with the Flow' });
+    await increase.click();
+    await budget.getByText('80 / 200 SP left').waitFor();
+    await increase.click();
+    await budget.getByText('-28 / 200 SP left').waitFor();
+    await shot(page, 'stamina-import-over-budget');
+    const run = page.getByRole('button', { name: 'Run check', exact: true });
+    await run.click();
+    await page.locator('.stamina-headline').waitFor();
+    const input = await page.evaluate(() => window.__SHOT_CONTROL__.calls.find(call => call.command === 'stamina_check').args.input);
+    check(input.build.stats.stamina === 720 && input.build.skills.map(skill => skill.id).join(',') === '110311,200501,210052', 'Simulation uses the reviewed stats and highest selected tier');
+    await panel.getByRole('button', { name: 'Decrease tier for Go with the Flow' }).click();
+    await page.getByText(/Inputs changed since this run/).waitFor();
+    await page.reload();
+    await nav(page, 'Stamina');
+    await budget.getByText('80 / 200 SP left').waitFor();
+    check(await page.getByRole('spinbutton', { name: 'Stamina', exact: true }).inputValue() === '720', 'Scan, edits and selected tier survive reload');
+    await page.close();
+  }
+  if (importOnly) await screenshotImportShots();
+  else if (drawerOnly) await (await import('./shots-player-drawer.mjs')).runPlayerDrawerShots({ open, nav, shot, check });
   else if (updatesOnly) await (await import('./shots-updater.mjs')).runUpdateShots({ open, nav, shot, check });
   else {
+  if (!arenaOnly && !statesOnly && !dataOnly && !usabilityOnly) await screenshotImportShots();
   if (!staminaOnly && !arenaOnly && !dataOnly && !usabilityOnly) {
     const page = await open('lobby', 1280, 800);
     await page.waitForFunction(() => document.querySelectorAll('.arena-card[data-state=loaded]').length === 10);

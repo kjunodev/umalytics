@@ -1,8 +1,8 @@
 use super::image::{Image, Rect, Rgb, Word};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::ops::Range;
 
-#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq, PartialOrd, Ord)]
 #[serde(rename_all = "kebab-case")]
 pub(super) enum Screen {
     AttributesNumbers,

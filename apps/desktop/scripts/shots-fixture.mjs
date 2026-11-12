@@ -37,6 +37,48 @@ export const catalog = {
     { id: 100621, name: 'Go Go Mun!', hp_recovery: false, rarity: 'unique', icon_path: 'fixture-heal.webp' },
     { id: 201241, name: 'Front Runner Straightaways ◎', hp_recovery: false, rarity: 'white', icon_path: 'fixture-heal.webp' }, ...[...new Set([...Object.values(kits).filter(Array.isArray).flat(), 202051, 210052])].map(id => ({ id, name: id === 202051 ? 'Runaway' : id === 210052 ? 'Ignited Spirit WIT' : `Fixture kit skill ${id}`, hp_recovery: false, rarity: 'white', icon_path: null }))]
 };
+export const screenshotCatalog = {
+  ...catalog,
+  screenshot_skills: {
+    110311: { cost: null, tier: null },
+    210052: { cost: null, tier: null },
+    200501: { cost: 120, tier: { group: 20050, rank: 2 } },
+    200502: { cost: 120, tier: { group: 20050, rank: 1 } },
+    910311: { cost: 200, tier: null },
+  },
+  skills: [
+    ...catalog.skills.filter(skill => ![200501, 200502, 910311].includes(skill.id)),
+    { id: 200501, name: 'Lane Legerdemain', rarity: 'gold', hp_recovery: false, icon_path: 'fixture-heal.webp' },
+    { id: 200502, name: 'Go with the Flow', rarity: 'white', hp_recovery: false, icon_path: 'fixture-heal.webp' },
+    { id: 910311, name: 'Fresh☆Parlor (inherited)', rarity: 'white', hp_recovery: true, icon_path: 'fixture-heal.webp' },
+  ],
+};
+
+const read = (raw_name, id, fields) => ({
+  raw_name, resolution: id ? { matched: { id, confidence: 1 } } : null,
+  fields: { level: null, cost: null, hint: null, obtained: null, ...fields },
+});
+const scan = (screen, data) => ({
+  screen, card: null, attributes: null, skill_points: null, instruction: null, skills: [], ...data,
+});
+const card = { id: 103102, name: 'Ines Fujin', title: '[Melt Your Heart]' };
+export const screenshotScans = [
+  scan('learn', { skill_points: 200, skills: [
+    read('Lane Legerdemain', 200501, { cost: 228, hint: 1 }),
+    read('Go with the Flow', 200502, { cost: 120 }),
+    read('Fresh☆Parlor', 910311, { cost: 170, hint: 1 }),
+    read('Fresh☆Parlor', 110311, { obtained: true }),
+  ] }),
+  scan('attributes-chart', { card, instruction: 'Switch to the number view' }),
+  scan('attributes-numbers', { card, attributes: { stats: [1210, 715, 817, 632, 635], track: 'SE', distance: 'EBSA', style: 'ABCG' } }),
+  scan('career-skills', { card, skills: [
+    read('Fresh☆Parlor', 110311),
+    read('Ignited Spint WIT', null),
+    { ...read('Carnival Bonus', null), resolution: 'ignored_no_race_effect' },
+  ] }),
+  scan('learn', { skill_points: 200, skills: [read('Go with the Flow', 200502, { cost: 120 })] }),
+  scan('unsupported', { instruction: 'Learned Skills screen' }),
+];
 export function apiResponse(url, scene) {
   const parsed = new URL(url);
   if (parsed.pathname === '/api/esports/league') return { standings: [{ teamId: 'fixture-team' }] };

@@ -2,25 +2,130 @@ mod image;
 mod layout;
 mod matcher;
 mod parse;
+#[cfg(test)]
 mod tests;
 
-use super::Uma;
+use super::{engine, Skill, Uma};
 use image::{Image, Ocr, Rect, Result};
 use layout::{brown_ink, is_event, is_unique, white_ink, Screen};
 use matcher::{Mark, Matcher, Resolution};
 use parse::{circle, ink_bounds, level, number, read, Attributes};
-use serde::Deserialize;
-use std::collections::BTreeMap;
+use serde::{Deserialize, Serialize};
+use std::{
+    collections::{BTreeMap, HashMap},
+    sync::OnceLock,
+};
+use uma_race_sim::data::SkillData;
 
-#[derive(Clone, Debug, Default, Deserialize, PartialEq)]
+const BUNDLED_SKILLS: &str = include_str!("../../resources/skill-data/skills.json");
+
+pub(super) fn screenshot_bytes(
+    body: &tauri::ipc::InvokeBody,
+) -> std::result::Result<Vec<u8>, String> {
+    use tauri::ipc::InvokeBody;
+    const MAX_BYTES: usize = 32 * 1024 * 1024;
+    let valid = |len| (1..=MAX_BYTES).contains(&len);
+    match body {
+        InvokeBody::Raw(bytes) if valid(bytes.len()) => Ok(bytes.clone()),
+        // Tauri serializes ArrayBuffer as a JSON array if its binary IPC is unavailable.
+        InvokeBody::Json(serde_json::Value::Array(bytes)) if valid(bytes.len()) => bytes
+            .iter()
+            .map(|byte| {
+                byte.as_u64()
+                    .and_then(|n| u8::try_from(n).ok())
+                    .ok_or("Expected image bytes.".into())
+            })
+            .collect(),
+        InvokeBody::Raw(_) | InvokeBody::Json(serde_json::Value::Array(_)) => {
+            Err("Choose an image under 32 MB.".into())
+        }
+        InvokeBody::Json(_) => Err("Expected an image.".into()),
+    }
+}
+
+#[derive(Clone, Serialize)]
+pub(super) struct ImportSkill {
+    cost: Option<u16>,
+    tier: Option<Tier>,
+}
+
+#[derive(Clone, Serialize)]
+struct Tier {
+    group: i32,
+    rank: i32,
+}
+
+pub(super) fn import_skills(
+    engine_skills: &HashMap<i32, SkillData>,
+    catalog: &[Skill],
+) -> std::result::Result<BTreeMap<i32, ImportSkill>, String> {
+    #[derive(Deserialize)]
+    struct Price {
+        id: i32,
+        cost: Option<u16>,
+        gene_version: Option<Inherited>,
+    }
+    #[derive(Deserialize)]
+    struct Inherited {
+        id: i32,
+    }
+    let rows: Vec<Price> =
+        serde_json::from_str(BUNDLED_SKILLS).map_err(|error| error.to_string())?;
+    let costs: HashMap<_, _> = rows
+        .into_iter()
+        .flat_map(|row| {
+            row.cost
+                .map(|cost| (row.id, cost))
+                .into_iter()
+                .chain(row.gene_version.map(|gene| (gene.id, 200)))
+        })
+        .collect();
+    Ok(catalog
+        .iter()
+        .filter_map(|meta| {
+            let skill = engine_skills
+                .get(&meta.id)
+                .filter(|skill| matcher::has_race_effect(skill))?;
+            let cost = costs.get(&skill.id).copied().filter(|cost| *cost > 0);
+            let tier = (meta.rarity != "unique" && skill.group_id > 0 && skill.group_rate > 0)
+                .then_some(Tier {
+                    group: skill.group_id,
+                    rank: skill.group_rate,
+                });
+            Some((skill.id, ImportSkill { cost, tier }))
+        })
+        .collect())
+}
+
+pub(super) fn scan_png(bytes: &[u8]) -> std::result::Result<Import, String> {
+    let engine = engine()?;
+    static MATCHER: OnceLock<std::result::Result<Matcher<'static>, String>> = OnceLock::new();
+    let matcher = MATCHER
+        .get_or_init(|| {
+            Matcher::new(&engine.catalog.skills, BUNDLED_SKILLS, &engine.data.skills)
+                .map_err(|error| error.to_string())
+        })
+        .as_ref()
+        .map_err(Clone::clone)?;
+    let result = (|| {
+        let ocr = Ocr::new()?;
+        let image = Image::from_png(bytes)?;
+        scan(&ocr, &image, matcher, &engine.catalog.umas)
+    })();
+    result.map_err(|error| error.to_string())
+}
+
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 struct SkillFields {
     level: Option<u8>,
     cost: Option<u16>,
     hint: Option<u8>,
     obtained: Option<bool>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    hint_unreadable: bool,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 struct SkillRow {
     resolution: Option<Resolution>,
     fields: SkillFields,
@@ -28,20 +133,22 @@ struct SkillRow {
     raw_fields: Vec<String>,
 }
 
-#[derive(Debug, Deserialize, PartialEq)]
+#[derive(Debug, Deserialize, PartialEq, Serialize)]
 struct Card {
     id: i32,
     title: String,
     name: String,
 }
 
-struct Import {
+#[derive(Serialize)]
+pub struct Import {
     screen: Screen,
     instruction: Option<&'static str>,
     attributes: Option<Attributes>,
     card: Option<Card>,
     skill_points: Option<u16>,
     skills: Vec<SkillRow>,
+    #[serde(skip)]
     raw: Vec<String>,
 }
 
@@ -94,7 +201,17 @@ fn scan(ocr: &Ocr, image: &Image, matcher: &Matcher<'_>, umas: &[Uma]) -> Result
                     .push(owned_row(ocr, image, matcher, row, layout.screen)?);
             }
         }
-        Screen::Unsupported => {}
+        Screen::Unsupported => {
+            result.instruction = Some(if layout::label(&words, "Learned").next().is_some() {
+                "Learned Skills screen"
+            } else if layout::label(&words, "Close").next().is_some()
+                && layout::label(&words, "Growth").next().is_some()
+            {
+                "Uma Details screen"
+            } else {
+                "Unrecognized screen"
+            });
+        }
     }
     Ok(result)
 }
@@ -185,6 +302,7 @@ fn learn_row(ocr: &Ocr, image: &Image, matcher: &Matcher<'_>, row: Rect) -> Resu
                 fields.hint = level(&retry);
                 raw_fields.push(retry);
             }
+            fields.hint_unreadable = fields.hint.is_none();
         }
     }
     Ok(SkillRow {
@@ -247,6 +365,7 @@ fn pixels_in(image: &Image, area: Rect, mut predicate: impl FnMut(image::Rgb) ->
     count as f32 / (area.width() * area.height()) as f32
 }
 
+#[cfg(test)]
 #[derive(Default)]
 struct SkillImport {
     identified: BTreeMap<i32, SkillRow>,
@@ -254,6 +373,7 @@ struct SkillImport {
     unknown: Vec<SkillRow>,
 }
 
+#[cfg(test)]
 impl SkillImport {
     fn extend(&mut self, rows: Vec<SkillRow>) {
         for row in rows {

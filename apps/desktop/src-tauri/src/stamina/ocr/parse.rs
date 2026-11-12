@@ -4,7 +4,7 @@ use super::{
     layout::{brown_ink, grade_rows, label, runs, Layout},
     matcher::{match_card, Mark},
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 pub(super) fn number(text: &str) -> Option<u16> {
     let text = text.trim();
@@ -86,7 +86,7 @@ pub(super) fn ink_bounds(
     (bounds.width() > 0 && bounds.height() > 0).then_some(bounds)
 }
 
-#[derive(Debug, Default, PartialEq, Deserialize)]
+#[derive(Debug, Default, PartialEq, Deserialize, Serialize)]
 pub(super) struct Attributes {
     pub stats: [Option<u16>; 5],
     pub track: String,
