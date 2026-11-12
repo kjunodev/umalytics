@@ -9,7 +9,9 @@ use super::{engine, Skill, Uma};
 use image::{Image, Ocr, Rect, Result};
 use layout::{brown_ink, is_event, is_unique, white_ink, Screen};
 use matcher::{Mark, Matcher, Resolution};
-use parse::{circle, ink_bounds, level, number, read, Attributes};
+use parse::{
+    circle, hint_level, hint_percent, ink_bounds, level, number, read, read_number, Attributes,
+};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeMap, HashMap},
@@ -47,6 +49,8 @@ pub(super) fn screenshot_bytes(
 pub(super) struct ImportSkill {
     cost: Option<u16>,
     tier: Option<Tier>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    hint_from: Option<i32>,
 }
 
 #[derive(Clone, Serialize)]
@@ -80,6 +84,14 @@ pub(super) fn import_skills(
                 .chain(row.gene_version.map(|gene| (gene.id, 200)))
         })
         .collect();
+    let circles: HashMap<_, _> = catalog
+        .iter()
+        .filter_map(|meta| {
+            let name = meta.name.strip_suffix(['○', '◯'])?.trim_end();
+            let skill = engine_skills.get(&meta.id)?;
+            Some(((skill.group_id, name), meta.id))
+        })
+        .collect();
     Ok(catalog
         .iter()
         .filter_map(|meta| {
@@ -92,7 +104,18 @@ pub(super) fn import_skills(
                     group: skill.group_id,
                     rank: skill.group_rate,
                 });
-            Some((skill.id, ImportSkill { cost, tier }))
+            let hint_from = meta
+                .name
+                .strip_suffix(['◎', '◉'])
+                .and_then(|name| circles.get(&(skill.group_id, name.trim_end())).copied());
+            Some((
+                skill.id,
+                ImportSkill {
+                    cost,
+                    tier,
+                    hint_from,
+                },
+            ))
         })
         .collect())
 }
@@ -123,6 +146,8 @@ struct SkillFields {
     obtained: Option<bool>,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     hint_unreadable: bool,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    hint_conflict: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -187,14 +212,30 @@ fn scan(ocr: &Ocr, image: &Image, matcher: &Matcher<'_>, umas: &[Uma]) -> Result
         }
         Screen::AttributesChart => result.instruction = Some("Switch to the number view"),
         Screen::Learn => {
-            let (points, raw) = parse::skill_points(ocr, image, &layout)?;
+            let (points, raw) = parse::skill_points(ocr, image, &layout, &words)?;
             result.skill_points = points;
             result.raw.push(raw);
             for row in layout.rows {
                 result.skills.push(learn_row(ocr, image, matcher, row)?);
             }
         }
-        Screen::CareerSkills | Screen::DetailsSkills => {
+        Screen::CareerSkills | Screen::DetailsSkills | Screen::FinishedDetails => {
+            if layout.screen == Screen::FinishedDetails {
+                if let Some(header) = layout::finished_header(image, &words) {
+                    let (id, attributes, raw) =
+                        parse::finished_details(ocr, image, &words, header, umas)?;
+                    result.attributes = Some(attributes);
+                    result.card = umas
+                        .iter()
+                        .find(|uma| id == Some(uma.card_id))
+                        .map(|uma| Card {
+                            id: uma.card_id,
+                            title: uma.title.clone(),
+                            name: uma.name.clone(),
+                        });
+                    result.raw.extend(raw);
+                }
+            }
             for row in layout.rows {
                 result
                     .skills
@@ -203,7 +244,13 @@ fn scan(ocr: &Ocr, image: &Image, matcher: &Matcher<'_>, umas: &[Uma]) -> Result
         }
         Screen::Unsupported => {
             result.instruction = Some(if layout::label(&words, "Learned").next().is_some() {
-                "Learned Skills screen"
+                "Skills Learned screen"
+            } else if layout::label(&words, "Inspiration").next().is_some() {
+                "Finished Uma Details · Switch to Skills"
+            } else if layout::label(&words, "Confirmation").next().is_some() {
+                "Skill purchase confirmation"
+            } else if layout::label(&words, "Deck").next().is_some() {
+                "Deck screen"
             } else if layout::label(&words, "Close").next().is_some()
                 && layout::label(&words, "Growth").next().is_some()
             {
@@ -233,7 +280,7 @@ fn owned_row(
     let paint = region(row, 82, 24, 93, 74);
     let unique = pixels_in(image, paint, is_unique) > 0.35;
     let event = pixels_in(image, paint, is_event) > 0.35;
-    let has_level = screen == Screen::DetailsSkills && (unique || event);
+    let has_level = screen != Screen::CareerSkills && (unique || event);
     let glyph_height = row.width() / 22;
     let area = region(row, 16, 10, if has_level { 80 } else { 96 }, 86);
     let (raw_name, matched, _) = read_name(ocr, image, matcher, area, glyph_height, unique)?;
@@ -244,6 +291,14 @@ fn owned_row(
         let raw = read(ocr, image, crop, glyph_height, brown_ink)?;
         fields.level = level(&raw);
         raw_fields.push(raw);
+        if fields.level.is_none() {
+            let digit = region(row, 90, 24, 96, 92);
+            let (value, raw) = read_number(ocr, image, digit, glyph_height, brown_ink)?;
+            fields.level = value
+                .filter(|value| (1..=6).contains(value))
+                .map(|value| value as u8);
+            raw_fields.push(raw);
+        }
     }
     Ok(SkillRow {
         resolution: matched,
@@ -267,7 +322,9 @@ fn learn_row(ocr: &Ocr, image: &Image, matcher: &Matcher<'_>, row: Rect) -> Resu
             glyph_height,
             brown_ink,
         )?;
-        matched = matcher.identify(&raw_name, Some(unique), mark, Some(&description));
+        matched = matcher
+            .identify(&raw_name, Some(unique), mark, Some(&description))
+            .or_else(|| matcher.identify_name_fragment(&raw_name, unique, &description));
         raw_fields.push(description);
     }
     let mut fields = SkillFields::default();
@@ -284,26 +341,53 @@ fn learn_row(ocr: &Ocr, image: &Image, matcher: &Matcher<'_>, row: Rect) -> Resu
     } else {
         let crop = region(row, 78, 37, 91, 66);
         let raw = ocr.text(&image.padded_crop(crop, glyph_height * 5 / 4, |rgb| rgb))?;
-        fields.cost = number(&raw);
+        let (cost, raw) = if let Some(cost) = number(&raw) {
+            (Some(cost), raw)
+        } else {
+            read_number(
+                ocr,
+                image,
+                region(row, 78, 38, 90, 62),
+                glyph_height,
+                brown_ink,
+            )?
+        };
+        fields.cost = cost;
         fields.obtained = fields.cost.map(|_| false);
         raw_fields.push(raw);
-        let search = region(row, 74, 2, 95, 28);
-        let orange = |[r, g, b]: image::Rgb| r >= 242 && (112..=166).contains(&g) && b < 60;
-        if pixels_in(image, search, orange) > 0.20 {
-            let badge = ink_bounds(image, search, orange).unwrap_or(search);
-            let first_line = region(badge, 4, 1, 96, 48);
-            let raw = read(ocr, image, first_line, glyph_height * 3 / 4, white_ink)?;
-            fields.hint = level(&raw);
-            raw_fields.push(raw);
-            if fields.hint.is_none() {
-                let retry = read(ocr, image, badge, glyph_height, |[_, _, b]| {
-                    255 - (b.saturating_sub(40) as u16 * 255 / 170).min(255) as u8
-                })?;
-                fields.hint = level(&retry);
-                raw_fields.push(retry);
-            }
-            fields.hint_unreadable = fields.hint.is_none();
+    }
+    let search = region(row, 74, 2, 95, 29);
+    let orange = |[r, g, b]: image::Rgb| r >= 242 && (112..=166).contains(&g) && b < 60;
+    if pixels_in(image, search, orange) > 0.20 {
+        let badge = ink_bounds(image, search, orange).unwrap_or(search);
+        let top = read(
+            ocr,
+            image,
+            region(badge, 3, 0, 97, 50),
+            glyph_height * 3 / 4,
+            white_ink,
+        )?;
+        let bottom = read(
+            ocr,
+            image,
+            region(badge, 3, 49, 97, 95),
+            glyph_height * 3 / 4,
+            white_ink,
+        )?;
+        let mut labeled = hint_level(&top);
+        let mut percent = hint_percent(&bottom);
+        raw_fields.extend([top, bottom]);
+        if labeled.is_none() || percent.is_none() {
+            let full = read(ocr, image, badge, glyph_height, |[_, _, b]| {
+                255 - (b.saturating_sub(40) as u16 * 255 / 170).min(255) as u8
+            })?;
+            labeled = labeled.or_else(|| hint_level(&full));
+            percent = percent.or_else(|| hint_percent(&full));
+            raw_fields.push(full);
         }
+        fields.hint = percent.or(labeled);
+        fields.hint_unreadable = fields.hint.is_none();
+        fields.hint_conflict = percent.zip(labeled).is_some_and(|(a, b)| a != b);
     }
     Ok(SkillRow {
         resolution: matched,

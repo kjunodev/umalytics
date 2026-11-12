@@ -134,6 +134,26 @@ impl Image {
         self.padded_crop(rect, reference_height, |pixel| [ink(pixel); 3])
     }
 
+    pub fn repeat_digit(&self, rect: Rect, ink: fn(Rgb) -> u8) -> Self {
+        let digit = self.crop(rect, (24. / rect.height().max(1) as f32).clamp(1., 4.));
+        let width = 16 + (digit.width + 3) * 3;
+        let height = 16 + digit.height;
+        let mut pixels = vec![[255; 3]; (width * height) as usize];
+        for repeat in 0..3 {
+            let left = 8 + repeat * (digit.width + 3);
+            for y in 0..digit.height {
+                for x in 0..digit.width {
+                    pixels[((y + 8) * width + left + x) as usize] = [ink(digit.at(x, y)); 3];
+                }
+            }
+        }
+        Self {
+            width,
+            height,
+            pixels,
+        }
+    }
+
     pub fn padded_crop(
         &self,
         rect: Rect,

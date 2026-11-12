@@ -9,6 +9,7 @@ pub(super) enum Screen {
     AttributesChart,
     CareerSkills,
     DetailsSkills,
+    FinishedDetails,
     Learn,
     Unsupported,
 }
@@ -187,9 +188,10 @@ fn skill_icon([r, g, b]: Rgb) -> bool {
     (r > 205 && g >= 108 && b < 152)
         || (g > 135 && g.saturating_sub(r) >= 25 && b < 130)
         || (b >= 175 && g >= 112 && r < 122)
+        || (r > 175 && r.saturating_sub(g) > 70 && r.saturating_sub(b) > 50)
 }
 
-fn chips(image: &Image, panel: Rect, columns: i32) -> Vec<Rect> {
+fn chips(image: &Image, panel: Rect, columns: i32, clipped_top: bool) -> Vec<Rect> {
     let mut rows = Vec::new();
     let width = panel.width() / columns;
     for col in 0..columns {
@@ -219,6 +221,9 @@ fn chips(image: &Image, panel: Rect, columns: i32) -> Vec<Rect> {
             bands
         };
         for band in bands {
+            if clipped_top && band.start <= panel.top + width / 150 {
+                continue;
+            }
             if !(width * 12 / 100..=width * 20 / 100).contains(&length(&band)) {
                 continue;
             }
@@ -291,7 +296,16 @@ fn learn(image: &Image, words: &[Word]) -> Option<Layout> {
         let rows = runs(panel.top..panel.bottom, |y| {
             [97, 98, 99]
                 .iter()
-                .filter(|&&pct| row_color(image.at(left + width * pct / 100, y)))
+                .filter(|&&pct| {
+                    let pixel @ [r, g, b] = image.at(left + width * pct / 100, y);
+                    row_color(pixel)
+                        || ((108..140).contains(&r)
+                            && r.abs_diff(g) <= 8
+                            && b.saturating_sub(r) >= 8)
+                        || ((140..220).contains(&r)
+                            && g.saturating_sub(b) >= 43
+                            && r.saturating_sub(g) >= 19)
+                })
                 .count()
                 >= 2
         })
@@ -308,6 +322,54 @@ fn learn(image: &Image, words: &[Word]) -> Option<Layout> {
     None
 }
 
+fn finished_layout(image: &Image, words: &[Word], close: Rect) -> Option<(Rect, Rect, bool)> {
+    let center = close.x();
+    let tabs = label(words, "Inspiration")
+        .find(|word| word.y() < close.y() && (word.x() - center).abs() < word.width())
+        .or_else(|| {
+            label(words, "Career").find(|word| {
+                word.y() < close.y()
+                    && (close.width() * 2..close.width() * 4).contains(&(word.x() - center))
+            })
+        })?;
+    let span = close.y() - tabs.y();
+    let (band, y) = (tabs.y() - span * 86 / 100..tabs.y() - span * 65 / 100)
+        .flat_map(|y| {
+            runs(center - span * 2 / 3..center + span * 2 / 3, |x| {
+                green(image.at(x, y))
+            })
+            .into_iter()
+            .map(move |band| (band, y))
+        })
+        .filter(|(band, _)| {
+            band.contains(&center) && (span * 9 / 10..span * 13 / 10).contains(&length(band))
+        })
+        .max_by_key(|(band, _)| length(band))?;
+    let width = length(&band);
+    let vertical = runs(y - width / 9..y + width / 9, |y| {
+        green(image.at(band.end - width / 12, y))
+    })
+    .into_iter()
+    .find(|span| span.contains(&y))?;
+    let active_x = band.start + width / 12;
+    let active = green(image.at(active_x, tabs.y()));
+    let panel = Rect::new(
+        band.start + width / 65,
+        tabs.y() + width * 57 / 1000,
+        band.end - width / 65,
+        close.y() - width / 10,
+    );
+    Some((
+        Rect::new(band.start, vertical.start, band.end, vertical.end),
+        panel,
+        active,
+    ))
+}
+
+pub(super) fn finished_header(image: &Image, words: &[Word]) -> Option<Rect> {
+    finished_layout(image, words, label(words, "Close").next()?).map(|(header, _, _)| header)
+}
+
 pub(super) fn detect(image: &Image, words: &[Word]) -> Layout {
     let unsupported = Layout {
         screen: Screen::Unsupported,
@@ -316,6 +378,16 @@ pub(super) fn detect(image: &Image, words: &[Word]) -> Layout {
     };
     if let Some(close) = label(words, "Close").next() {
         if label(words, "Learned").any(|r| r.y() < close.y()) {
+            return unsupported;
+        }
+        if let Some((_, panel, active)) = finished_layout(image, words, close) {
+            if active {
+                return Layout {
+                    screen: Screen::FinishedDetails,
+                    panel,
+                    rows: chips(image, panel, 2, true),
+                };
+            }
             return unsupported;
         }
         if let Some(growth) = label(words, "Growth").find(|r| r.y() < close.y()) {
@@ -336,7 +408,7 @@ pub(super) fn detect(image: &Image, words: &[Word]) -> Layout {
                 return Layout {
                     screen: Screen::DetailsSkills,
                     panel,
-                    rows: chips(image, panel, 2),
+                    rows: chips(image, panel, 2, false),
                 };
             }
         }
@@ -383,7 +455,7 @@ pub(super) fn detect(image: &Image, words: &[Word]) -> Layout {
             screen,
             panel,
             rows: if skills {
-                chips(image, panel, 1)
+                chips(image, panel, 1, false)
             } else {
                 Vec::new()
             },

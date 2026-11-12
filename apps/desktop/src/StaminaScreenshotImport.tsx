@@ -10,6 +10,7 @@ const screens: Record<Screen, string> = {
   'attributes-chart': 'Career Attributes · Chart view',
   'career-skills': 'Career Skills',
   'details-skills': 'Uma Details · Skills',
+  'finished-details': 'Finished Uma Details · Skills',
   learn: 'Learn',
   unsupported: 'Unsupported screenshot',
 };
@@ -82,17 +83,19 @@ export function StaminaScreenshotImport({ catalog, recent, onRecent, onClose, on
       });
     }
   };
-  const numbers = [...sources].reverse().find(source => source.scan?.screen === 'attributes-numbers')?.scan;
+  const finished = sources.some(source => source.scan?.screen === 'finished-details');
+  const mixed = finished && sources.some(source => source.scan && ['attributes-numbers', 'career-skills', 'details-skills', 'learn'].includes(source.scan.screen));
+  const numbers = [...sources].reverse().find(source => source.scan?.screen === (finished ? 'finished-details' : 'attributes-numbers'))?.scan;
   const skills = sources.some(source => source.scan?.screen === 'career-skills' || source.scan?.screen === 'details-skills');
   const learn = sources.some(source => source.scan?.screen === 'learn');
   const points = [...new Set(sources.flatMap(({ scan }) => scan?.skill_points == null ? [] : [scan.skill_points]))];
   const cards = new Set(sources.flatMap(({ scan }) =>
-    scan?.card && (scan.screen === 'attributes-numbers' || scan.screen === 'career-skills') ? [scan.card.id] : []));
+    scan?.card && ['attributes-numbers', 'career-skills', 'finished-details'].includes(scan.screen) ? [scan.card.id] : []));
   const cardId = chosen ?? numbers?.card?.id ?? (cards.size === 1 ? [...cards][0] : undefined);
   const uma = catalog.umas.find(card => card.card_id === cardId);
   const rows = sources.flatMap(({ id, scan }) => scan?.skills.map((row, index) => ({
-    ...row, key: `${id}-${index}`, owned: scan.screen !== 'learn' || row.fields.obtained === true,
-  })) ?? []);
+    ...row, key: `${id}-${index}`, learn: scan.screen === 'learn', owned: scan.screen !== 'learn' || row.fields.obtained === true,
+  })) ?? []).sort((a, b) => Number(b.learn) - Number(a.learn));
   const canSimulate = (id: number) => Object.hasOwn(catalog.screenshot_skills ?? {}, id);
   const ignored = [...new Set(rows.flatMap(row => {
     if (row.resolution === 'ignored_no_race_effect') return [row.raw_name];
@@ -110,16 +113,23 @@ export function StaminaScreenshotImport({ catalog, recent, onRecent, onClose, on
     if (row.resolution === 'ignored_no_race_effect') return [];
     const id = row.resolution?.matched.id ?? resolved[row.key];
     if (id === undefined || !canSimulate(id)) return [];
-    return [{ id, owned: row.owned, level: row.fields.level, price: row.fields.cost, hint: row.fields.hint, hintUnreadable: row.fields.hint_unreadable }];
+    return [{ id, owned: row.owned, learn: row.learn, level: row.fields.level, price: row.fields.cost,
+      hint: row.fields.hint, hintUnreadable: row.fields.hint_unreadable, hintConflict: row.fields.hint_conflict }];
   });
-  if (uma && !observations.some(row => row.id === uma.unique_skill_id && row.owned && row.level !== null)) {
-    // The Career Skills tab omits the unique level.
-    observations.push({ id: uma.unique_skill_id, owned: true, level: 4, price: null, hint: null });
-  }
-  const chains = catalog.screenshot_skills ? tierChains(observations, catalog.screenshot_skills) : [];
+  const uniqueKey = `unique-${uma?.unique_skill_id}`;
+  const levels = [...new Set(observations.flatMap(row =>
+    row.id === uma?.unique_skill_id && row.owned && row.level !== null ? [row.level] : []))];
+  const uniqueLevel = edits[uniqueKey] ?? (levels.length === 1 ? String(levels[0]) : '');
+  const reviewed = uma && uniqueLevel ? [
+    ...observations.map(row => row.id === uma.unique_skill_id && row.owned ? { ...row, level: Number(uniqueLevel) } : row),
+    ...(observations.some(row => row.id === uma.unique_skill_id && row.owned) ? [] :
+      [{ id: uma.unique_skill_id, owned: true, level: Number(uniqueLevel), price: null, hint: null }]),
+  ] : observations;
+  const chains = catalog.screenshot_skills ? tierChains(reviewed, catalog.screenshot_skills) : [];
   const tooMany = purchasePlan(chains, [], 0).skills.length > 100;
   const unresolved = unknown.filter(row => resolved[row.key] === undefined).length;
-  const canApply = !!(numbers && skills && learn && uma && !pending && cards.size <= 1 && !unresolved && !tooMany);
+  const hasScreens = !!numbers && (finished || (skills && learn));
+  const canApply = !!(hasScreens && uma && uniqueLevel && !pending && cards.size <= 1 && !mixed && !unresolved && !tooMany);
   const edit = (key: string, value: string) => setEdits(previous => ({ ...previous, [key]: value }));
   const apply = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -131,7 +141,7 @@ export function StaminaScreenshotImport({ catalog, recent, onRecent, onClose, on
       ground: [grade('track', 0), grade('track', 1)],
       distance: [grade('distance', 0), grade('distance', 1), grade('distance', 2), grade('distance', 3)],
       style: [grade('style', 0), grade('style', 1), grade('style', 2), grade('style', 3)],
-    }, { points: Number(sp), observations, ignored, selected: [] });
+    }, { points: finished ? null : Number(sp), observations: reviewed, ignored, selected: [] });
   };
 
   return <dialog ref={dialog} aria-labelledby="import-heading" className="screenshot-dialog desktop-tool panel"
@@ -152,11 +162,13 @@ export function StaminaScreenshotImport({ catalog, recent, onRecent, onClose, on
             event.target.value = '';
           }}/>
         </div>
-        <ul className="import-checklist" aria-label="Screens needed">
+        {finished ? <ul className="import-checklist" aria-label="Screens needed">
+          <li data-ready>Finished Uma Details · Scroll the Skills tab to capture all rows</li>
+        </ul> : <><ul className="import-checklist" aria-label="Screens needed">
           <li data-ready={!!numbers}>Complete Career Attributes · Number view</li>
           <li data-ready={skills}>Complete Career Skills · Scroll to capture all rows</li>
           <li data-ready={learn}>Learn · Capture overlapping screenshots</li>
-        </ul>
+        </ul><p className="muted">For a finished Uma, capture the Skills tab of its Details popup.</p></>}
         {pending > 0 && <p role="status">Reading {pending} {pending === 1 ? 'image' : 'images'}…</p>}
         {!!sources.length && <ul className="import-sources" aria-label="Scanned screenshots">{sources.map(({ id, scan, error }) =>
           <li key={id}><div><strong>{scan ? screens[scan.screen] : 'Image could not be read'}</strong>
@@ -168,15 +180,22 @@ export function StaminaScreenshotImport({ catalog, recent, onRecent, onClose, on
           <section aria-label="Review build">
             <h3>Review build</h3>
             {cards.size > 1 && <p className="import-warning" role="alert">These Career screenshots show different Umas. Remove the screenshots from the other career.</p>}
+            {mixed && <p className="import-warning" role="alert">Remove the in-career screenshots to load the finished Uma.</p>}
             <StaminaUmaPicker umas={catalog.umas} selected={uma} uniques={[]} full={false} onSelect={card => setChosen(card?.card_id ?? 0)} onLevel={() => {}}/>
+            {uma && <div className="import-unique-level">
+              <label>Unique skill level<select required value={uniqueLevel} onChange={event => edit(uniqueKey, event.target.value)}>
+                <option value="">Check level</option>{[1, 2, 3, 4, 5, 6].map(level => <option key={level} value={level}>Lv {level}</option>)}
+              </select></label>
+              {!uniqueLevel && <small className="import-warning">Confirm the unique skill level or add a Details screenshot that shows it.</small>}
+            </div>}
             <div className="raw-stats">{stats.map(([key, label], i) => <label key={key}>{label}<input aria-label={label} type="number" min={1} max={2000} required value={stat(i)} onChange={event => edit(key, event.target.value)}/></label>)}</div>
             {aptitudes.map(([key, label, names]) => <div className="field" key={key}><span>{label}</span>
               <div className={`aptitude-grid aptitude-${key === 'track' ? 'ground' : key}`}>{names.map((name, i) =>
                 <label key={name}>{name}<select aria-label={`${name} aptitude`} required value={aptitude(key, i)} onChange={event => edit(`${key}-${i}`, event.target.value)}>
                   <option value="">—</option>{[...grades].map(grade => <option key={grade}>{grade}</option>)}
                 </select></label>)}</div></div>)}
-            <label className="import-points">Skill Points<input type="number" min={0} max={65535} required value={sp} onChange={event => edit('points', event.target.value)}/></label>
-            {points.length > 1 && <small className="import-warning">Learn screenshots show different totals. Enter the correct Skill Points.</small>}
+            {!finished && <><label className="import-points">Skill Points<input type="number" min={0} max={65535} required value={sp} onChange={event => edit('points', event.target.value)}/></label>
+              {points.length > 1 && <small className="import-warning">Learn screenshots show different totals. Enter the correct Skill Points.</small>}</>}
           </section>
           {(unknown.length > 0 || ignored.length > 0) && <section aria-label="Review skill matches">
             {unknown.length > 0 && <><h3>Unmatched skills</h3><p className="muted">Choose a skill for every row before applying.</p>
@@ -190,7 +209,7 @@ export function StaminaScreenshotImport({ catalog, recent, onRecent, onClose, on
         {tooMany && <p role="alert" className="import-warning">The screenshots contain more than 100 owned skills. Remove screenshots to stay within the simulator’s limit.</p>}
       </div>
       <footer className="drawer-footer">
-        <span className="muted">{numbers && skills && learn ? 'Applying replaces the current build’s stats, aptitudes and skills.' : 'Add each screen to apply the import.'}</span>
+        <span className="muted">{hasScreens ? 'Applying replaces the current build’s stats, aptitudes and skills.' : 'Add the required screenshots to apply the import.'}</span>
         <button type="submit" className="import-apply" disabled={!canApply}>Apply to build</button>
       </footer>
     </form>

@@ -264,6 +264,36 @@ impl<'a> Matcher<'a> {
     }
 }
 
+impl Matcher<'_> {
+    pub fn identify_name_fragment(
+        &self,
+        raw: &str,
+        unique: bool,
+        description: &str,
+    ) -> Option<Resolution> {
+        let (stray, fragment) = raw.split_once(' ')?;
+        if !matches!(stray, "I" | "l" | "|") {
+            return None;
+        }
+        let key = normalize(fragment);
+        let family: Vec<_> = self
+            .0
+            .iter()
+            .filter(|entry| {
+                entry.name == key
+                    && entry.mark.is_none()
+                    && !entry.non_race
+                    && (entry.skill.rarity == "unique") == unique
+            })
+            .collect();
+        let chosen = match_description(&family, description, None)?;
+        Some(Resolution::Matched(Match {
+            id: chosen.skill.id,
+            confidence: MIN_CONFIDENCE,
+        }))
+    }
+}
+
 fn only<T>(mut choices: impl Iterator<Item = T>) -> Option<T> {
     let first = choices.next()?;
     choices.next().is_none().then_some(first)

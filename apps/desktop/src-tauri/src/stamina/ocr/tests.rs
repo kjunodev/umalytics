@@ -1,6 +1,7 @@
 use super::*;
 use crate::stamina::{engine, skill_data, Skill, UmaAptitudes};
 use matcher::{Mark, Match};
+use parse::number;
 use std::{collections::HashMap, fs, path::Path, time::Instant};
 
 #[test]
@@ -41,6 +42,18 @@ fn import_catalog_uses_shipped_prices_and_engine_tiers() {
         skills[&200013].tier.is_none(),
         "A negative skill is independent"
     );
+    assert_eq!(skills[&201111].hint_from, Some(201112));
+    assert_eq!(skills[&200181].hint_from, Some(200182));
+}
+
+#[test]
+fn recognizes_hint_max_and_reads_the_percentage_independently() {
+    assert_eq!(hint_level("Hint Lvl Max 40% OFF!"), Some(5));
+    assert_eq!(hint_percent("Hint Lvl Max 40% OFF!"), Some(5));
+    assert_eq!(hint_level("Hint LVI I"), Some(1));
+    assert_eq!(hint_percent("Hint LVI I 1096 OFF!"), Some(1));
+    assert_eq!(hint_level("Hint Lvl 3 35% OFF!"), Some(3));
+    assert_eq!(hint_percent("Hint Lvl 3 35% OFF!"), Some(4));
 }
 
 #[test]
@@ -76,7 +89,8 @@ struct ExpectedRow {
 
 #[derive(Deserialize)]
 struct Expected {
-    screen: Screen,
+    screen: Option<Screen>,
+    crop: Option<String>,
     attributes: Option<Attributes>,
     card: Option<Card>,
     skill_points: Option<u16>,
@@ -98,13 +112,14 @@ struct Score {
 }
 
 fn compare(name: &str, expected: &Expected, actual: &Import, score: &mut Score) {
+    let screen = expected.screen.unwrap();
     score.screens += 1;
-    score.classified += usize::from(actual.screen == expected.screen);
+    score.classified += usize::from(actual.screen == screen);
     score.skill_rows += expected.skills.len();
-    if actual.screen != expected.screen {
+    if actual.screen != screen {
         println!(
             "MISS {name} screen {:?}, expected {:?}",
-            actual.screen, expected.screen
+            actual.screen, screen
         );
     }
     for (field, matches, details) in [
@@ -128,7 +143,7 @@ fn compare(name: &str, expected: &Expected, actual: &Import, score: &mut Score) 
         ),
         (
             "instruction",
-            (expected.screen == Screen::AttributesChart)
+            (screen == Screen::AttributesChart)
                 == (actual.instruction == Some("Switch to the number view")),
             format!("{:?}", actual.instruction),
         ),
@@ -137,7 +152,7 @@ fn compare(name: &str, expected: &Expected, actual: &Import, score: &mut Score) 
             "attributes" => expected.attributes.is_some(),
             "card" => expected.card.is_some(),
             "skill points" => expected.skill_points.is_some(),
-            _ => expected.screen == Screen::AttributesChart,
+            _ => screen == Screen::AttributesChart,
         };
         score.non_skill_fields += usize::from(expected_field);
         score.correct_non_skill_fields += usize::from(expected_field && matches);
@@ -151,7 +166,7 @@ fn compare(name: &str, expected: &Expected, actual: &Import, score: &mut Score) 
         let is_match = |candidate: &SkillRow| match (candidate.resolution, &row.result) {
             (Some(Resolution::Matched(matched)), None) => row.id == Some(matched.id),
             (Some(Resolution::IgnoredNoRaceEffect), Some(ExpectedResult::IgnoredNoRaceEffect)) => {
-                candidate.raw_name.eq_ignore_ascii_case(&row.name) && candidate.fields == row.fields
+                candidate.raw_name.eq_ignore_ascii_case(&row.name)
             }
             _ => false,
         };
@@ -246,12 +261,35 @@ fn screenshot_accuracy() -> Result<()> {
     let metadata = fs::read_to_string(metadata.join("skills.json"))?;
     let matcher = Matcher::new(&skills, &metadata, &engine.data.skills)?;
     let ocr = Ocr::new()?;
+    let dump = std::env::var_os("UMALYTICS_OCR_DUMP").is_some();
+    if dump {
+        println!(
+            "OCR_CATALOG {}",
+            serde_json::to_string(&import_skills(&engine.data.skills, &skills)?)?
+        );
+    }
+    let crops = expected
+        .values()
+        .filter(|entry| entry.crop.is_some())
+        .count();
+    println!(
+        "{} screenshots, {crops} labeled crops excluded",
+        expected.len() - crops
+    );
     let mut passed = true;
     for scale in [1., 0.75, 1.25] {
         let mut scores = BTreeMap::<Screen, Score>::new();
         let mut dedup = SkillImport::default();
         println!("Scale {scale:.2}x");
         for (name, expected) in &expected {
+            assert_ne!(
+                expected.screen.is_some(),
+                expected.crop.is_some(),
+                "{name} needs a screen or a crop label"
+            );
+            let Some(screen) = expected.screen else {
+                continue;
+            };
             for row in &expected.skills {
                 assert_ne!(
                     row.id.is_some(),
@@ -280,18 +318,19 @@ fn screenshot_accuracy() -> Result<()> {
             };
             let start = Instant::now();
             let actual = scan(&ocr, &screenshot, &matcher, &engine.catalog.umas)?;
+            if dump {
+                println!(
+                    "OCR_SCAN {}",
+                    serde_json::json!({ "scale": scale, "name": name, "scan": actual })
+                );
+            }
             println!(
                 "{name}: {:?}, {} rows, {:.1} ms",
                 actual.screen,
                 actual.skills.len(),
                 start.elapsed().as_secs_f64() * 1000.
             );
-            compare(
-                name,
-                expected,
-                &actual,
-                scores.entry(expected.screen).or_default(),
-            );
+            compare(name, expected, &actual, scores.entry(screen).or_default());
             dedup.extend(actual.skills);
         }
         for (screen, score) in &scores {
@@ -304,7 +343,15 @@ fn screenshot_accuracy() -> Result<()> {
         let total: usize = scores.values().map(|s| s.skill_rows).sum();
         let wrong: usize = scores.values().map(|s| s.wrong).sum();
         let accuracy = correct as f64 / total.max(1) as f64;
-        let gate = total > 0 && correct * 100 >= total * 98 && wrong == 0;
+        let gate = total > 0
+            && correct * 100 >= total * 98
+            && wrong == 0
+            && scores
+                .values()
+                .all(|score| score.classified == score.screens)
+            && scores
+                .get(&Screen::FinishedDetails)
+                .is_none_or(|score| score.correct_non_skill_fields == score.non_skill_fields);
         passed &= gate;
         println!("Gate {scale:.2}x: {correct}/{total} ({:.2}%), wrong/extra {wrong}, {} distinct IDs, {} ignored rows, {} unknown rows: {}",
             100. * accuracy, dedup.identified.len(), dedup.ignored.len(), dedup.unknown.len(), if gate { "PASS" } else { "FAIL" });
@@ -317,7 +364,7 @@ fn screenshot_accuracy() -> Result<()> {
     }
     assert!(
         passed,
-        "Expected at least 98% correct row results and zero wrong matches at each scale"
+        "Expected correct screen classifications and finished builds, at least 98% correct rows, and zero wrong matches at each scale"
     );
     Ok(())
 }

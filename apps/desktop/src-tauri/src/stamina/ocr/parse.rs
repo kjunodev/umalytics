@@ -46,10 +46,82 @@ pub(super) fn level(text: &str) -> Option<u8> {
     .flatten()
 }
 
+pub(super) fn hint_level(text: &str) -> Option<u8> {
+    let header = text.lines().next().unwrap_or(&text);
+    if header
+        .split(|c: char| !c.is_ascii_alphabetic())
+        .any(|word| word.eq_ignore_ascii_case("max"))
+    {
+        Some(5)
+    } else {
+        level(header).filter(|level| *level <= 5)
+    }
+}
+
+pub(super) fn hint_percent(text: &str) -> Option<u8> {
+    let digits = if let Some((left, _)) = text.split_once('%') {
+        left.trim_end()
+            .rsplit(|c: char| !c.is_ascii_digit())
+            .next()?
+    } else {
+        // Windows OCR can read the two circles and slash of a percent sign as "96".
+        text.split_whitespace().find_map(|token| {
+            let value = token.strip_suffix("96")?;
+            (value.len() == 2).then_some(value)
+        })?
+    }
+    .parse::<u8>()
+    .ok()?;
+    [10, 20, 30, 35, 40]
+        .iter()
+        .position(|value| *value == digits)
+        .map(|index| index as u8 + 1)
+}
+
+pub(super) fn read_number(
+    ocr: &Ocr,
+    image: &Image,
+    area: Rect,
+    glyph_height: i32,
+    ink: fn(Rgb) -> u8,
+) -> Result<(Option<u16>, String)> {
+    let tight = ink_bounds(image, area, |pixel| ink(pixel) < 170).unwrap_or(area);
+    let mut attempts = Vec::new();
+    for (crop, height) in [
+        (tight, tight.height()),
+        (area, glyph_height),
+        (tight, tight.height() * 3 / 4),
+    ] {
+        let raw = read(ocr, image, crop, height, ink)?;
+        if let Some(value) = number(&raw) {
+            return Ok((Some(value), raw));
+        }
+        attempts.push(raw);
+    }
+    let raw = ocr.text(&image.padded_crop(tight, glyph_height * 3 / 4, |rgb| rgb))?;
+    let mut value = number(&raw);
+    attempts.push(raw);
+    if value.is_none() && tight.width() <= tight.height() {
+        // A single glyph can be ignored by Windows OCR. Give it a line of identical glyphs.
+        let repeated = ocr.text(&image.repeat_digit(tight, ink))?;
+        let digits = repeated.trim().as_bytes();
+        if let [first, ..] = digits {
+            if digits.len() >= 2
+                && first.is_ascii_digit()
+                && digits.iter().all(|digit| digit == first)
+            {
+                value = Some(u16::from(first - b'0'));
+            }
+        }
+        attempts.push(repeated);
+    }
+    Ok((value, attempts.join(" / ")))
+}
+
 fn level_value(token: char) -> Option<u8> {
     match token {
         'I' | 'l' | '|' => Some(1),
-        '1'..='5' => Some(token as u8 - b'0'),
+        '1'..='6' => Some(token as u8 - b'0'),
         _ => None,
     }
 }
@@ -127,8 +199,8 @@ pub(super) fn attributes(
                         panel.left + width * 84 / 100,
                         y + width / 24,
                     );
-                    let text = read(ocr, image, area, width / 17, brown_ink)?;
-                    *stat = number(&text);
+                    let (value, text) = read_number(ocr, image, area, width / 17, brown_ink)?;
+                    *stat = value;
                     raw.push(text);
                 }
             }
@@ -151,6 +223,93 @@ pub(super) fn attributes(
             .collect();
     }
     Ok((result, raw))
+}
+
+pub(super) fn finished_details(
+    ocr: &Ocr,
+    image: &Image,
+    words: &[Word],
+    header: Rect,
+    umas: &[Uma],
+) -> Result<(Option<i32>, Attributes, Vec<String>)> {
+    let w = header.width();
+    let area = Rect::new(
+        header.left + w * 52 / 100,
+        header.bottom + w / 55,
+        header.right - w / 18,
+        header.bottom + w * 13 / 100,
+    );
+    let raw_card = read(ocr, image, area, w / 38, brown_ink)?;
+    let card = match_card(umas, &raw_card);
+    let mut raw = vec![raw_card];
+    let mut result = Attributes::default();
+    let stat_header = runs(header.bottom + w / 4..header.bottom + w * 38 / 100, |y| {
+        [4, 23, 42, 61, 80]
+            .iter()
+            .filter(|&&pct| {
+                let [r, g, b] = image.at(header.left + w * pct / 100, y);
+                g > 150 && g.saturating_sub(r) > 30 && b < 95
+            })
+            .count()
+            >= 3
+    })
+    .into_iter()
+    .max_by_key(|span| span.end - span.start);
+    if let Some(band) = stat_header {
+        for (i, stat) in result.stats.iter_mut().enumerate() {
+            let left = header.left + w / 48 + (w * 955 / 1000) * i as i32 / 5;
+            let area = Rect::new(
+                left + w * 73 / 1000,
+                band.end + w / 110,
+                left + w * 18 / 100,
+                band.end + w * 68 / 1000,
+            );
+            let mut tokens: Vec<_> = words
+                .iter()
+                .filter(|word| {
+                    word.bounds.left >= area.left
+                        && word.bounds.right <= area.right
+                        && (area.top..area.bottom).contains(&word.bounds.y())
+                        && number(&word.text).is_some()
+                })
+                .collect();
+            tokens.sort_by_key(|word| word.bounds.left);
+            let digits: String = tokens.iter().map(|word| word.text.as_str()).collect();
+            let (value, text) = if let Some(value) = number(&digits) {
+                (Some(value), digits)
+            } else {
+                read_number(ocr, image, area, w / 31, brown_ink)?
+            };
+            *stat = value;
+            raw.push(text);
+        }
+    }
+    let in_popup = |rect: &Rect| (header.left..header.right).contains(&rect.x());
+    for (name, count, out) in [
+        ("Track", 2, &mut result.track),
+        ("Distance", 4, &mut result.distance),
+        ("Style", 4, &mut result.style),
+    ] {
+        if let Some(label) = label(words, name).filter(in_popup).find(|word| {
+            (header.bottom + w * 41 / 100..header.bottom + w * 61 / 100).contains(&word.y())
+        }) {
+            for pct in [37, 55, 73, 91].into_iter().take(count) {
+                let x = header.left + w * pct / 100;
+                let y = label.y();
+                let r = w / 60;
+                let mut value = grade(image, x, y, r);
+                if value == '?' {
+                    let crop = Rect::new(x - r, y - r, x + r, y + r);
+                    let text = ocr.text(&image.padded_crop(crop, r, |rgb| rgb))?;
+                    if text.len() == 1 && "GFEDCBAS".contains(&text) {
+                        value = text.chars().next().unwrap_or('?');
+                    }
+                }
+                out.push(value);
+            }
+        }
+    }
+    Ok((card, result, raw))
 }
 
 fn grade(image: &Image, cx: i32, cy: i32, radius: i32) -> char {
@@ -292,6 +451,7 @@ pub(super) fn skill_points(
     ocr: &Ocr,
     image: &Image,
     layout: &Layout,
+    words: &[Word],
 ) -> Result<(Option<u16>, String)> {
     let panel = layout.panel;
     let width = panel.width();
@@ -318,10 +478,15 @@ pub(super) fn skill_points(
         panel.left + width * 96 / 100,
         bottom,
     );
-    let raw = read(ocr, image, area, width / 26, orange_ink)?;
-    if let Some(points) = number(&raw) {
-        return Ok((Some(points), raw));
+    let (points, raw) = read_number(ocr, image, area, width / 26, orange_ink)?;
+    if points.is_some() {
+        return Ok((points, raw));
     }
-    let retry = ocr.text(&image.padded_crop(area, width / 21, |rgb| rgb))?;
-    Ok((number(&retry), if retry.is_empty() { raw } else { retry }))
+    let found = words.iter().find_map(|word| {
+        ((area.left..area.right).contains(&word.bounds.x())
+            && (area.top..area.bottom).contains(&word.bounds.y()))
+        .then(|| number(&word.text))
+        .flatten()
+    });
+    Ok((found, raw))
 }
