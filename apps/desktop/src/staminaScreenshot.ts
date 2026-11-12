@@ -4,6 +4,7 @@ export type Screen = 'attributes-numbers' | 'attributes-chart' | 'career-skills'
 export interface ScreenshotRow {
   raw_name: string;
   resolution: { matched: { id: number; confidence: number } } | 'ignored_no_race_effect' | null;
+  variant_choice?: { name: string; circle: number; double_circle: number; suggested?: number };
   fields: { cost: number | null; hint: number | null; level: number | null; obtained: boolean | null; hint_unreadable?: boolean; hint_conflict?: boolean };
 }
 export interface Screenshot {

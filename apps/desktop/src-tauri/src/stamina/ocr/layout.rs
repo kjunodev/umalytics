@@ -256,7 +256,22 @@ fn chips(image: &Image, panel: Rect, columns: i32, clipped_top: bool) -> Vec<Rec
             }
         });
         let bands = if columns == 2 {
-            join_gaps(bands, width / 33)
+            let min_height = width * 12 / 100;
+            let mut joined: Vec<Range<i32>> = Vec::new();
+            for band in join_gaps(bands, width / 33) {
+                if let Some(previous) = joined.last_mut().filter(|previous| {
+                    length(previous) < min_height
+                        && length(&band) < min_height
+                        && band.start - previous.end <= width / 27
+                        && band.end - previous.start <= width / 5
+                }) {
+                    // The printed level can interrupt the color at the right of a compact chip.
+                    previous.end = band.end;
+                } else {
+                    joined.push(band);
+                }
+            }
+            joined
         } else {
             bands
         };
@@ -264,7 +279,7 @@ fn chips(image: &Image, panel: Rect, columns: i32, clipped_top: bool) -> Vec<Rec
             if clipped_top && band.start <= panel.top + width / 150 {
                 continue;
             }
-            if !(width * 12 / 100..=width * 20 / 100).contains(&length(&band)) {
+            if !(width * 12 / 100..=width / 5).contains(&length(&band)) {
                 continue;
             }
             let center = (band.start + band.end) / 2;
@@ -285,19 +300,33 @@ fn chips(image: &Image, panel: Rect, columns: i32, clipped_top: bool) -> Vec<Rec
         }
     }
     // Small border/antialiasing differences between the columns must not change reading order.
-    rows.sort_by_key(|r| r.top);
-    for pair in rows
-        .chunks_mut(2)
-        .filter(|pair| pair.len() == 2 && columns == 2)
-    {
-        if (pair[0].top - pair[1].top).abs() < width / 30 {
-            pair.sort_by_key(|r| r.left);
-        }
+    rows.sort_by_key(|row| row.y());
+    let mut start = 0;
+    while start < rows.len() {
+        let end =
+            start + rows[start..].partition_point(|row| row.y() - rows[start].y() <= width / 30);
+        rows[start..end].sort_by_key(|row| row.left);
+        start = end;
     }
     rows
 }
 
 fn learn(image: &Image, words: &[Word], profile: Option<Rect>) -> Option<Layout> {
+    let near_confirm = words.iter().filter_map(|word| {
+        let banner = profile?;
+        let w = banner.width();
+        let text = &word.text;
+        let mismatches = text
+            .bytes()
+            .zip(b"Confirm")
+            .filter(|(a, b)| !a.eq_ignore_ascii_case(b))
+            .count();
+        (text.len() == 7
+            && mismatches == 1
+            && (banner.left - w * 83 / 100..banner.left - w * 70 / 100).contains(&word.bounds.x())
+            && (banner.top + w * 13 / 10..banner.top + w * 15 / 10).contains(&word.bounds.y()))
+        .then_some(word.bounds)
+    });
     let fallback = profile.and_then(|banner| {
         let width = banner.width();
         let reset = label(words, "Reset").find(|word| {
@@ -313,7 +342,7 @@ fn learn(image: &Image, words: &[Word], profile: Option<Rect>) -> Option<Layout>
             reset.bottom,
         ))
     });
-    for confirm in label(words, "Confirm").chain(fallback) {
+    for confirm in label(words, "Confirm").chain(near_confirm).chain(fallback) {
         let center = confirm.x();
         let reach = confirm.width() * 2;
         let Some(band) = (confirm.bottom..confirm.bottom + confirm.height())
@@ -369,12 +398,14 @@ fn learn(image: &Image, words: &[Word], profile: Option<Rect>) -> Option<Layout>
         let left = 2 * center - right;
         let panel = Rect::new(left, top, right, bottom);
         let width = panel.width();
-        let rows = runs(panel.top..panel.bottom, |y| {
+        let bands = runs(panel.top..panel.bottom, |y| {
             [97, 98, 99]
                 .iter()
                 .filter(|&&pct| {
                     let pixel @ [r, g, b] = image.at(left + width * pct / 100, y);
                     row_color(pixel)
+                        || button_green(pixel)
+                        || ((140..=226).contains(&r) && b.saturating_sub(r.max(g)) >= 6)
                         || ((108..140).contains(&r)
                             && r.abs_diff(g) <= 8
                             && b.saturating_sub(r) >= 8)
@@ -384,11 +415,14 @@ fn learn(image: &Image, words: &[Word], profile: Option<Rect>) -> Option<Layout>
                 })
                 .count()
                 >= 2
-        })
-        .into_iter()
-        .filter(|band| (button_width * 55 / 100..=button_width * 63 / 100).contains(&length(band)))
-        .map(|band| Rect::new(left, band.start, right, band.end))
-        .collect();
+        });
+        let rows = join_gaps(bands, button_width / 32)
+            .into_iter()
+            .filter(|band| {
+                (button_width * 55 / 100..=button_width * 63 / 100).contains(&length(band))
+            })
+            .map(|band| Rect::new(left, band.start, right, band.end))
+            .collect();
         return Some(Layout {
             screen: Screen::Learn,
             panel,

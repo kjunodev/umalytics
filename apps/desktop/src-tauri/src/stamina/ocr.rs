@@ -10,9 +10,10 @@ use image::{Image, Ocr, Rect, Result};
 use layout::{
     blue_channel_ink, brown_ink, faint_brown_ink, is_event, is_unique, white_ink, Screen,
 };
-use matcher::{Mark, Matcher, Resolution};
+use matcher::{Mark, Matcher, Resolution, VariantChoice};
 use parse::{
-    circle, hint_level, hint_percent, ink_bounds, level, number, read, read_number, Attributes,
+    circle, circle_with_ink, hint_level, hint_percent, ink_bounds, level, number, read,
+    read_number, Attributes,
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -155,6 +156,8 @@ struct SkillFields {
 #[derive(Debug, Serialize)]
 struct SkillRow {
     resolution: Option<Resolution>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    variant_choice: Option<VariantChoice>,
     fields: SkillFields,
     raw_name: String,
     raw_fields: Vec<String>,
@@ -186,7 +189,7 @@ struct ResizedCapture<'a> {
 }
 
 impl ResizedCapture<'_> {
-    fn text_crop(&self, area: Rect, magnification: f32) -> Option<Image> {
+    fn source_rect(&self, area: Rect) -> Option<Rect> {
         let x = |x: i32| {
             (self.frame.left + (x as f32 / self.scale).round() as i32)
                 .clamp(self.frame.left, self.frame.right)
@@ -196,8 +199,14 @@ impl ResizedCapture<'_> {
                 .clamp(self.frame.top, self.frame.bottom)
         };
         let original = Rect::new(x(area.left), y(area.top), x(area.right), y(area.bottom));
-        (original.width() > 0 && original.height() > 0)
-            .then(|| self.original.resample(original, magnification))
+        (original.width() > 0 && original.height() > 0).then_some(original)
+    }
+
+    fn text_crop(&self, area: Rect, magnification: f32) -> Option<Image> {
+        Some(
+            self.original
+                .resample(self.source_rect(area)?, magnification),
+        )
     }
 }
 
@@ -287,26 +296,33 @@ fn scan_at_scale(
             }
         }
         Screen::CareerSkills | Screen::DetailsSkills | Screen::FinishedDetails => {
+            let mut unique_skill = None;
             if layout.screen == Screen::FinishedDetails {
                 if let Some(header) = layout.header {
                     let (id, attributes, raw) =
                         parse::finished_details(ocr, image, &words, header, umas)?;
                     result.attributes = Some(attributes);
-                    result.card = umas
-                        .iter()
-                        .find(|uma| id == Some(uma.card_id))
-                        .map(|uma| Card {
+                    if let Some(uma) = umas.iter().find(|uma| id == Some(uma.card_id)) {
+                        unique_skill = Some(uma.unique_skill_id);
+                        result.card = Some(Card {
                             id: uma.card_id,
                             title: uma.title.clone(),
                             name: uma.name.clone(),
                         });
+                    }
                     result.raw.extend(raw);
                 }
             }
             for row in layout.rows {
-                result
-                    .skills
-                    .push(owned_row(ocr, image, resized, matcher, row, layout.screen)?);
+                result.skills.push(owned_row(
+                    ocr,
+                    image,
+                    resized,
+                    matcher,
+                    row,
+                    layout.screen,
+                    unique_skill,
+                )?);
             }
         }
         Screen::Unsupported => {
@@ -346,6 +362,7 @@ fn owned_row(
     matcher: &Matcher<'_>,
     row: Rect,
     screen: Screen,
+    unique_skill: Option<i32>,
 ) -> Result<SkillRow> {
     let paint = region(row, 82, 24, 93, 74);
     let unique = pixels_in(image, paint, is_unique) > 0.35;
@@ -353,8 +370,27 @@ fn owned_row(
     let has_level = screen != Screen::CareerSkills && (unique || event);
     let glyph_height = row.width() / 22;
     let area = region(row, 16, 10, if has_level { 80 } else { 96 }, 86);
-    let (raw_name, matched, _) =
-        read_name(ocr, image, resized, matcher, area, glyph_height, unique)?;
+    let tiny = resized.is_some_and(|capture| capture.scale >= 1.5);
+    let details = screen != Screen::CareerSkills;
+    let (mut raw_name, mut matched, _) = if tiny && details {
+        (String::new(), None, None)
+    } else {
+        read_name(ocr, image, resized, matcher, area, glyph_height, unique)?
+    };
+    let mut variant_choice = None;
+    if matched.is_none() && details {
+        let expanded = region(row, 17, 5, if has_level { 80 } else { 96 }, 92);
+        let (raw, resolution, variants) =
+            compact_name(ocr, image, resized, matcher, expanded, glyph_height, unique)?;
+        if resolution.is_some() || variants.is_some() || raw_name.is_empty() {
+            raw_name = raw;
+            matched = resolution;
+            variant_choice = variants;
+        }
+    }
+    if matched.is_none() && variant_choice.is_none() && !unique {
+        variant_choice = matcher.circle_variants(&raw_name, None);
+    }
     let mut fields = SkillFields::default();
     let mut raw_fields = Vec::new();
     if has_level {
@@ -371,12 +407,223 @@ fn owned_row(
             raw_fields.push(raw);
         }
     }
+    if matched.is_none() && unique && fields.level.is_some() {
+        // A finished card has one unique skill chip with a displayed level.
+        matched = unique_skill.map(|id| {
+            Resolution::Matched(matcher::Match {
+                id,
+                confidence: 1.0,
+            })
+        });
+    }
     Ok(SkillRow {
         resolution: matched,
+        variant_choice,
         fields,
         raw_name,
         raw_fields,
     })
+}
+
+fn compact_name(
+    ocr: &Ocr,
+    image: &Image,
+    resized: Option<&ResizedCapture<'_>>,
+    matcher: &Matcher<'_>,
+    area: Rect,
+    glyph_height: i32,
+    unique: bool,
+) -> Result<(String, Option<Resolution>, Option<VariantChoice>)> {
+    let source_scale = resized.map_or(1.0, |capture| capture.scale);
+    let magnification = (32.0 * source_scale / glyph_height as f32).clamp(1.0, 6.0);
+    let (source, source_area) = resized
+        .and_then(|capture| Some((capture.original, capture.source_rect(area)?)))
+        .unwrap_or((image, area));
+    let crop = source.resample(source_area, magnification);
+    let whole = Rect::new(0, 0, crop.width, crop.height);
+    let height = (glyph_height as f32 * magnification / source_scale).round() as i32;
+    let density: Vec<_> = (0..crop.height)
+        .map(|y| {
+            (0..crop.width)
+                .filter(|&x| faint_brown_ink(crop.at(x, y)) < 190)
+                .count()
+        })
+        .collect();
+    let spans = layout::runs(0..crop.height, |y| {
+        density[y as usize] >= (height / 5).max(1) as usize
+    });
+    let mut lines: Vec<_> = spans
+        .into_iter()
+        .filter(|span| span.end - span.start >= height / 4)
+        .map(|span| {
+            Rect::new(
+                0,
+                (span.start - height / 6).max(0),
+                crop.width,
+                (span.end + height / 6).min(crop.height),
+            )
+        })
+        .collect();
+    if let [line] = lines.as_slice() {
+        if line.height() - 2 * (height / 6) > height * 5 / 3 {
+            // Ascenders and descenders can close the gap between two lines.
+            let middle = line.y();
+            let split = (middle - height / 4..=middle + height / 4)
+                .min_by_key(|&y| density[y as usize])
+                .unwrap_or(middle);
+            lines = vec![
+                Rect::new(0, line.top, crop.width, split),
+                Rect::new(0, split, crop.width, line.bottom),
+            ];
+        }
+    } else if lines.len() != 2 {
+        lines = vec![whole];
+    }
+    let last = lines.last_mut().unwrap();
+    let symbol_area = Rect::new(0, last.top, crop.width, crop.height);
+    let marks: Vec<_> = [
+        (brown_ink as fn(image::Rgb) -> u8, 208),
+        (brown_ink, 223),
+        (brown_ink, 232),
+        (faint_brown_ink, 168),
+        (faint_brown_ink, 184),
+        (faint_brown_ink, 199),
+    ]
+    .into_iter()
+    .filter_map(|(ink, threshold)| {
+        circle_with_ink(&crop, symbol_area, height, 6, |pixel| {
+            ink(pixel) < threshold
+        })
+    })
+    .collect();
+    let (mark, suggested) = if let Some((candidate, bounds)) = marks
+        .first()
+        .filter(|(candidate, _)| marks.iter().all(|(other, _)| other == candidate))
+    {
+        last.right = bounds.start;
+        let diameter = (bounds.end - bounds.start) as f32 / magnification;
+        let reliable = (marks.len() >= 2 && diameter >= 5.0) || diameter >= 8.0;
+        (reliable.then_some(*candidate), Some(*candidate))
+    } else {
+        (None, None)
+    };
+
+    let mut best_raw = String::new();
+    let mut variants = None;
+    let mut readings = [Vec::<String>::new(), Vec::new()];
+    for (scale, ink, full, tight) in [
+        (1.0, None, true, false),
+        (0.6, None, false, false),
+        (0.75, Some(0), false, false),
+        (1.0, Some(0), false, false),
+        (1.0, None, false, false),
+        (1.25, Some(2), false, true),
+        (0.85, Some(2), true, false),
+        (0.85, None, false, true),
+    ] {
+        let alternate = (scale != 1.0).then(|| source.resample(source_area, magnification * scale));
+        let working = alternate.as_ref().unwrap_or(&crop);
+        let scaled = |v: i32| (v as f32 * scale).round() as i32;
+        let mut words = Vec::new();
+        for (index, line) in lines.iter().enumerate() {
+            let full_line = Rect::new(line.left, 0, line.right, crop.height);
+            let line = if full && lines.len() == 1 {
+                &full_line
+            } else {
+                line
+            };
+            let mut rect = Rect::new(
+                scaled(line.left),
+                scaled(line.top),
+                scaled(line.right),
+                scaled(line.bottom),
+            );
+            if tight {
+                if let Some(bounds) =
+                    ink_bounds(working, rect, |pixel| faint_brown_ink(pixel) < 190)
+                {
+                    rect.left = (bounds.left - 3).max(rect.left);
+                    rect.right = (bounds.right + 3).min(rect.right);
+                }
+            }
+            let strip = working.resample(rect, 1.0);
+            let padded = strip.with_margin(28, |x, y| {
+                let pixel = strip.at(x, y);
+                let Some(channel) = ink else {
+                    return pixel;
+                };
+                let source_x = rect.left + x;
+                let bg = working.at(source_x, 0)[channel]
+                    .max(working.at(source_x, working.height - 1)[channel]);
+                let darkness = u16::from(bg.saturating_sub(pixel[channel])) * 365
+                    / u16::from(
+                        bg.saturating_sub(if channel == 0 { 110 } else { 38 })
+                            .max(25),
+                    );
+                [255 - darkness.min(255) as u8; 3]
+            });
+            let raw = ocr.text(&padded)?;
+            if !raw.trim().is_empty() {
+                if !readings[index].contains(&raw) {
+                    readings[index].push(raw.clone());
+                }
+                words.push(raw);
+            }
+        }
+        let complete = words.len() == lines.len();
+        let raw = words.join(" ");
+        if !complete {
+            continue;
+        }
+        if let Some(matched) = matcher
+            .identify(&raw, Some(unique), mark, None)
+            .filter(|matched| {
+                !tight || matches!(matched, Resolution::Matched(value) if value.confidence == 1.0)
+            })
+        {
+            return Ok((raw, Some(matched), None));
+        }
+        if !unique && variants.is_none() {
+            variants = matcher.circle_variants(&raw, suggested);
+            if variants.is_some() {
+                best_raw = raw.clone();
+            }
+        }
+        if variants.is_none() && raw.len() > best_raw.len() {
+            best_raw = raw;
+        }
+    }
+    for top in &readings[0] {
+        for bottom in &readings[1] {
+            let raw = format!("{top} {bottom}");
+            if let Some(Resolution::Matched(matched)) =
+                matcher.identify(&raw, Some(unique), mark, None)
+            {
+                if matched.confidence == 1.0 {
+                    return Ok((raw, Some(Resolution::Matched(matched)), None));
+                }
+            }
+            if !unique && variants.is_none() {
+                variants = matcher.circle_variants(&raw, suggested);
+                if variants.is_some() {
+                    best_raw = raw;
+                }
+            }
+        }
+    }
+    if source_scale >= 1.5 && variants.is_none() {
+        let (raw, _, _) = read_name(ocr, image, resized, matcher, area, glyph_height, unique)?;
+        if let Some(matched) = matcher.identify(&raw, Some(unique), mark, None) {
+            return Ok((raw, Some(matched), None));
+        }
+        if !unique {
+            variants = matcher.circle_variants(&raw, suggested);
+        }
+        if variants.is_some() || best_raw.is_empty() {
+            best_raw = raw;
+        }
+    }
+    Ok((best_raw, None, variants))
 }
 
 fn learn_row(
@@ -389,9 +636,10 @@ fn learn_row(
     let glyph_height = row.width() / 32;
     let area = region(row, 15, 3, 70, 25);
     let unique = pixels_in(image, region(row, 92, 15, 96, 25), is_unique) > 0.5;
-    let (raw_name, mut matched, mark) =
+    let (mut raw_name, mut matched, mark) =
         read_name(ocr, image, resized, matcher, area, glyph_height, unique)?;
     let mut raw_fields = Vec::new();
+    let mut variant_choice = None;
     if matched.is_none() {
         let description = read(
             ocr,
@@ -403,6 +651,19 @@ fn learn_row(
         matched = matcher
             .identify(&raw_name, Some(unique), mark, Some(&description))
             .or_else(|| matcher.identify_name_fragment(&raw_name, unique, &description));
+        if matched.is_none() && resized.is_some_and(|capture| capture.scale >= 1.5) {
+            let (raw, resolution, variants) =
+                compact_name(ocr, image, resized, matcher, area, glyph_height, unique)?;
+            if resolution.is_some() || variants.is_some() || raw_name.is_empty() {
+                raw_name = raw;
+                matched = resolution.or_else(|| {
+                    matcher.identify(&raw_name, Some(unique), mark, Some(&description))
+                });
+                if matched.is_none() {
+                    variant_choice = variants;
+                }
+            }
+        }
         raw_fields.push(description);
     }
     let mut fields = SkillFields::default();
@@ -485,6 +746,11 @@ fn learn_row(
     }
     Ok(SkillRow {
         resolution: matched,
+        variant_choice: variant_choice.or_else(|| {
+            (matched.is_none() && !unique)
+                .then(|| matcher.circle_variants(&raw_name, None))
+                .flatten()
+        }),
         fields,
         raw_name,
         raw_fields,

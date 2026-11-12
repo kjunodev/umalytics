@@ -14,6 +14,7 @@ const screens: Record<Screen, string> = {
   learn: 'Learn',
   unsupported: 'Unsupported screenshot',
 };
+const skillScreens: ReadonlySet<Screen> = new Set(['career-skills', 'details-skills', 'finished-details', 'learn']);
 const stats = [
   ['speed', 'Speed'], ['stamina', 'Stamina'], ['pow', 'Power'], ['guts', 'Guts'], ['wiz', 'Wit'],
 ] as const;
@@ -88,7 +89,7 @@ export function StaminaScreenshotImport({ catalog, recent, onRecent, onClose, on
   const finished = sources.some(source => source.scan?.screen === 'finished-details');
   const mixed = finished && sources.some(source => source.scan && ['attributes-numbers', 'career-skills', 'details-skills', 'learn'].includes(source.scan.screen));
   const numbers = [...sources].reverse().find(source => source.scan?.screen === (finished ? 'finished-details' : 'attributes-numbers'))?.scan;
-  const skills = sources.some(source => source.scan?.screen === 'career-skills' || source.scan?.screen === 'details-skills');
+  const careerSkills = sources.some(source => source.scan?.screen === 'career-skills' && source.scan.skills.length > 0);
   const learn = sources.some(source => source.scan?.screen === 'learn');
   const points = [...new Set(sources.flatMap(({ scan }) => scan?.skill_points == null ? [] : [scan.skill_points]))];
   const cards = new Set(sources.flatMap(({ scan }) =>
@@ -96,7 +97,7 @@ export function StaminaScreenshotImport({ catalog, recent, onRecent, onClose, on
   const cardId = chosen ?? numbers?.card?.id ?? (cards.size === 1 ? [...cards][0] : undefined);
   const uma = catalog.umas.find(card => card.card_id === cardId);
   const rows = sources.flatMap(({ id, scan }) => scan?.skills.map((row, index) => ({
-    ...row, key: `${id}-${index}`, learn: scan.screen === 'learn', owned: scan.screen !== 'learn' || row.fields.obtained === true,
+    ...row, key: `${id}-${index}`, screen: scan.screen, learn: scan.screen === 'learn', owned: scan.screen !== 'learn' || row.fields.obtained === true,
   })) ?? []).sort((a, b) => Number(b.learn) - Number(a.learn));
   const canSimulate = (id: number) => Object.hasOwn(catalog.screenshot_skills ?? {}, id);
   const ignored = [...new Set(rows.flatMap(row => {
@@ -105,6 +106,9 @@ export function StaminaScreenshotImport({ catalog, recent, onRecent, onClose, on
     return id !== undefined && !canSimulate(id) ? [catalog.skills.find(skill => skill.id === id)?.name ?? row.raw_name] : [];
   }))];
   const unknown = rows.filter(row => row.resolution === null);
+  const suggestions = unknown.flatMap(row => row.variant_choice?.suggested !== undefined && resolved[row.key] === undefined
+    ? [[row.key, row.variant_choice.suggested] as const] : []);
+  const resolve = (key: string, id: number | undefined) => setResolved(previous => ({ ...previous, [key]: id }));
   const stat = (i: number) => edits[stats[i]![0]] ?? numbers?.attributes?.stats[i]?.toString() ?? '';
   const aptitude = (key: typeof aptitudes[number][0], i: number) => {
     const value = edits[`${key}-${i}`] ?? numbers?.attributes?.[key][i] ?? '';
@@ -119,8 +123,9 @@ export function StaminaScreenshotImport({ catalog, recent, onRecent, onClose, on
       hint: row.fields.hint, hintUnreadable: row.fields.hint_unreadable, hintConflict: row.fields.hint_conflict }];
   });
   const uniqueKey = `unique-${uma?.unique_skill_id}`;
-  const levels = [...new Set(observations.flatMap(row =>
-    row.id === uma?.unique_skill_id && row.owned && row.level !== null ? [row.level] : []))];
+  const levels = [...new Set(rows.flatMap(row =>
+    (row.screen === 'details-skills' || row.screen === 'finished-details') && row.resolution && row.resolution !== 'ignored_no_race_effect'
+      && row.resolution.matched.id === uma?.unique_skill_id && row.fields.level !== null ? [row.fields.level] : []))];
   const uniqueLevel = edits[uniqueKey] ?? (levels.length === 1 ? String(levels[0]) : '');
   const reviewed = uma && uniqueLevel ? [
     ...observations.map(row => row.id === uma.unique_skill_id && row.owned ? { ...row, level: Number(uniqueLevel) } : row),
@@ -130,7 +135,7 @@ export function StaminaScreenshotImport({ catalog, recent, onRecent, onClose, on
   const chains = catalog.screenshot_skills ? tierChains(reviewed, catalog.screenshot_skills) : [];
   const tooMany = purchasePlan(chains, [], 0).skills.length > 100;
   const unresolved = unknown.filter(row => resolved[row.key] === undefined).length;
-  const hasScreens = !!numbers && (finished || (skills && learn));
+  const hasScreens = !!numbers && (finished || learn);
   const canApply = !!(hasScreens && uma && uniqueLevel && !pending && cards.size <= 1 && !mixed && !unresolved && !tooMany);
   const edit = (key: string, value: string) => setEdits(previous => ({ ...previous, [key]: value }));
   const apply = (event: FormEvent<HTMLFormElement>) => {
@@ -177,17 +182,19 @@ export function StaminaScreenshotImport({ catalog, recent, onRecent, onClose, on
           <li data-ready>Finished Uma Details · Scroll the Skills tab to capture all rows</li>
         </ul> : <><ul className="import-checklist" aria-label="Screens needed">
           <li data-ready={!!numbers}>Complete Career Attributes · Number view</li>
-          <li data-ready={skills}>Complete Career Skills · Scroll to capture all rows</li>
           <li data-ready={learn}>Learn · Capture overlapping screenshots</li>
+          <li className="import-recommended" data-ready={careerSkills}>Complete Career Skills · Recommended to include every owned skill</li>
         </ul><p className="muted">For a finished Uma, capture the Skills tab of its Details popup.</p></>}
         {pending > 0 && <p role="status">Reading {pending} {pending === 1 ? 'image' : 'images'}…</p>}
         {!!sources.length && <ul className="import-sources" aria-label="Scanned screenshots">{sources.map(({ id, scan, error }) =>
           <li key={id}><div><strong>{scan ? screens[scan.screen] : 'Image could not be read'}</strong>
             {(error || scan?.instruction) && <small>{error ?? scan?.instruction}</small>}
-            {!!scan?.skills.length && <small>{scan.skills.length} {scan.skills.length === 1 ? 'skill row' : 'skill rows'}</small>}
+            {scan && skillScreens.has(scan.screen) && (scan.skills.length > 0
+              ? <small>{scan.skills.length} {scan.skills.length === 1 ? 'skill row' : 'skill rows'}</small>
+              : <small className="import-warning">No skills read on this screenshot. Make the game window larger or recapture.</small>)}
           </div><button type="button" aria-label={`Remove screenshot ${id + 1}`} onClick={() => setSources(previous => previous.filter(source => source.id !== id))}>×</button></li>
         )}</ul>}
-        {(numbers || learn || skills) && <div className="import-review">
+        {(numbers || learn || rows.length > 0) && <div className="import-review">
           <section aria-label="Review build">
             <h3>Review build</h3>
             {cards.size > 1 && <p className="import-warning" role="alert">These Career screenshots show different Umas. Remove the screenshots from the other career.</p>}
@@ -209,10 +216,17 @@ export function StaminaScreenshotImport({ catalog, recent, onRecent, onClose, on
               {points.length > 1 && <small className="import-warning">Learn screenshots show different totals. Enter the correct Skill Points.</small>}</>}
           </section>
           {(unknown.length > 0 || ignored.length > 0) && <section aria-label="Review skill matches">
-            {unknown.length > 0 && <><h3>Unmatched skills</h3><p className="muted">Choose a skill for every row before applying.</p>
-              {unknown.map(row => <div className="import-unmatched" key={row.key}><span>{row.raw_name || 'Unreadable skill name'}</span>
-                <SkillPicker resolving catalog={catalog} skills={resolved[row.key] === undefined ? [] : [{ id: resolved[row.key]!, level: 1 }]} limit={1}
-                  recent={recent} onRecent={onRecent} onChange={value => setResolved(previous => ({ ...previous, [row.key]: value[0]?.id }))}/>
+            {unknown.length > 0 && <><h3>Unmatched skills</h3><p className="muted">Confirm every row before applying.</p>
+              {suggestions.length > 0 && <button type="button" onClick={() => setResolved(previous => ({ ...Object.fromEntries(suggestions), ...previous }))}>Accept suggestions</button>}
+              {unknown.map(({ key, raw_name: raw, variant_choice: variant }) => <div className="import-unmatched" key={key}>
+                {variant ? <><span>{variant.name}</span>
+                  <div className="import-variants" role="group" aria-label={`${variant.name} variant`}>
+                    {([[variant.circle, '○'], [variant.double_circle, '◎']] as const).map(([id, symbol]) =>
+                      <button type="button" key={id} aria-label={`${variant.name} ${symbol}`} aria-pressed={resolved[key] === id}
+                        onClick={() => resolve(key, id)}>{symbol}{variant.suggested === id && <small>Suggested</small>}</button>)}
+                  </div></> : <><span>{raw || 'Unreadable skill name'}</span>
+                  <SkillPicker resolving catalog={catalog} skills={resolved[key] === undefined ? [] : [{ id: resolved[key]!, level: 1 }]} limit={1}
+                    recent={recent} onRecent={onRecent} onChange={value => resolve(key, value[0]?.id)}/></>}
               </div>)}</>}
             {ignored.length > 0 && <><h3>Ignored · No race effect</h3><ul className="import-ignored">{ignored.map(name => <li key={name}>{name}</li>)}</ul></>}
           </section>}

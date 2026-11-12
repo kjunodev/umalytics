@@ -93,6 +93,15 @@ pub(super) enum Resolution {
     IgnoredNoRaceEffect,
 }
 
+#[derive(Debug, Serialize)]
+pub(super) struct VariantChoice {
+    pub name: String,
+    pub circle: i32,
+    pub double_circle: i32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub suggested: Option<i32>,
+}
+
 impl Resolution {
     #[cfg(test)]
     pub fn matched(self) -> Option<Match> {
@@ -265,6 +274,34 @@ impl<'a> Matcher<'a> {
 }
 
 impl Matcher<'_> {
+    pub fn circle_variants(&self, raw: &str, suggested: Option<Mark>) -> Option<VariantChoice> {
+        let Some(Resolution::Matched(circle)) =
+            self.identify(raw, Some(false), Some(Mark::Circle), None)
+        else {
+            return None;
+        };
+        let Some(Resolution::Matched(double)) =
+            self.identify(raw, Some(false), Some(Mark::DoubleCircle), None)
+        else {
+            return None;
+        };
+        let entry = self.0.iter().find(|entry| entry.skill.id == circle.id)?;
+        Some(VariantChoice {
+            name: split_mark(&entry.skill.name).0.to_owned(),
+            circle: circle.id,
+            double_circle: double.id,
+            suggested: match suggested.or_else(|| match raw.split_whitespace().last()? {
+                "o" | "O" | "0" | "○" | "◯" => Some(Mark::Circle),
+                "00" | "◎" | "◉" => Some(Mark::DoubleCircle),
+                _ => None,
+            }) {
+                Some(Mark::Circle) => Some(circle.id),
+                Some(Mark::DoubleCircle) => Some(double.id),
+                _ => None,
+            },
+        })
+    }
+
     pub fn identify_name_fragment(
         &self,
         raw: &str,

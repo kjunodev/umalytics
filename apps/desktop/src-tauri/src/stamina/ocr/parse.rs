@@ -249,8 +249,33 @@ pub(super) fn finished_details(
         header.bottom + w * 13 / 100,
     );
     let raw_card = read(ocr, image, area, w / 38, brown_ink)?;
-    let card = match_card(umas, &raw_card);
+    let mut card = match_card(umas, &raw_card);
     let mut raw = vec![raw_card];
+    if card.is_none() {
+        for height in [w / 38, w / 52] {
+            let text = ocr.text(&image.padded_crop(area, height, |rgb| rgb))?;
+            card = match_card(umas, &text);
+            raw.push(text);
+            if card.is_some() {
+                break;
+            }
+        }
+    }
+    if card.is_none() {
+        let mut lines = Vec::new();
+        for (top, bottom) in [(1, 7), (6, 13)] {
+            let line = Rect::new(
+                area.left,
+                header.bottom + w * top / 100,
+                area.right,
+                header.bottom + w * bottom / 100,
+            );
+            lines.push(read(ocr, image, line, w / 45, brown_ink)?);
+        }
+        let text = lines.join(" ");
+        card = match_card(umas, &text);
+        raw.push(text);
+    }
     let mut result = Attributes::default();
     let stat_header = runs(header.bottom + w / 4..header.bottom + w * 38 / 100, |y| {
         [4, 23, 42, 61, 80]
@@ -300,7 +325,13 @@ pub(super) fn finished_details(
                     read_number(ocr, image, area, w / 31, brown_ink)?
                 }
             };
-            *stat = value;
+            if value.is_none() {
+                let color = ocr.text(&image.padded_crop(area, w / 43, |rgb| rgb))?;
+                *stat = number(&color);
+                raw.push(color);
+            } else {
+                *stat = value;
+            }
             raw.push(text);
         }
     }
@@ -378,14 +409,25 @@ fn grade(image: &Image, cx: i32, cy: i32, radius: i32) -> char {
 }
 
 pub(super) fn circle(image: &Image, area: Rect, glyph_height: i32) -> Option<(Mark, i32)> {
-    let ink = |x, y| brown_ink(image.at(x, y)) < 188;
+    circle_with_ink(image, area, glyph_height, 4, |pixel| brown_ink(pixel) < 188)
+        .map(|(mark, glyph)| (mark, glyph.start))
+}
+
+pub(super) fn circle_with_ink(
+    image: &Image,
+    area: Rect,
+    glyph_height: i32,
+    gap_divisor: i32,
+    is_ink: impl Fn(Rgb) -> bool,
+) -> Option<(Mark, std::ops::Range<i32>)> {
+    let ink = |x, y| is_ink(image.at(x, y));
     let cols = runs(area.left..area.right, |x| {
         (area.top..area.bottom).any(|y| ink(x, y))
     });
     let glyph = cols.last()?;
     let width = glyph.end - glyph.start;
     let previous = cols.iter().rev().nth(1)?;
-    if glyph.start - previous.end < (width / 4).max(2) {
+    if glyph.start - previous.end < (width / gap_divisor).max(2) {
         return None;
     }
     if width * 5 < glyph_height * 3 || width * 4 > glyph_height * 5 {
@@ -418,8 +460,8 @@ pub(super) fn circle(image: &Image, area: Rect, glyph_height: i32) -> Option<(Ma
         return None;
     }
     match inner.count_ones() {
-        0..=1 => Some((Mark::Circle, glyph.start)),
-        6..=8 => Some((Mark::DoubleCircle, glyph.start)),
+        0..=1 => Some((Mark::Circle, glyph.clone())),
+        6..=8 => Some((Mark::DoubleCircle, glyph.clone())),
         _ => None,
     }
 }

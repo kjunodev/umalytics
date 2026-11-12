@@ -1,7 +1,7 @@
 import { draftSnapshotFixture } from '../../../tests/fixtures/stamina-draft.mjs';
 import { mockIPC, mockWindows, mockConvertFileSrc } from '@tauri-apps/api/mocks';
 import { emit } from '@tauri-apps/api/event';
-import { apiResponse, catalog, finishedScans, messages, screenshotCatalog, screenshotScans, staminaResult } from './shots-fixture.mjs';
+import { apiResponse, catalog, finishedScans, learnOnlyScans, messages, screenshotCatalog, screenshotScans, staminaResult } from './shots-fixture.mjs';
 
 const scene = window.__SHOT_SCENE__ ?? 'lobby';
 const requests = new Map();
@@ -57,12 +57,12 @@ mockIPC(async (command, args) => {
   }
   if (command === 'engine_catalog') {
     if (scene === 'stamina-missing-engine') throw 'UmaLytics engine data is missing at C:\\UmaLytics\\resources\\engine-data.';
-    if (scene === 'stamina-screenshot-import' || scene === 'stamina-finished-import') return screenshotCatalog;
+    if (['stamina-screenshot-import', 'stamina-finished-import', 'stamina-learn-import'].includes(scene)) return screenshotCatalog;
     return scene === 'stamina-no-data' ? { ...catalog, local_skill_data: false, local_skill_count: 0, local_icon_count: 0, skills: catalog.skills.map(s => ({ ...s, icon_path: null })) } : catalog;
   }
-  if (command === 'scan_stamina_screenshot' && (scene === 'stamina-screenshot-import' || scene === 'stamina-finished-import')) {
+  if (command === 'scan_stamina_screenshot') {
     if (!(args instanceof ArrayBuffer) || args.byteLength === 0) throw Error('Expected screenshot bytes');
-    const scans = scene === 'stamina-finished-import' ? finishedScans : screenshotScans;
+    const scans = scene === 'stamina-finished-import' ? finishedScans : scene === 'stamina-learn-import' ? learnOnlyScans : screenshotScans;
     return scans[calls.filter(call => call.command === command).length - 1];
   }
   if (command === 'stamina_check') {

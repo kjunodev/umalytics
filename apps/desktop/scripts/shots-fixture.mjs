@@ -49,17 +49,21 @@ export const screenshotCatalog = {
     910311: { cost: 200, tier: null },
     110681: { cost: null, tier: null },
     200542: { cost: 180, tier: { group: 20054, rank: 1 } },
+    200181: { cost: 110, tier: { group: 20018, rank: 2 }, hint_from: 200182 },
+    200182: { cost: 90, tier: { group: 20018, rank: 1 } },
     201111: { cost: 110, tier: { group: 20111, rank: 2 }, hint_from: 201112 },
     201112: { cost: 100, tier: { group: 20111, rank: 1 } },
     201113: { cost: 150, tier: { group: 20111, rank: 3 } },
   },
   skills: [
-    ...catalog.skills.filter(skill => ![200501, 200502, 910311, 200542, 201111, 201112, 201113].includes(skill.id)),
+    ...catalog.skills.filter(skill => ![200181, 200182, 200501, 200502, 910311, 200542, 201111, 201112, 201113].includes(skill.id)),
     { id: 200501, name: 'Lane Legerdemain', rarity: 'gold', hp_recovery: false, icon_path: 'fixture-heal.webp' },
     { id: 200502, name: 'Go with the Flow', rarity: 'white', hp_recovery: false, icon_path: 'fixture-heal.webp' },
     { id: 910311, name: 'Fresh☆Parlor (inherited)', rarity: 'white', hp_recovery: true, icon_path: 'fixture-heal.webp' },
     { id: 110681, name: 'Bring on the Banquet!', rarity: 'unique', hp_recovery: false, icon_path: 'fixture-heal.webp' },
     { id: 200542, name: 'Fast-Paced', rarity: 'white', hp_recovery: false, icon_path: 'fixture-heal.webp' },
+    { id: 200181, name: 'Summer Runner ◎', rarity: 'white', hp_recovery: false, icon_path: 'fixture-heal.webp' },
+    { id: 200182, name: 'Summer Runner ○', rarity: 'white', hp_recovery: false, icon_path: 'fixture-heal.webp' },
     { id: 201111, name: 'Medium Corners ◎', rarity: 'white', hp_recovery: false, icon_path: 'fixture-heal.webp' },
     { id: 201112, name: 'Medium Corners ○', rarity: 'white', hp_recovery: false, icon_path: 'fixture-heal.webp' },
     { id: 201113, name: 'Refraction Arc', rarity: 'gold', hp_recovery: false, icon_path: 'fixture-heal.webp' },
@@ -100,8 +104,14 @@ const finished = {
 };
 export const finishedScans = [
   scan('finished-details', { ...finished, skills: [read('Bring on the Banquet!', 110681, { level: 5 }), read('Fast-Paced', 200542)] }),
-  scan('finished-details', { ...finished, skills: [read('Fast-Paced', 200542), read('Medium Corners ○', 201112)] }),
+  scan('finished-details', { ...finished, skills: [read('Fast-Paced', 200542),
+    { ...read('Medium Corners o', null), variant_choice: { name: 'Medium Corners', circle: 201112, double_circle: 201111, suggested: 201112 } },
+    { ...read('Summer Runner', null), variant_choice: { name: 'Summer Runner', circle: 200182, double_circle: 200181, suggested: 200182 } },
+  ] }),
 ];
+export const learnOnlyScans = [screenshotScans[2], scan('learn', { skill_points: 200 }), {
+  ...screenshotScans[0], skills: [read('Fresh☆Parlor', 110311, { obtained: true, level: 4 }), read('Fast-Paced', 200542, { obtained: true })],
+}];
 export function apiResponse(url, scene) {
   const parsed = new URL(url);
   if (parsed.pathname === '/api/esports/league') return { standings: [{ teamId: 'fixture-team' }] };

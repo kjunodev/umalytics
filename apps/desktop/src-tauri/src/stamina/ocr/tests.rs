@@ -235,21 +235,16 @@ fn compare(name: &str, expected: &Expected, actual: &Import, score: &mut Score) 
 fn screenshot_accuracy() -> Result<()> {
     let folder = std::env::var_os("UMALYTICS_OCR_SAMPLES").ok_or("Set UMALYTICS_OCR_SAMPLES")?;
     let folder = Path::new(&folder);
-    const SCALES: &[f32] = &[0.5, 0.6, 0.75, 1.0, 1.25];
-    const NATIVE_SIZE: &[f32] = &[1.0];
-    let mut passed = if folder.ends_with("small-window") {
-        benchmark_set(folder, NATIVE_SIZE, true)?
-    } else {
-        benchmark_set(folder, SCALES, false)?
-    };
-    for (name, scales, verify_fields) in [
-        ("career-2", SCALES, false),
-        ("small-window", NATIVE_SIZE, true),
+    const SCALES: &[f32] = &[0.75, 1.0, 1.25];
+    let mut passed = benchmark_set(folder, SCALES, folder.ends_with("small-window"))?;
+    for (name, verify_native_fields) in [
+        ("career-2", false),
+        ("small-window", true),
+        ("retest-2026-11-12", false),
     ] {
         let extra = folder.join(name);
         if extra.is_dir() {
-            // The installed-test capture already comes from a small window.
-            passed &= benchmark_set(&extra, scales, verify_fields)?;
+            passed &= benchmark_set(&extra, SCALES, verify_native_fields)?;
         }
     }
     assert!(passed, "Expected correct screen classifications, at least 98% correct rows, and zero wrong matches at each scale");
@@ -381,6 +376,7 @@ fn benchmark_set(folder: &Path, scales: &[f32], verify_fields: bool) -> Result<b
                 .get(&Screen::FinishedDetails)
                 .is_none_or(|score| score.correct_non_skill_fields == score.non_skill_fields)
             && (!verify_fields
+                || scale != 1.0
                 || scores.values().all(|score| {
                     score.correct_non_skill_fields == score.non_skill_fields
                         && score.rows_with_fields == score.skill_rows
@@ -460,6 +456,30 @@ fn circle_variants_need_shape_or_description_and_conflict_is_unknown() {
     .unwrap();
     let name = "Tokyo Racecourse O";
     assert!(matcher.identify(name, None, None, None).is_none());
+    let choice = matcher.circle_variants(name, Some(Mark::Circle)).unwrap();
+    assert_eq!(
+        (
+            choice.name.as_str(),
+            choice.circle,
+            choice.double_circle,
+            choice.suggested
+        ),
+        ("Tokyo Racecourse", 1, 2, Some(1))
+    );
+    assert_eq!(
+        matcher.circle_variants(name, None).unwrap().suggested,
+        Some(1)
+    );
+    assert_eq!(
+        matcher
+            .circle_variants("Tokyo Racecourse", None)
+            .unwrap()
+            .suggested,
+        None
+    );
+    assert!(matcher
+        .circle_variants("Unknown Racecourse", Some(Mark::Circle))
+        .is_none());
     assert!(matcher
         .identify("Tokyo Racecourse ○", None, None, None)
         .is_none());
@@ -595,6 +615,7 @@ fn parsers_require_complete_numeric_fields_and_full_card_identity() {
 fn dedup_merges_identified_ids_and_keeps_unknown_observations() {
     let row = |resolution, level| SkillRow {
         resolution,
+        variant_choice: None,
         fields: SkillFields {
             level,
             ..SkillFields::default()

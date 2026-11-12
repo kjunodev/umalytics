@@ -39,7 +39,7 @@ try {
     } else await page.locator('.sidebar').getByRole('button', { name, exact: true }).click();
   }
   async function open(scene, width, height, prefs = {}) {
-    const page = await browser.newPage({ viewport: { width, height }, deviceScaleFactor: ['stamina-screenshot-import', 'stamina-finished-import'].includes(scene) ? 1.25 : 1 });
+    const page = await browser.newPage({ viewport: { width, height }, deviceScaleFactor: ['stamina-screenshot-import', 'stamina-finished-import', 'stamina-learn-import'].includes(scene) ? 1.25 : 1 });
     page.setDefaultTimeout(20000);
     page.on('pageerror', error => failures.push(error.message));
     await page.route('https://**/*', async route => {
@@ -209,11 +209,21 @@ try {
     await page.waitForFunction(() => document.querySelectorAll('.import-sources > li').length === 2);
     check(await dialog.getByLabel('Unique skill level').inputValue() === '5', 'Finished Uma review keeps the scanned unique level');
     check(await dialog.getByLabel('Skill Points').count() === 0, 'Finished Uma review needs no SP');
+    const apply = dialog.getByRole('button', { name: 'Apply to build' });
+    check(await apply.isDisabled(), 'Circle suggestions need confirmation');
+    check(await dialog.getByRole('button', { name: 'Match skill' }).count() === 0, 'A clear circle family shows two direct choices');
+    await shot(page, 'stamina-import-variant-choice');
+    const doubleCircle = dialog.getByRole('button', { name: 'Medium Corners ◎', exact: true });
+    await doubleCircle.click();
+    check(await apply.isDisabled(), 'A direct choice resolves only its row');
+    await dialog.getByRole('button', { name: 'Accept suggestions' }).click();
+    check(await doubleCircle.getAttribute('aria-pressed') === 'true', 'Bulk acceptance preserves manual choices');
+    check(await dialog.getByRole('button', { name: 'Summer Runner ○', exact: true }).getAttribute('aria-pressed') === 'true', 'Bulk acceptance resolves suggested variants');
     await shot(page, 'stamina-import-finished-review');
-    await dialog.getByRole('button', { name: 'Apply to build' }).click();
+    await apply.click();
     const panel = page.getByRole('region', { name: 'Screenshot skills' });
     await panel.getByRole('heading', { name: 'Finished Uma skills' }).waitFor();
-    check(await panel.getByText('Owned', { exact: true }).count() === 3 && await panel.getByRole('button').count() === 0, 'Finished skills are deduplicated and locked');
+    check(await panel.getByText('Owned', { exact: true }).count() === 4 && await panel.getByRole('button').count() === 0, 'Finished skills are deduplicated and locked');
     await shot(page, 'stamina-import-finished-build');
     await page.reload();
     await nav(page, 'Stamina');
@@ -221,11 +231,29 @@ try {
     check(await page.getByRole('spinbutton', { name: 'Stamina', exact: true }).inputValue() === '669', 'Finished build survives reload');
     await page.close();
   }
-  if (importOnly) { await screenshotImportShots(); await finishedImportShots(); }
+  async function learnOnlyImportShots() {
+    const page = await open('stamina-learn-import', 1120, 980);
+    await nav(page, 'Stamina');
+    await page.getByRole('button', { name: 'Import from screenshots' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Import from screenshots' });
+    await sendImages(dialog, 'drop', 3);
+    await page.waitForFunction(() => document.querySelectorAll('.import-sources > li').length === 3);
+    check(await dialog.getByText('No skills read on this screenshot. Make the game window larger or recapture.').count() === 1, 'An empty Learn capture has a recapture hint');
+    const apply = dialog.getByRole('button', { name: 'Apply to build' });
+    const level = dialog.getByLabel('Unique skill level');
+    check(await level.inputValue() === '' && await apply.isDisabled(), 'Learn alone cannot supply the unique level');
+    await shot(page, 'stamina-import-learn-only');
+    await level.selectOption('5');
+    check(await apply.isEnabled(), 'Attributes and Learn can apply without Career Skills');
+    await apply.click();
+    await page.getByRole('region', { name: 'Screenshot skills' }).getByText('200 SP left', { exact: true }).waitFor();
+    await page.close();
+  }
+  if (importOnly) { await screenshotImportShots(); await finishedImportShots(); await learnOnlyImportShots(); }
   else if (drawerOnly) await (await import('./shots-player-drawer.mjs')).runPlayerDrawerShots({ open, nav, shot, check });
   else if (updatesOnly) await (await import('./shots-updater.mjs')).runUpdateShots({ open, nav, shot, check });
   else {
-  if (!arenaOnly && !statesOnly && !dataOnly && !usabilityOnly) { await screenshotImportShots(); await finishedImportShots(); }
+  if (!arenaOnly && !statesOnly && !dataOnly && !usabilityOnly) { await screenshotImportShots(); await finishedImportShots(); await learnOnlyImportShots(); }
   if (!staminaOnly && !arenaOnly && !dataOnly && !usabilityOnly) {
     const page = await open('lobby', 1280, 800);
     await page.waitForFunction(() => document.querySelectorAll('.arena-card[data-state=loaded]').length === 10);

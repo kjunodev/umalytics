@@ -225,13 +225,16 @@ impl Image {
     ) -> Self {
         let scale = (32. / reference_height.max(1) as f32).clamp(1., 4.);
         let crop = self.crop(rect, scale);
-        let margin = 8;
-        let width = crop.width + margin * 2;
-        let height = crop.height + margin * 2;
+        crop.with_margin(8, |x, y| color(crop.at(x, y)))
+    }
+
+    pub fn with_margin(&self, margin: i32, color: impl Fn(i32, i32) -> Rgb) -> Self {
+        let width = self.width + margin * 2;
+        let height = self.height + margin * 2;
         let mut pixels = vec![[255; 3]; width as usize * height as usize];
-        for y in 0..crop.height {
-            for x in 0..crop.width {
-                pixels[((y + margin) * width + x + margin) as usize] = color(crop.at(x, y));
+        for y in 0..self.height {
+            for x in 0..self.width {
+                pixels[((y + margin) * width + x + margin) as usize] = color(x, y);
             }
         }
         Self {
