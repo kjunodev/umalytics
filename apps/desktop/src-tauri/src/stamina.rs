@@ -16,6 +16,9 @@ use uma_race_sim::{
     AnalysisOptions, HorseInput, RaceInput, SkillInput, SkillWizCheck,
 };
 mod skill_data;
+// The screenshot spike runs through the native test harness.
+#[cfg(all(windows, test))]
+mod ocr;
 
 #[derive(Deserialize)]
 struct Names {
