@@ -1,7 +1,7 @@
 use super::super::Uma;
 use super::{
     image::{Image, Ocr, Rect, Result, Rgb, Word},
-    layout::{brown_ink, grade_rows, label, runs, Layout},
+    layout::{blue_channel_ink, brown_ink, grade_rows, label, runs, Layout},
     matcher::{match_card, Mark},
 };
 use serde::{Deserialize, Serialize};
@@ -54,7 +54,16 @@ pub(super) fn hint_level(text: &str) -> Option<u8> {
     {
         Some(5)
     } else {
-        level(header).filter(|level| *level <= 5)
+        level(header).filter(|level| *level <= 5).or_else(|| {
+            // Small badges can lose the "Hint Lvl" lettering while retaining
+            // the isolated level glyph. A percent token is parsed separately.
+            let mut levels = header.split_whitespace().filter_map(|token| {
+                let level = token.parse::<u8>().ok()?;
+                (token.len() == 1 && (1..=5).contains(&level)).then_some(level)
+            });
+            let level = levels.next()?;
+            levels.next().is_none().then_some(level)
+        })
     }
 }
 
@@ -255,7 +264,7 @@ pub(super) fn finished_details(
     })
     .into_iter()
     .max_by_key(|span| span.end - span.start);
-    if let Some(band) = stat_header {
+    if let Some(band) = &stat_header {
         for (i, stat) in result.stats.iter_mut().enumerate() {
             let left = header.left + w / 48 + (w * 955 / 1000) * i as i32 / 5;
             let area = Rect::new(
@@ -275,27 +284,41 @@ pub(super) fn finished_details(
                 .collect();
             tokens.sort_by_key(|word| word.bounds.left);
             let digits: String = tokens.iter().map(|word| word.text.as_str()).collect();
-            let (value, text) = if let Some(value) = number(&digits) {
+            let glyph_count = runs(area.left..area.right, |x| {
+                (area.top..area.bottom).any(|y| brown_ink(image.at(x, y)) < 205)
+            })
+            .len();
+            let (value, text) = if let Some(value) =
+                number(&digits).filter(|_| glyph_count > 4 || digits.len() >= glyph_count)
+            {
                 (Some(value), digits)
             } else {
-                read_number(ocr, image, area, w / 31, brown_ink)?
+                let blue = read(ocr, image, area, w / 31, blue_channel_ink)?;
+                if let Some(value) = number(&blue).filter(|_| blue.len() >= glyph_count.min(4)) {
+                    (Some(value), blue)
+                } else {
+                    read_number(ocr, image, area, w / 31, brown_ink)?
+                }
             };
             *stat = value;
             raw.push(text);
         }
     }
     let in_popup = |rect: &Rect| (header.left..header.right).contains(&rect.x());
-    for (name, count, out) in [
-        ("Track", 2, &mut result.track),
-        ("Distance", 4, &mut result.distance),
-        ("Style", 4, &mut result.style),
+    for (name, count, offset, out) in [
+        ("Track", 2, 12, &mut result.track),
+        ("Distance", 4, 18, &mut result.distance),
+        ("Style", 4, 24, &mut result.style),
     ] {
-        if let Some(label) = label(words, name).filter(in_popup).find(|word| {
+        let label = label(words, name).filter(in_popup).find(|word| {
             (header.bottom + w * 41 / 100..header.bottom + w * 61 / 100).contains(&word.y())
-        }) {
+        });
+        if let Some(y) = label
+            .map(Rect::y)
+            .or_else(|| stat_header.as_ref().map(|band| band.end + w * offset / 100))
+        {
             for pct in [37, 55, 73, 91].into_iter().take(count) {
                 let x = header.left + w * pct / 100;
-                let y = label.y();
                 let r = w / 60;
                 let mut value = grade(image, x, y, r);
                 if value == '?' {

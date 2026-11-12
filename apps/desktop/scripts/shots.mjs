@@ -133,8 +133,14 @@ try {
     const dialog = page.getByRole('dialog', { name: 'Import from screenshots' });
     await dialog.waitFor();
     await shot(page, 'stamina-import-empty');
+    await dialog.locator('input[type=file]').evaluate(input => {
+      input.showPicker = () => { throw new DOMException('Picker unavailable', 'NotAllowedError'); };
+    });
+    await dialog.getByRole('button', { name: 'Choose images' }).click();
+    await dialog.getByText('Couldn’t open the image picker. Paste or drop the screenshot instead.', { exact: true }).waitFor();
     await sendImages(dialog, 'paste', 1);
     await dialog.getByText('Learn', { exact: true }).waitFor();
+    check(await dialog.getByText('Couldn’t open the image picker.', { exact: false }).count() === 0, 'A successful paste clears the picker error');
     await sendImages(dialog, 'drop', 5);
     await dialog.getByText('Skills Learned screen', { exact: true }).waitFor();
     check(await dialog.getByText('Switch to the number view', { exact: true }).count() === 1, 'Chart screenshots request number view');

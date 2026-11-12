@@ -235,6 +235,28 @@ fn compare(name: &str, expected: &Expected, actual: &Import, score: &mut Score) 
 fn screenshot_accuracy() -> Result<()> {
     let folder = std::env::var_os("UMALYTICS_OCR_SAMPLES").ok_or("Set UMALYTICS_OCR_SAMPLES")?;
     let folder = Path::new(&folder);
+    const SCALES: &[f32] = &[0.5, 0.6, 0.75, 1.0, 1.25];
+    const NATIVE_SIZE: &[f32] = &[1.0];
+    let mut passed = if folder.ends_with("small-window") {
+        benchmark_set(folder, NATIVE_SIZE, true)?
+    } else {
+        benchmark_set(folder, SCALES, false)?
+    };
+    for (name, scales, verify_fields) in [
+        ("career-2", SCALES, false),
+        ("small-window", NATIVE_SIZE, true),
+    ] {
+        let extra = folder.join(name);
+        if extra.is_dir() {
+            // The installed-test capture already comes from a small window.
+            passed &= benchmark_set(&extra, scales, verify_fields)?;
+        }
+    }
+    assert!(passed, "Expected correct screen classifications, at least 98% correct rows, and zero wrong matches at each scale");
+    Ok(())
+}
+
+fn benchmark_set(folder: &Path, scales: &[f32], verify_fields: bool) -> Result<bool> {
     let json = fs::read_to_string(folder.join("expected.json"))?;
     let expected: BTreeMap<String, Expected> =
         serde_json::from_str(json.trim_start_matches('\u{feff}'))?;
@@ -273,13 +295,15 @@ fn screenshot_accuracy() -> Result<()> {
         .filter(|entry| entry.crop.is_some())
         .count();
     println!(
-        "{} screenshots, {crops} labeled crops excluded",
+        "Set {}: {} screenshots, {crops} labeled crops excluded",
+        folder.file_name().unwrap_or_default().to_string_lossy(),
         expected.len() - crops
     );
     let mut passed = true;
-    for scale in [1., 0.75, 1.25] {
+    for &scale in scales {
         let mut scores = BTreeMap::<Screen, Score>::new();
         let mut dedup = SkillImport::default();
+        let mut scan_time = std::time::Duration::ZERO;
         println!("Scale {scale:.2}x");
         for (name, expected) in &expected {
             assert_ne!(
@@ -318,17 +342,19 @@ fn screenshot_accuracy() -> Result<()> {
             };
             let start = Instant::now();
             let actual = scan(&ocr, &screenshot, &matcher, &engine.catalog.umas)?;
+            let elapsed = start.elapsed();
+            scan_time += elapsed;
             if dump {
                 println!(
                     "OCR_SCAN {}",
-                    serde_json::json!({ "scale": scale, "name": name, "scan": actual })
+                    serde_json::json!({ "scale": scale, "name": name, "width": screenshot.width, "height": screenshot.height, "scan": actual })
                 );
             }
             println!(
                 "{name}: {:?}, {} rows, {:.1} ms",
                 actual.screen,
                 actual.skills.len(),
-                start.elapsed().as_secs_f64() * 1000.
+                elapsed.as_secs_f64() * 1000.
             );
             compare(name, expected, &actual, scores.entry(screen).or_default());
             dedup.extend(actual.skills);
@@ -342,6 +368,8 @@ fn screenshot_accuracy() -> Result<()> {
         let correct: usize = scores.values().map(|s| s.identified + s.ignored).sum();
         let total: usize = scores.values().map(|s| s.skill_rows).sum();
         let wrong: usize = scores.values().map(|s| s.wrong).sum();
+        let screens: usize = scores.values().map(|s| s.screens).sum();
+        let classified: usize = scores.values().map(|s| s.classified).sum();
         let accuracy = correct as f64 / total.max(1) as f64;
         let gate = total > 0
             && correct * 100 >= total * 98
@@ -351,10 +379,15 @@ fn screenshot_accuracy() -> Result<()> {
                 .all(|score| score.classified == score.screens)
             && scores
                 .get(&Screen::FinishedDetails)
-                .is_none_or(|score| score.correct_non_skill_fields == score.non_skill_fields);
+                .is_none_or(|score| score.correct_non_skill_fields == score.non_skill_fields)
+            && (!verify_fields
+                || scores.values().all(|score| {
+                    score.correct_non_skill_fields == score.non_skill_fields
+                        && score.rows_with_fields == score.skill_rows
+                }));
         passed &= gate;
-        println!("Gate {scale:.2}x: {correct}/{total} ({:.2}%), wrong/extra {wrong}, {} distinct IDs, {} ignored rows, {} unknown rows: {}",
-            100. * accuracy, dedup.identified.len(), dedup.ignored.len(), dedup.unknown.len(), if gate { "PASS" } else { "FAIL" });
+        println!("Gate {scale:.2}x: {classified}/{screens} screens, {correct}/{total} rows ({:.2}%), wrong/extra {wrong}, {:.2}s total, {:.0}ms/image: {}",
+            100. * accuracy, scan_time.as_secs_f64(), scan_time.as_secs_f64() * 1000. / screens.max(1) as f64, if gate { "PASS" } else { "FAIL" });
         for row in &dedup.ignored {
             println!(
                 "IGNORED: no race effect, raw {:?}, level {:?}",
@@ -362,11 +395,7 @@ fn screenshot_accuracy() -> Result<()> {
             );
         }
     }
-    assert!(
-        passed,
-        "Expected correct screen classifications and finished builds, at least 98% correct rows, and zero wrong matches at each scale"
-    );
-    Ok(())
+    Ok(passed)
 }
 
 fn skill(id: i32, name: &str, rarity: &str) -> Skill {

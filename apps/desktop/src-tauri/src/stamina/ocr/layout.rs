@@ -18,6 +18,7 @@ pub(super) enum Screen {
 pub(super) struct Layout {
     pub screen: Screen,
     pub panel: Rect,
+    pub header: Option<Rect>,
     pub rows: Vec<Rect>,
 }
 
@@ -68,6 +69,34 @@ fn green([r, g, b]: Rgb) -> bool {
     r >= 65 && g >= 150 && g.saturating_sub(r) >= 32 && b < 70
 }
 
+// The Career Profile banner scales with the game UI, even when the OS title bar
+// and capture margins do not. Its rounded, wide green band is visible behind popups.
+pub(super) fn profile_banner(image: &Image) -> Option<Rect> {
+    let is_banner = |[r, g, b]: Rgb| g >= 146 && g.saturating_sub(r) >= 23 && b < 135;
+    let (band, y) = (0..image.height / 6)
+        .flat_map(|y| {
+            // White lettering can interrupt the green span inside the banner.
+            join_gaps(
+                runs(image.width / 3..image.width, |x| is_banner(image.at(x, y))),
+                image.width / 34,
+            )
+            .into_iter()
+            .map(move |band| (band, y))
+        })
+        .filter(|(band, _)| length(band) >= image.width / 5 && length(band) <= image.width / 2)
+        .max_by_key(|(band, _)| length(band))?;
+    let width = length(&band);
+    let probe = band.start + width / 7;
+    let vertical = runs(y - width / 7..y + width / 7, |y| {
+        is_banner(image.at(probe, y))
+    })
+    .into_iter()
+    .find(|span| span.contains(&y))?;
+    (width / 18..width / 8)
+        .contains(&length(&vertical))
+        .then(|| Rect::new(band.start, vertical.start, band.end, vertical.end))
+}
+
 fn button_green([r, g, b]: Rgb) -> bool {
     r >= 30 && g >= 68 && g.saturating_sub(r) >= 10 && b < 65
 }
@@ -77,6 +106,17 @@ pub(super) fn brown_ink([r, g, b]: Rgb) -> u8 {
         .min(g.saturating_sub(b).saturating_sub(3) as u16 * 14)
         .min(230_u8.saturating_sub(r) as u16 * 3);
     255 - opacity.min(255) as u8
+}
+
+pub(super) fn faint_brown_ink([r, g, b]: Rgb) -> u8 {
+    let opacity = (r.saturating_sub(g).saturating_sub(5) as u16 * 15)
+        .min(g.saturating_sub(b).saturating_sub(2) as u16 * 20)
+        .min(240_u8.saturating_sub(r) as u16 * 6);
+    255 - opacity.min(255) as u8
+}
+
+pub(super) fn blue_channel_ink([_, _, b]: Rgb) -> u8 {
+    b.saturating_sub(65).saturating_mul(3)
 }
 
 pub(super) fn white_ink([r, g, b]: Rgb) -> u8 {
@@ -257,8 +297,23 @@ fn chips(image: &Image, panel: Rect, columns: i32, clipped_top: bool) -> Vec<Rec
     rows
 }
 
-fn learn(image: &Image, words: &[Word]) -> Option<Layout> {
-    for confirm in label(words, "Confirm") {
+fn learn(image: &Image, words: &[Word], profile: Option<Rect>) -> Option<Layout> {
+    let fallback = profile.and_then(|banner| {
+        let width = banner.width();
+        let reset = label(words, "Reset").find(|word| {
+            (banner.top + width * 13 / 10..banner.top + width * 15 / 10).contains(&word.y())
+                && (banner.left - width / 2..banner.left - width / 4).contains(&word.x())
+        })?;
+        let center = reset.x() - width * 34 / 100;
+        let half = width / 16;
+        Some(Rect::new(
+            center - half,
+            reset.top,
+            center + half,
+            reset.bottom,
+        ))
+    });
+    for confirm in label(words, "Confirm").chain(fallback) {
         let center = confirm.x();
         let reach = confirm.width() * 2;
         let Some(band) = (confirm.bottom..confirm.bottom + confirm.height())
@@ -276,22 +331,43 @@ fn learn(image: &Image, words: &[Word]) -> Option<Layout> {
         if !(confirm.width() * 2..=confirm.width() * 4).contains(&button_width) {
             continue;
         }
-        let Some((bar_x, viewport)) = scrollbar(
+        let measured = scrollbar(
             image,
             center + button_width * 115 / 100..center + button_width * 130 / 100,
             confirm.top - button_width * 23 / 10..confirm.top - button_width / 8,
             button_width * 3 / 2,
-        ) else {
+        );
+        let (right, top, bottom) = if let Some((bar_x, viewport)) = measured {
+            (
+                bar_x - button_width / 22,
+                viewport.start - button_width / 20,
+                viewport.end + button_width / 15,
+            )
+        } else if profile.is_some_and(|banner| {
+            let w = banner.width();
+            (w * 34 / 100..w * 41 / 100).contains(&button_width)
+                && (banner.left - w * 83 / 100..banner.left - w * 70 / 100).contains(&center)
+                && (banner.top + w * 13 / 10..banner.top + w * 15 / 10).contains(&confirm.y())
+        }) {
+            // At small sizes the narrow scrollbar track can disappear into the background.
+            // Confirm and Reset still anchor the list's fixed bounds.
+            let top = runs(confirm.y() - button_width / 4..confirm.y(), |y| {
+                button_green(image.at(center - button_width / 4, y))
+            })
+            .into_iter()
+            .last()
+            .map(|band| band.start)
+            .unwrap_or(confirm.top);
+            (
+                center + button_width * 117 / 100,
+                top - button_width * 205 / 100,
+                top - button_width / 20,
+            )
+        } else {
             continue;
         };
-        let right = bar_x - button_width / 22;
         let left = 2 * center - right;
-        let panel = Rect::new(
-            left,
-            viewport.start - button_width / 20,
-            right,
-            viewport.end + button_width / 15,
-        );
+        let panel = Rect::new(left, top, right, bottom);
         let width = panel.width();
         let rows = runs(panel.top..panel.bottom, |y| {
             [97, 98, 99]
@@ -316,6 +392,7 @@ fn learn(image: &Image, words: &[Word]) -> Option<Layout> {
         return Some(Layout {
             screen: Screen::Learn,
             panel,
+            header: None,
             rows,
         });
     }
@@ -366,25 +443,107 @@ fn finished_layout(image: &Image, words: &[Word], close: Rect) -> Option<(Rect, 
     ))
 }
 
-pub(super) fn finished_header(image: &Image, words: &[Word]) -> Option<Rect> {
-    finished_layout(image, words, label(words, "Close").next()?).map(|(header, _, _)| header)
+fn popup_header(image: &Image, profile: Rect) -> Option<Rect> {
+    let width = profile.width();
+    let center = profile.left - width * 76 / 100;
+    let (band, y) = (profile.top..profile.top + width / 7)
+        .flat_map(|y| {
+            runs(center - width * 55 / 100..center + width * 55 / 100, |x| {
+                green(image.at(x, y))
+            })
+            .into_iter()
+            .map(move |band| (band, y))
+        })
+        .filter(|(band, _)| {
+            (width * 87 / 100..width).contains(&length(band))
+                && (band.start + length(band) / 2 - center).abs() <= width / 25
+        })
+        .max_by_key(|(band, _)| length(band))?;
+    let probe = band.end - width / 10;
+    let ys = runs(y - width / 8..y + width / 8, |y| green(image.at(probe, y)))
+        .into_iter()
+        .find(|span| span.contains(&y))?;
+    (width / 18..width / 9)
+        .contains(&length(&ys))
+        .then(|| Rect::new(band.start, ys.start, band.end, ys.end))
 }
 
-pub(super) fn detect(image: &Image, words: &[Word]) -> Layout {
+fn popup_skills(image: &Image, header: Rect, close: Option<Rect>) -> Option<Layout> {
+    let w = header.width();
+    let bottom = close.map_or(header.bottom + w * 145 / 100, |close| close.y() - w / 10);
+    // Finished Details has three tabs, with Skills in the left third. In-career
+    // Details has two tabs with Skills on the right, below the growth-rate row.
+    let split = header.left + w / 3;
+    if let Some((tabs, false)) = tab(
+        image,
+        split,
+        header.bottom + w * 62 / 100..header.bottom + w * 70 / 100,
+        w / 35,
+        w * 28 / 100,
+    ) {
+        let panel = Rect::new(
+            header.left + w / 65,
+            tabs.bottom + w / 34,
+            header.right - w / 65,
+            bottom,
+        );
+        return Some(Layout {
+            screen: Screen::FinishedDetails,
+            panel,
+            header: Some(header),
+            rows: chips(image, panel, 2, true),
+        });
+    }
+    if let Some((tabs, true)) = tab(
+        image,
+        header.x(),
+        header.bottom + w * 74 / 100..header.bottom + w * 82 / 100,
+        w / 35,
+        w * 43 / 100,
+    ) {
+        let panel = Rect::new(tabs.left, tabs.bottom, tabs.right, bottom);
+        return Some(Layout {
+            screen: Screen::DetailsSkills,
+            panel,
+            header: None,
+            rows: chips(image, panel, 2, false),
+        });
+    }
+    None
+}
+
+fn is_chart(image: &Image, panel: Rect) -> bool {
+    let w = panel.width();
+    let x = panel.left + w * 36 / 100..panel.left + w * 67 / 100;
+    let y = panel.top + w * 26 / 100..panel.top + w * 56 / 100;
+    let area = length(&x) * length(&y);
+    let fill = y
+        .flat_map(|y| x.clone().map(move |x| image.at(x, y)))
+        .filter(|&[r, g, b]| {
+            r > 220 && (150..=218).contains(&g) && r.saturating_sub(g) > 24 && b < 155
+        })
+        .count() as i32;
+    fill * 7 > area
+}
+
+pub(super) fn detect(image: &Image, words: &[Word], profile: Option<Rect>) -> Layout {
     let unsupported = Layout {
         screen: Screen::Unsupported,
         panel: Rect::new(0, 0, 0, 0),
+        header: None,
         rows: Vec::new(),
     };
-    if let Some(close) = label(words, "Close").next() {
+    let close = label(words, "Close").next();
+    if let Some(close) = close {
         if label(words, "Learned").any(|r| r.y() < close.y()) {
             return unsupported;
         }
-        if let Some((_, panel, active)) = finished_layout(image, words, close) {
+        if let Some((header, panel, active)) = finished_layout(image, words, close) {
             if active {
                 return Layout {
                     screen: Screen::FinishedDetails,
                     panel,
+                    header: Some(header),
                     rows: chips(image, panel, 2, true),
                 };
             }
@@ -408,16 +567,34 @@ pub(super) fn detect(image: &Image, words: &[Word]) -> Layout {
                 return Layout {
                     screen: Screen::DetailsSkills,
                     panel,
+                    header: None,
                     rows: chips(image, panel, 2, false),
                 };
             }
         }
+    }
+    if let Some(header) = profile.and_then(|profile| popup_header(image, profile)) {
+        return popup_skills(image, header, close).unwrap_or(unsupported);
+    }
+    if close.is_some() {
         return unsupported;
     }
-    if let Some(layout) = learn(image, words) {
+    if let Some(layout) = learn(image, words, profile) {
         return layout;
     }
-    if let Some((tabs, skills)) = active_career_tab(image, words) {
+    let career_tab = active_career_tab(image, words).or_else(|| {
+        profile.and_then(|profile| {
+            let w = profile.width();
+            tab(
+                image,
+                profile.left - w * 54 / 100,
+                profile.top + w * 35 / 100..profile.top + w * 43 / 100,
+                w / 32,
+                w / 5,
+            )
+        })
+    });
+    if let Some((tabs, skills)) = career_tab {
         let width = tabs.width();
         let panel = if skills {
             let bottom = scrollbar(
@@ -436,14 +613,15 @@ pub(super) fn detect(image: &Image, words: &[Word]) -> Layout {
                 tabs.bottom + width * 7 / 5,
             )
         };
-        let chart = label(words, "Wit").any(|wit| {
-            label(words, "Stamina").any(|stamina| {
-                stamina.x() - wit.x() > width / 3
-                    && (stamina.y() - wit.y()).abs() < width / 12
-                    && wit.y() > panel.top
-                    && stamina.x() < panel.right
-            })
-        });
+        let chart = is_chart(image, panel)
+            || label(words, "Wit").any(|wit| {
+                label(words, "Stamina").any(|stamina| {
+                    stamina.x() - wit.x() > width / 3
+                        && (stamina.y() - wit.y()).abs() < width / 12
+                        && wit.y() > panel.top
+                        && stamina.x() < panel.right
+                })
+            });
         let screen = if skills {
             Screen::CareerSkills
         } else if chart {
@@ -454,6 +632,7 @@ pub(super) fn detect(image: &Image, words: &[Word]) -> Layout {
         return Layout {
             screen,
             panel,
+            header: None,
             rows: if skills {
                 chips(image, panel, 1, false)
             } else {

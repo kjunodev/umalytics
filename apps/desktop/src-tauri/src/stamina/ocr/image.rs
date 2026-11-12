@@ -130,6 +130,69 @@ impl Image {
         }
     }
 
+    pub fn resample(&self, rect: Rect, scale: f32) -> Self {
+        // Catmull-Rom keeps small lettering sharper than a second bilinear pass.
+        fn weights(t: f32) -> [f32; 4] {
+            let t2 = t * t;
+            let t3 = t2 * t;
+            [
+                -0.5 * t + t2 - 0.5 * t3,
+                1.0 - 2.5 * t2 + 1.5 * t3,
+                0.5 * t + 2.0 * t2 - 1.5 * t3,
+                -0.5 * t2 + 0.5 * t3,
+            ]
+        }
+        fn axis(start: i32, extent: i32, scale: f32) -> Vec<(i32, [f32; 4])> {
+            let count = (extent as f32 * scale).round().max(1.0) as i32;
+            (0..count)
+                .map(|i| {
+                    let coordinate = (i as f32 + 0.5) / scale - 0.5 + start as f32;
+                    (
+                        coordinate.floor() as i32 - 1,
+                        weights(coordinate - coordinate.floor()),
+                    )
+                })
+                .collect()
+        }
+        let xs = axis(rect.left, rect.width(), scale);
+        let ys = axis(rect.top, rect.height(), scale);
+        let mut horizontal = Vec::<[f32; 3]>::with_capacity(xs.len() * rect.height() as usize);
+        for y in rect.top..rect.bottom {
+            for &(x, weights) in &xs {
+                let mut pixel = [0.0; 3];
+                for (i, weight) in weights.into_iter().enumerate() {
+                    let source = self.at((x + i as i32).clamp(rect.left, rect.right - 1), y);
+                    for channel in 0..3 {
+                        pixel[channel] += f32::from(source[channel]) * weight;
+                    }
+                }
+                horizontal.push(pixel);
+            }
+        }
+        let width = xs.len();
+        let mut pixels = Vec::with_capacity(width * ys.len());
+        for &(y, weights) in &ys {
+            let rows = [0, 1, 2, 3].map(|offset| {
+                (y + offset).clamp(rect.top, rect.bottom - 1) as usize - rect.top as usize
+            });
+            for x in 0..width {
+                let source = rows.map(|row| horizontal[row * width + x]);
+                pixels.push(std::array::from_fn(|channel| {
+                    (0..4)
+                        .map(|i| source[i][channel] * weights[i])
+                        .sum::<f32>()
+                        .round()
+                        .clamp(0.0, 255.0) as u8
+                }));
+            }
+        }
+        Self {
+            width: width as i32,
+            height: ys.len() as i32,
+            pixels,
+        }
+    }
+
     pub fn text_crop(&self, rect: Rect, reference_height: i32, ink: fn(Rgb) -> u8) -> Self {
         self.padded_crop(rect, reference_height, |pixel| [ink(pixel); 3])
     }

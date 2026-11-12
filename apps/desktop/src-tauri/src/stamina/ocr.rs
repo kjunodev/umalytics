@@ -7,7 +7,9 @@ mod tests;
 
 use super::{engine, Skill, Uma};
 use image::{Image, Ocr, Rect, Result};
-use layout::{brown_ink, is_event, is_unique, white_ink, Screen};
+use layout::{
+    blue_channel_ink, brown_ink, faint_brown_ink, is_event, is_unique, white_ink, Screen,
+};
 use matcher::{Mark, Matcher, Resolution};
 use parse::{
     circle, hint_level, hint_percent, ink_bounds, level, number, read, read_number, Attributes,
@@ -177,9 +179,72 @@ pub struct Import {
     raw: Vec<String>,
 }
 
+struct ResizedCapture<'a> {
+    original: &'a Image,
+    frame: Rect,
+    scale: f32,
+}
+
+impl ResizedCapture<'_> {
+    fn text_crop(&self, area: Rect, magnification: f32) -> Option<Image> {
+        let x = |x: i32| {
+            (self.frame.left + (x as f32 / self.scale).round() as i32)
+                .clamp(self.frame.left, self.frame.right)
+        };
+        let y = |y: i32| {
+            (self.frame.top + (y as f32 / self.scale).round() as i32)
+                .clamp(self.frame.top, self.frame.bottom)
+        };
+        let original = Rect::new(x(area.left), y(area.top), x(area.right), y(area.bottom));
+        (original.width() > 0 && original.height() > 0)
+            .then(|| self.original.resample(original, magnification))
+    }
+}
+
 fn scan(ocr: &Ocr, image: &Image, matcher: &Matcher<'_>, umas: &[Uma]) -> Result<Import> {
+    const REFERENCE_BANNER_WIDTH: f32 = 570.0;
+    let banner = layout::profile_banner(image);
+    let resized = banner.and_then(|banner| {
+        let width = banner.width();
+        let scale = REFERENCE_BANNER_WIDTH / width as f32;
+        // Keep the native pixels when the panel is already in the OCR working range.
+        if (420..=600).contains(&width) {
+            return None;
+        }
+        let frame = Rect::new(
+            (banner.left - width * 8 / 5).max(0),
+            (banner.top - width / 12).max(0),
+            (banner.right + width / 7).min(image.width),
+            (banner.top + width * 17 / 10).min(image.height),
+        );
+        Some(ResizedCapture {
+            original: image,
+            frame,
+            scale,
+        })
+    });
+    let normalized = resized
+        .as_ref()
+        .map(|capture| image.resample(capture.frame, capture.scale));
+    scan_at_scale(
+        ocr,
+        normalized.as_ref().unwrap_or(image),
+        resized.as_ref(),
+        matcher,
+        umas,
+    )
+}
+
+fn scan_at_scale(
+    ocr: &Ocr,
+    image: &Image,
+    resized: Option<&ResizedCapture<'_>>,
+    matcher: &Matcher<'_>,
+    umas: &[Uma],
+) -> Result<Import> {
     let words = ocr.words(image)?;
-    let layout = layout::detect(image, &words);
+    let profile = layout::profile_banner(image);
+    let layout = layout::detect(image, &words, profile);
     let mut result = Import {
         screen: layout.screen,
         instruction: None,
@@ -216,12 +281,14 @@ fn scan(ocr: &Ocr, image: &Image, matcher: &Matcher<'_>, umas: &[Uma]) -> Result
             result.skill_points = points;
             result.raw.push(raw);
             for row in layout.rows {
-                result.skills.push(learn_row(ocr, image, matcher, row)?);
+                result
+                    .skills
+                    .push(learn_row(ocr, image, resized, matcher, row)?);
             }
         }
         Screen::CareerSkills | Screen::DetailsSkills | Screen::FinishedDetails => {
             if layout.screen == Screen::FinishedDetails {
-                if let Some(header) = layout::finished_header(image, &words) {
+                if let Some(header) = layout.header {
                     let (id, attributes, raw) =
                         parse::finished_details(ocr, image, &words, header, umas)?;
                     result.attributes = Some(attributes);
@@ -239,24 +306,26 @@ fn scan(ocr: &Ocr, image: &Image, matcher: &Matcher<'_>, umas: &[Uma]) -> Result
             for row in layout.rows {
                 result
                     .skills
-                    .push(owned_row(ocr, image, matcher, row, layout.screen)?);
+                    .push(owned_row(ocr, image, resized, matcher, row, layout.screen)?);
             }
         }
         Screen::Unsupported => {
-            result.instruction = Some(if layout::label(&words, "Learned").next().is_some() {
+            result.instruction = Some(if profile.is_none() {
+                "Couldn't read this screenshot. Make the game window larger and capture the full window again."
+            } else if layout::label(&words, "Learned").next().is_some() {
                 "Skills Learned screen"
             } else if layout::label(&words, "Inspiration").next().is_some() {
                 "Finished Uma Details · Switch to Skills"
-            } else if layout::label(&words, "Confirmation").next().is_some() {
+            } else if layout::label(&words, "Profile").next().is_some()
+                && layout::label(&words, "Confirmation").next().is_some()
+            {
                 "Skill purchase confirmation"
-            } else if layout::label(&words, "Deck").next().is_some() {
-                "Deck screen"
             } else if layout::label(&words, "Close").next().is_some()
                 && layout::label(&words, "Growth").next().is_some()
             {
                 "Uma Details screen"
             } else {
-                "Unrecognized screen"
+                "Couldn't read this screenshot. Make the game window larger and capture the full window again."
             });
         }
     }
@@ -273,6 +342,7 @@ fn region(row: Rect, left: i32, top: i32, right: i32, bottom: i32) -> Rect {
 fn owned_row(
     ocr: &Ocr,
     image: &Image,
+    resized: Option<&ResizedCapture<'_>>,
     matcher: &Matcher<'_>,
     row: Rect,
     screen: Screen,
@@ -283,7 +353,8 @@ fn owned_row(
     let has_level = screen != Screen::CareerSkills && (unique || event);
     let glyph_height = row.width() / 22;
     let area = region(row, 16, 10, if has_level { 80 } else { 96 }, 86);
-    let (raw_name, matched, _) = read_name(ocr, image, matcher, area, glyph_height, unique)?;
+    let (raw_name, matched, _) =
+        read_name(ocr, image, resized, matcher, area, glyph_height, unique)?;
     let mut fields = SkillFields::default();
     let mut raw_fields = Vec::new();
     if has_level {
@@ -308,11 +379,18 @@ fn owned_row(
     })
 }
 
-fn learn_row(ocr: &Ocr, image: &Image, matcher: &Matcher<'_>, row: Rect) -> Result<SkillRow> {
+fn learn_row(
+    ocr: &Ocr,
+    image: &Image,
+    resized: Option<&ResizedCapture<'_>>,
+    matcher: &Matcher<'_>,
+    row: Rect,
+) -> Result<SkillRow> {
     let glyph_height = row.width() / 32;
     let area = region(row, 15, 3, 70, 25);
     let unique = pixels_in(image, region(row, 92, 15, 96, 25), is_unique) > 0.5;
-    let (raw_name, mut matched, mark) = read_name(ocr, image, matcher, area, glyph_height, unique)?;
+    let (raw_name, mut matched, mark) =
+        read_name(ocr, image, resized, matcher, area, glyph_height, unique)?;
     let mut raw_fields = Vec::new();
     if matched.is_none() {
         let description = read(
@@ -378,6 +456,22 @@ fn learn_row(ocr: &Ocr, image: &Image, matcher: &Matcher<'_>, row: Rect) -> Resu
         let mut percent = hint_percent(&bottom);
         raw_fields.extend([top, bottom]);
         if labeled.is_none() || percent.is_none() {
+            // At small sizes the white text blends into the orange paint. The
+            // color crop retains strokes that the white-ink mask rejects.
+            let color = if let Some(source) = resized
+                .filter(|capture| capture.scale > 1.0)
+                .and_then(|capture| capture.text_crop(badge, 3.0))
+            {
+                let area = Rect::new(0, 0, source.width, source.height);
+                ocr.text(&source.padded_crop(area, 32, |rgb| rgb))?
+            } else {
+                ocr.text(&image.padded_crop(badge, glyph_height, |rgb| rgb))?
+            };
+            labeled = labeled.or_else(|| hint_level(&color));
+            percent = percent.or_else(|| hint_percent(&color));
+            raw_fields.push(color);
+        }
+        if labeled.is_none() || percent.is_none() {
             let full = read(ocr, image, badge, glyph_height, |[_, _, b]| {
                 255 - (b.saturating_sub(40) as u16 * 255 / 170).min(255) as u8
             })?;
@@ -400,6 +494,7 @@ fn learn_row(ocr: &Ocr, image: &Image, matcher: &Matcher<'_>, row: Rect) -> Resu
 fn read_name(
     ocr: &Ocr,
     image: &Image,
+    resized: Option<&ResizedCapture<'_>>,
     matcher: &Matcher<'_>,
     area: Rect,
     glyph_height: i32,
@@ -429,14 +524,70 @@ fn read_name(
             return Ok((raw, matched, mark));
         }
     }
+    let mut best_raw = raw;
     if let Some(bounds) = ink_bounds(image, name_crop, |pixel| brown_ink(pixel) < 175) {
         let retry = ocr.text(&image.padded_crop(bounds, glyph_height, |rgb| rgb))?;
         let matched = matcher.identify(&retry, Some(unique), mark, None);
-        if matched.is_some() || raw.is_empty() {
+        if matched.is_some() {
             return Ok((retry, matched, mark));
         }
+        if best_raw.is_empty() {
+            best_raw = retry;
+        }
     }
-    Ok((raw, None, mark))
+    let tight =
+        ink_bounds(image, name_crop, |pixel| faint_brown_ink(pixel) < 185).unwrap_or(name_crop);
+    for (crop, height, color) in [
+        (
+            name_crop,
+            glyph_height,
+            faint_brown_ink as fn(image::Rgb) -> u8,
+        ),
+        (tight, glyph_height * 3 / 4, faint_brown_ink),
+    ] {
+        let retry = read(ocr, image, crop, height, color)?;
+        let matched = matcher.identify(&retry, Some(unique), mark, None);
+        if matched.is_some() {
+            return Ok((retry, matched, mark));
+        }
+        if retry.chars().filter(|c| c.is_alphanumeric()).count()
+            > best_raw.chars().filter(|c| c.is_alphanumeric()).count()
+        {
+            best_raw = retry;
+        }
+    }
+    if let Some(capture) = resized.filter(|capture| capture.scale > 1.0) {
+        // A second resize of the working frame can smear the smallest glyphs.
+        // Retry the same region enlarged directly from the original pixels.
+        for scale in [3.0, 4.0] {
+            let Some(crop) = capture.text_crop(name_crop, scale) else {
+                break;
+            };
+            let retry = read(
+                ocr,
+                &crop,
+                Rect::new(0, 0, crop.width, crop.height),
+                32,
+                blue_channel_ink,
+            )?;
+            let matched = matcher.identify(&retry, Some(unique), mark, None);
+            if matched.is_some() {
+                return Ok((retry, matched, mark));
+            }
+            if retry.chars().filter(|c| c.is_alphanumeric()).count()
+                > best_raw.chars().filter(|c| c.is_alphanumeric()).count()
+            {
+                best_raw = retry;
+            }
+        }
+    }
+    let retry = ocr.text(&image.padded_crop(name_crop, glyph_height, |rgb| rgb))?;
+    let matched = matcher.identify(&retry, Some(unique), mark, None);
+    Ok((
+        if matched.is_some() { retry } else { best_raw },
+        matched,
+        mark,
+    ))
 }
 
 fn pixels_in(image: &Image, area: Rect, mut predicate: impl FnMut(image::Rgb) -> bool) -> f32 {

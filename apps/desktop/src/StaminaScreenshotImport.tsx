@@ -56,6 +56,7 @@ export function StaminaScreenshotImport({ catalog, recent, onRecent, onClose, on
   const queue = useRef(Promise.resolve());
   const closed = useRef(false);
   const [pending, setPending] = useState(0);
+  const [pickerError, setPickerError] = useState(false);
   const [sources, setSources] = useState<Source[]>([]);
   const [chosen, setChosen] = useState<number>();
   const [edits, setEdits] = useState<Record<string, string>>({});
@@ -69,6 +70,7 @@ export function StaminaScreenshotImport({ catalog, recent, onRecent, onClose, on
 
   const add = (files: File[]) => {
     if (!files.length) return;
+    setPickerError(false);
     setPending(count => count + files.length);
     for (const file of files) {
       const id = nextId.current++;
@@ -156,12 +158,21 @@ export function StaminaScreenshotImport({ catalog, recent, onRecent, onClose, on
         <div className="import-drop" onDragOver={event => { event.preventDefault(); event.dataTransfer.dropEffect = 'copy'; }} onDrop={event => { event.preventDefault(); add(Array.from(event.dataTransfer.files)); }}>
           <strong>Paste or drop screenshots</strong>
           <p>Use <kbd>Ctrl</kbd> + <kbd>V</kbd> or drop images in any order.</p>
-          <button type="button" onClick={() => fileInput.current?.click()}>Choose images</button>
-          <input ref={fileInput} type="file" accept="image/*" multiple hidden onChange={event => {
+          <button type="button" onClick={() => {
+            setPickerError(false);
+            const picker = fileInput.current;
+            if (!picker) return;
+            try {
+              if (typeof picker.showPicker === 'function') picker.showPicker();
+              else picker.click();
+            } catch { setPickerError(true); }
+          }}>Choose images</button>
+          <input ref={fileInput} type="file" accept="image/*" multiple hidden onError={() => setPickerError(true)} onChange={event => {
             add(Array.from(event.target.files ?? []));
             event.target.value = '';
           }}/>
         </div>
+        {pickerError && <p role="alert" className="import-warning">Couldn’t open the image picker. Paste or drop the screenshot instead.</p>}
         {finished ? <ul className="import-checklist" aria-label="Screens needed">
           <li data-ready>Finished Uma Details · Scroll the Skills tab to capture all rows</li>
         </ul> : <><ul className="import-checklist" aria-label="Screens needed">
