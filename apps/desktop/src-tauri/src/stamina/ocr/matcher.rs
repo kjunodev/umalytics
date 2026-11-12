@@ -1,6 +1,7 @@
 use super::super::{Skill, Uma};
 use serde::Deserialize;
 use std::collections::HashMap;
+use uma_race_sim::data::SkillData;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(super) enum Mark {
@@ -74,6 +75,7 @@ struct Entry<'a> {
     mark: Option<Mark>,
     description: Option<String>,
     global: Option<bool>,
+    non_race: bool,
 }
 
 pub(super) struct Matcher<'a>(Vec<Entry<'a>>);
@@ -84,10 +86,38 @@ pub(super) struct Match {
     pub confidence: f32,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub(super) enum Resolution {
+    Matched(Match),
+    IgnoredNoRaceEffect,
+}
+
+impl Resolution {
+    pub fn matched(self) -> Option<Match> {
+        match self {
+            Self::Matched(matched) => Some(matched),
+            Self::IgnoredNoRaceEffect => None,
+        }
+    }
+}
+
+fn has_race_effect(skill: &SkillData) -> bool {
+    // Match the simulator's create_ability arms and the type 6 running-style override.
+    skill
+        .details
+        .iter()
+        .flat_map(|detail| &detail.abilities)
+        .any(|ability| matches!(ability.ability_type, 1..=14 | 21 | 22 | 27..=32 | 35..=38))
+}
+
 const MIN_CONFIDENCE: f32 = 0.88;
 
 impl<'a> Matcher<'a> {
-    pub fn new(skills: &'a [Skill], metadata_json: &str) -> serde_json::Result<Self> {
+    pub fn new(
+        skills: &'a [Skill],
+        metadata_json: &str,
+        engine_skills: &HashMap<i32, SkillData>,
+    ) -> serde_json::Result<Self> {
         let rows: Vec<Metadata> = serde_json::from_str(metadata_json)?;
         let mut descriptions = HashMap::new();
         let mut availability = HashMap::new();
@@ -123,6 +153,9 @@ impl<'a> Matcher<'a> {
                         mark,
                         description: descriptions.remove(&skill.id),
                         global: availability.get(&skill.id).copied().flatten(),
+                        non_race: engine_skills
+                            .get(&skill.id)
+                            .is_some_and(|skill| !has_race_effect(skill)),
                     })
                 })
                 .collect(),
@@ -135,7 +168,7 @@ impl<'a> Matcher<'a> {
         unique: Option<bool>,
         visual_mark: Option<Mark>,
         description: Option<&str>,
-    ) -> Option<Match> {
+    ) -> Option<Resolution> {
         let (base, _) = split_mark(raw);
         let key = normalize(base);
         let without_ocr_mark = base
@@ -198,6 +231,9 @@ impl<'a> Matcher<'a> {
                 (entry.name == best.name && other_edits == edits).then_some(entry)
             })
             .collect();
+        if family.iter().all(|entry| entry.non_race) {
+            return Some(Resolution::IgnoredNoRaceEffect);
+        }
         if family.iter().any(|entry| entry.global == Some(true)) {
             family.retain(|entry| entry.global != Some(false));
         }
@@ -212,10 +248,13 @@ impl<'a> Matcher<'a> {
                     .filter(|entry| entry.mark.is_some() && entry.mark == visual_mark),
             )?
         };
-        Some(Match {
+        if chosen.non_race {
+            return None;
+        }
+        Some(Resolution::Matched(Match {
             id: chosen.skill.id,
             confidence,
-        })
+        }))
     }
 }
 

@@ -7,7 +7,7 @@ mod tests;
 use super::Uma;
 use image::{Image, Ocr, Rect, Result};
 use layout::{brown_ink, is_event, is_unique, white_ink, Screen};
-use matcher::{Mark, Match, Matcher};
+use matcher::{Mark, Matcher, Resolution};
 use parse::{circle, ink_bounds, level, number, read, Attributes};
 use serde::Deserialize;
 use std::collections::BTreeMap;
@@ -22,7 +22,7 @@ struct SkillFields {
 
 #[derive(Debug)]
 struct SkillRow {
-    matched: Option<Match>,
+    resolution: Option<Resolution>,
     fields: SkillFields,
     raw_name: String,
     raw_fields: Vec<String>,
@@ -129,7 +129,7 @@ fn owned_row(
         raw_fields.push(raw);
     }
     Ok(SkillRow {
-        matched,
+        resolution: matched,
         fields,
         raw_name,
         raw_fields,
@@ -188,7 +188,7 @@ fn learn_row(ocr: &Ocr, image: &Image, matcher: &Matcher<'_>, row: Rect) -> Resu
         }
     }
     Ok(SkillRow {
-        matched,
+        resolution: matched,
         fields,
         raw_name,
         raw_fields,
@@ -202,7 +202,7 @@ fn read_name(
     area: Rect,
     glyph_height: i32,
     unique: bool,
-) -> Result<(String, Option<Match>, Option<Mark>)> {
+) -> Result<(String, Option<Resolution>, Option<Mark>)> {
     let raw = read(ocr, image, area, glyph_height, brown_ink)?;
     let matched = matcher.identify(&raw, Some(unique), None, None);
     if matched.is_some() {
@@ -250,15 +250,23 @@ fn pixels_in(image: &Image, area: Rect, mut predicate: impl FnMut(image::Rgb) ->
 #[derive(Default)]
 struct SkillImport {
     identified: BTreeMap<i32, SkillRow>,
+    ignored: Vec<SkillRow>,
     unknown: Vec<SkillRow>,
 }
 
 impl SkillImport {
     fn extend(&mut self, rows: Vec<SkillRow>) {
         for row in rows {
-            let Some(matched) = row.matched else {
-                self.unknown.push(row);
-                continue;
+            let matched = match row.resolution {
+                Some(Resolution::Matched(matched)) => matched,
+                Some(Resolution::IgnoredNoRaceEffect) => {
+                    self.ignored.push(row);
+                    continue;
+                }
+                None => {
+                    self.unknown.push(row);
+                    continue;
+                }
             };
             self.identified
                 .entry(matched.id)
@@ -276,10 +284,11 @@ impl SkillImport {
                         existing.fields.hint = row.fields.hint;
                     }
                     if existing
-                        .matched
+                        .resolution
+                        .and_then(Resolution::matched)
                         .is_some_and(|old| old.confidence < matched.confidence)
                     {
-                        existing.matched = Some(matched);
+                        existing.resolution = row.resolution;
                         existing.raw_name.clone_from(&row.raw_name);
                     }
                 })

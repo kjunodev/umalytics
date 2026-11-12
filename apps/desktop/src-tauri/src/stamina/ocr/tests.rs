@@ -1,11 +1,18 @@
 use super::*;
 use crate::stamina::{engine, skill_data, Skill, UmaAptitudes};
-use matcher::Mark;
-use std::{fs, path::Path, time::Instant};
+use matcher::{Mark, Match};
+use std::{collections::HashMap, fs, path::Path, time::Instant};
+
+#[derive(Deserialize, Debug)]
+enum ExpectedResult {
+    #[serde(rename = "ignored: no race effect")]
+    IgnoredNoRaceEffect,
+}
 
 #[derive(Deserialize)]
 struct ExpectedRow {
     id: Option<i32>,
+    result: Option<ExpectedResult>,
     name: String,
     #[serde(flatten)]
     fields: SkillFields,
@@ -27,6 +34,7 @@ struct Score {
     classified: usize,
     skill_rows: usize,
     identified: usize,
+    ignored: usize,
     rows_with_fields: usize,
     wrong: usize,
     non_skill_fields: usize,
@@ -84,9 +92,14 @@ fn compare(name: &str, expected: &Expected, actual: &Import, score: &mut Score) 
 
     let mut matched_rows = vec![false; actual.skills.len()];
     for (index, row) in expected.skills.iter().enumerate() {
-        let found = row.id.and_then(|id| {
-            let is_match =
-                |candidate: &SkillRow| candidate.matched.is_some_and(|matched| matched.id == id);
+        let is_match = |candidate: &SkillRow| match (candidate.resolution, &row.result) {
+            (Some(Resolution::Matched(matched)), None) => row.id == Some(matched.id),
+            (Some(Resolution::IgnoredNoRaceEffect), Some(ExpectedResult::IgnoredNoRaceEffect)) => {
+                candidate.raw_name.eq_ignore_ascii_case(&row.name) && candidate.fields == row.fields
+            }
+            _ => false,
+        };
+        let found = {
             if actual.skills.len() == expected.skills.len() {
                 actual
                     .skills
@@ -100,10 +113,14 @@ fn compare(name: &str, expected: &Expected, actual: &Import, score: &mut Score) 
                     .enumerate()
                     .find(|(i, candidate)| !matched_rows[*i] && is_match(candidate))
             }
-        });
+        };
         if let Some((i, found)) = found {
             matched_rows[i] = true;
-            score.identified += 1;
+            if row.id.is_some() {
+                score.identified += 1;
+            } else {
+                score.ignored += 1;
+            }
             if found.fields == row.fields {
                 score.rows_with_fields += 1;
             } else {
@@ -118,22 +135,22 @@ fn compare(name: &str, expected: &Expected, actual: &Import, score: &mut Score) 
                 .filter(|_| actual.skills.len() == expected.skills.len())
                 .map(|row| &row.raw_name);
             println!(
-                "MISS {name} expected {:?} id {:?}, raw {raw:?}",
-                row.name, row.id
+                "MISS {name} expected {:?} id {:?}, result {:?}, fields {:?}, raw {raw:?}",
+                row.name, row.id, row.result, row.fields
             );
         }
     }
     for (row, accounted_for) in actual.skills.iter().zip(matched_rows) {
         if !accounted_for {
-            score.wrong += usize::from(row.matched.is_some());
+            score.wrong += usize::from(row.resolution.is_some());
             println!(
-                "{} {name} id {:?}, raw {:?}, fields {:?}, raw fields {:?}",
-                if row.matched.is_some() {
+                "{} {name} result {:?}, raw {:?}, fields {:?}, raw fields {:?}",
+                if row.resolution.is_some() {
                     "WRONG/EXTRA"
                 } else {
                     "UNKNOWN"
                 },
-                row.matched,
+                row.resolution,
                 row.raw_name,
                 row.fields,
                 row.raw_fields
@@ -171,7 +188,7 @@ fn screenshot_accuracy() -> Result<()> {
     let metadata = Path::new(env!("CARGO_MANIFEST_DIR")).join("resources/skill-data");
     assert!(skill_data::enrich_from(&mut skills, &metadata).0);
     let metadata = fs::read_to_string(metadata.join("skills.json"))?;
-    let matcher = Matcher::new(&skills, &metadata)?;
+    let matcher = Matcher::new(&skills, &metadata, &engine.data.skills)?;
     let ocr = Ocr::new()?;
     let mut passed = true;
     for scale in [1., 0.75, 1.25] {
@@ -180,6 +197,12 @@ fn screenshot_accuracy() -> Result<()> {
         println!("Scale {scale:.2}x");
         for (name, expected) in &expected {
             for row in &expected.skills {
+                assert_ne!(
+                    row.id.is_some(),
+                    row.result.is_some(),
+                    "{name} must specify an ID or an ignore result for {:?}",
+                    row.name
+                );
                 if let Some(id) = row.id {
                     assert!(
                         skills.iter().any(|skill| skill.id == id
@@ -216,23 +239,29 @@ fn screenshot_accuracy() -> Result<()> {
             dedup.extend(actual.skills);
         }
         for (screen, score) in &scores {
-            println!("{screen:?}: screens {}/{}, IDs {}/{}, complete rows {}/{}, wrong/extra {}, non-skill results {}/{}",
-                score.classified, score.screens, score.identified, score.skill_rows,
+            println!("{screen:?}: screens {}/{}, IDs {}, correctly ignored {}, complete rows {}/{}, wrong/extra {}, non-skill results {}/{}",
+                score.classified, score.screens, score.identified, score.ignored,
                 score.rows_with_fields, score.skill_rows, score.wrong,
                 score.correct_non_skill_fields, score.non_skill_fields);
         }
-        let identified: usize = scores.values().map(|s| s.identified).sum();
+        let correct: usize = scores.values().map(|s| s.identified + s.ignored).sum();
         let total: usize = scores.values().map(|s| s.skill_rows).sum();
         let wrong: usize = scores.values().map(|s| s.wrong).sum();
-        let accuracy = identified as f64 / total.max(1) as f64;
-        let gate = total > 0 && identified * 100 >= total * 98 && wrong == 0;
+        let accuracy = correct as f64 / total.max(1) as f64;
+        let gate = total > 0 && correct * 100 >= total * 98 && wrong == 0;
         passed &= gate;
-        println!("Gate {scale:.2}x: {identified}/{total} ({:.2}%), wrong/extra {wrong}, {} distinct IDs, {} unknown rows: {}",
-            100. * accuracy, dedup.identified.len(), dedup.unknown.len(), if gate { "PASS" } else { "FAIL" });
+        println!("Gate {scale:.2}x: {correct}/{total} ({:.2}%), wrong/extra {wrong}, {} distinct IDs, {} ignored rows, {} unknown rows: {}",
+            100. * accuracy, dedup.identified.len(), dedup.ignored.len(), dedup.unknown.len(), if gate { "PASS" } else { "FAIL" });
+        for row in &dedup.ignored {
+            println!(
+                "IGNORED: no race effect, raw {:?}, level {:?}",
+                row.raw_name, row.fields.level
+            );
+        }
     }
     assert!(
         passed,
-        "Expected at least 98% identified and zero wrong IDs at each scale"
+        "Expected at least 98% correct row results and zero wrong matches at each scale"
     );
     Ok(())
 }
@@ -256,10 +285,11 @@ fn fuzzy_match_uses_catalog_and_rejects_close_competitors() {
         skill(4, "Front Runners", "white"),
         skill(5, "Victoria por plancha ☆", "unique"),
     ];
-    let matcher = Matcher::new(&skills, "[]").unwrap();
+    let matcher = Matcher::new(&skills, "[]", &HashMap::new()).unwrap();
     assert_eq!(
         matcher
             .identify("Leaders Prlde", None, None, None)
+            .and_then(Resolution::matched)
             .unwrap()
             .id,
         1
@@ -267,6 +297,7 @@ fn fuzzy_match_uses_catalog_and_rejects_close_competitors() {
     assert_eq!(
         matcher
             .identify("Victoria por plancha", Some(false), None, None)
+            .and_then(Resolution::matched)
             .unwrap()
             .id,
         2
@@ -292,6 +323,7 @@ fn circle_variants_need_shape_or_description_and_conflict_is_unknown() {
         {"id":2,"desc_en":"Increase performance at Tokyo Racecourse."},
         {"id":3,"desc_en":"Moderately decrease performance at Tokyo Racecourse."}
     ]"#,
+        &HashMap::new(),
     )
     .unwrap();
     let name = "Tokyo Racecourse O";
@@ -302,6 +334,7 @@ fn circle_variants_need_shape_or_description_and_conflict_is_unknown() {
     assert_eq!(
         matcher
             .identify(name, None, Some(Mark::DoubleCircle), None)
+            .and_then(Resolution::matched)
             .unwrap()
             .id,
         2
@@ -310,6 +343,7 @@ fn circle_variants_need_shape_or_description_and_conflict_is_unknown() {
     assert_eq!(
         matcher
             .identify(name, None, None, Some(description))
+            .and_then(Resolution::matched)
             .unwrap()
             .id,
         1
@@ -325,20 +359,76 @@ fn same_name_requires_positive_global_evidence_to_exclude_unreleased_duplicate()
         skill(1, "Firm Resolve", "white"),
         skill(2, "Firm Resolve", "white"),
     ];
-    let matcher = Matcher::new(&skills, r#"[{"id":2,"unreleased":["en"]}]"#).unwrap();
+    let matcher = Matcher::new(
+        &skills,
+        r#"[{"id":2,"unreleased":["en"]}]"#,
+        &HashMap::new(),
+    )
+    .unwrap();
     assert!(matcher.identify("Firm Resolve", None, None, None).is_none());
     let matcher = Matcher::new(
         &skills,
         r#"[{"id":1,"loc":{"en":{}}},{"id":2,"unreleased":["en"]}]"#,
+        &HashMap::new(),
     )
     .unwrap();
     assert_eq!(
         matcher
             .identify("Firm Resolve", None, None, None)
+            .and_then(Resolution::matched)
             .unwrap()
             .id,
         1
     );
+}
+
+#[test]
+fn ignores_only_names_whose_candidates_have_no_race_effect() {
+    use uma_race_sim::data::SkillData;
+    let skills = [
+        skill(1, "Event Bonus", "white"),
+        skill(2, "Event Bonus", "white"),
+        skill(3, "Race Bonus", "white"),
+        skill(4, "Race Bonus", "white"),
+        skill(5, "Mixed Effects", "white"),
+    ];
+    let with_effects = |effects: &[i32]| {
+        let mut skill = SkillData::default();
+        for (slot, &kind) in skill
+            .details
+            .iter_mut()
+            .flat_map(|detail| &mut detail.abilities)
+            .zip(effects)
+        {
+            slot.ability_type = kind;
+        }
+        skill
+    };
+    let mut effects = HashMap::from([
+        (1, with_effects(&[501])),
+        (2, with_effects(&[502, 503])),
+        (3, with_effects(&[9])),
+        (4, with_effects(&[31])),
+        (5, with_effects(&[501, 502, 503, 6])),
+    ]);
+    let matcher = Matcher::new(&skills, "[]", &effects).unwrap();
+    assert!(matches!(
+        matcher.identify("Event Bonus", None, None, None),
+        Some(Resolution::IgnoredNoRaceEffect)
+    ));
+    assert!(matcher.identify("Race Bonus", None, None, None).is_none());
+    assert_eq!(
+        matcher
+            .identify("Mixed Effects", None, None, None)
+            .and_then(Resolution::matched)
+            .unwrap()
+            .id,
+        5
+    );
+
+    effects.remove(&2);
+    let matcher = Matcher::new(&skills, "[]", &effects).unwrap();
+    assert!(matcher.identify("Event Bonus", None, None, None).is_none());
 }
 
 #[test]
@@ -371,8 +461,8 @@ fn parsers_require_complete_numeric_fields_and_full_card_identity() {
 
 #[test]
 fn dedup_merges_identified_ids_and_keeps_unknown_observations() {
-    let row = |id: Option<i32>, level| SkillRow {
-        matched: id.map(|id| Match { id, confidence: 1. }),
+    let row = |resolution, level| SkillRow {
+        resolution,
         fields: SkillFields {
             level,
             ..SkillFields::default()
@@ -381,9 +471,19 @@ fn dedup_merges_identified_ids_and_keeps_unknown_observations() {
         raw_fields: Vec::new(),
     };
     let mut merged = SkillImport::default();
-    merged.extend(vec![row(Some(1), None), row(None, None)]);
-    merged.extend(vec![row(Some(1), Some(5)), row(None, None)]);
+    let matched = Some(Resolution::Matched(Match {
+        id: 1,
+        confidence: 1.,
+    }));
+    merged.extend(vec![row(matched, None), row(None, None)]);
+    merged.extend(vec![
+        row(matched, Some(5)),
+        row(None, None),
+        row(Some(Resolution::IgnoredNoRaceEffect), Some(1)),
+    ]);
     assert_eq!(merged.identified.len(), 1);
     assert_eq!(merged.identified[&1].fields.level, Some(5));
     assert_eq!(merged.unknown.len(), 2);
+    assert_eq!(merged.ignored.len(), 1);
+    assert_eq!(merged.ignored[0].fields.level, Some(1));
 }
