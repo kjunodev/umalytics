@@ -15,9 +15,9 @@ use uma_race_sim::{
     sim::{defs::last_spurt_calc_result, race, tick},
     AnalysisOptions, HorseInput, RaceInput, SkillInput, SkillWizCheck,
 };
-mod skill_data;
 #[cfg(windows)]
 mod ocr;
+mod skill_data;
 
 #[derive(Deserialize)]
 struct Names {
@@ -104,6 +104,7 @@ pub struct Catalog {
     local_skill_path: String,
     local_skill_count: usize,
     local_icon_count: usize,
+    screenshot_import_enabled: bool,
     #[cfg(windows)]
     screenshot_skills: BTreeMap<i32, ocr::ImportSkill>,
 }
@@ -321,6 +322,7 @@ fn load_engine_from(data_dir: &Path) -> Result<Engine, String> {
             local_icon_count,
             #[cfg(windows)]
             screenshot_skills,
+            screenshot_import_enabled: false,
         },
     })
 }
@@ -1304,10 +1306,15 @@ fn run_races(
     Ok(results)
 }
 #[tauri::command]
-pub async fn engine_catalog(app: tauri::AppHandle) -> Result<Catalog, String> {
+pub async fn engine_catalog(
+    app: tauri::AppHandle,
+    access: tauri::State<'_, crate::ScreenshotImportAccess>,
+) -> Result<Catalog, String> {
+    let screenshot_import_enabled = cfg!(windows) && access.0;
     tauri::async_runtime::spawn_blocking(move || {
         use tauri::Manager;
-        let catalog = engine()?.catalog.clone();
+        let mut catalog = engine()?.catalog.clone();
+        catalog.screenshot_import_enabled = screenshot_import_enabled;
         for skill in &catalog.skills {
             if let Some(path) = &skill.icon_path {
                 app.asset_protocol_scope()
@@ -1322,7 +1329,13 @@ pub async fn engine_catalog(app: tauri::AppHandle) -> Result<Catalog, String> {
 }
 #[cfg(windows)]
 #[tauri::command]
-pub async fn scan_stamina_screenshot(request: tauri::ipc::Request<'_>) -> Result<ocr::Import, String> {
+pub async fn scan_stamina_screenshot(
+    request: tauri::ipc::Request<'_>,
+    access: tauri::State<'_, crate::ScreenshotImportAccess>,
+) -> Result<ocr::Import, String> {
+    if !access.0 {
+        return Err("Screenshot import is unavailable.".into());
+    }
     let bytes = ocr::screenshot_bytes(request.body())?;
     tauri::async_runtime::spawn_blocking(move || ocr::scan_png(&bytes))
         .await

@@ -4,12 +4,13 @@ import type { CatalogSkill } from './staminaTypes';
 
 const format = (value: number) => value.toLocaleString('en-US');
 
-export function StaminaScreenshotSkills({ scan, chains, skills, running, onChange }: {
+export function StaminaScreenshotSkills({ scan, chains, skills, running, onChange, onRemove }: {
   scan: ScreenshotImport;
   chains: SkillChain[];
   skills: CatalogSkill[];
   running: boolean;
   onChange: (selected: number[]) => void;
+  onRemove: () => void;
 }) {
   const plan = purchasePlan(chains, scan.selected, scan.points);
   const meta = new Map(skills.map(skill => [skill.id, skill]));
@@ -17,9 +18,8 @@ export function StaminaScreenshotSkills({ scan, chains, skills, running, onChang
   const identity = (id: number) => <span className="import-skill-name"><SkillIcon skill={meta.get(id)}/><span>{name(id)}</span>
     {meta.get(id)?.hp_recovery && <small>Recovery</small>}</span>;
 
-  return <section className="panel screenshot-skills" aria-label="Screenshot skills">
-    <header><h2>{scan.points === null ? 'Finished Uma skills' : 'Screenshot skills'}</h2>
-      {scan.points !== null && <div className="import-budget" role="status">
+  return <section className="screenshot-skills" aria-label="Screenshot skills">
+    <header>{scan.points === null ? <h2>Finished Uma skills</h2> : <div className="import-budget" role="status">
         <strong className={plan.overBy ? 'import-warning' : undefined}>
           {plan.overBy ? `${format(plan.overBy)} SP over budget` : plan.left === null ? 'SP left unknown' : `${format(plan.left)} SP left`}
         </strong><small>{format(scan.points)} SP total</small>
@@ -61,5 +61,6 @@ export function StaminaScreenshotSkills({ scan, chains, skills, running, onChang
     {scan.ignored.length > 0 && <details><summary>Ignored · {scan.ignored.length} without race effects</summary>
       <ul className="import-ignored">{scan.ignored.map(text => <li key={text}>{text}</li>)}</ul>
     </details>}
+    <button type="button" className="remove-scan" onClick={onRemove}>Remove scan</button>
   </section>;
 }

@@ -14,7 +14,8 @@ function module(path, imports = {}) {
 }
 const types = module('../apps/desktop/src/staminaTypes.ts');
 const writes = [];
-const store = { get: async () => undefined, set: async (key, value) => writes.push([key, value]), save: async () => {} };
+let stored;
+const store = { get: async () => stored, set: async (key, value) => { stored = value; writes.push([key, value]); }, save: async () => {} };
 const { fuzzyScore, restoreStaminaMemory, loadStaminaMemory, saveStaminaMemory } = module('../apps/desktop/src/staminaState.ts', {
   './staminaScreenshot': module('../apps/desktop/src/staminaScreenshot.ts'),
   './staminaTypes': types, '@tauri-apps/plugin-store': { load: async path => { assert.equal(path, 'stamina.json'); return store; } }
@@ -73,4 +74,25 @@ test('skill search matches case, accents, subsequences and IDs; excludes nonmatc
   assert.equal(fuzzyScore('Élan 123', 'elan'), 0);
   assert(Number.isFinite(fuzzyScore('Skill 200351', '200351')));
   assert.equal(fuzzyScore('Swinging Maestro', 'xyz'), Infinity);
+});
+
+test('hidden screenshot drafts are ignored and survive saves in either race mode', async () => {
+  const scan = { points: 200, observations: [{ id: 2, owned: true, level: 1, price: null, hint: null }], ignored: [], selected: [] };
+  stored = { input: { screenshotImport: scan }, draftInput: { screenshotImport: scan }, buildTab: 'scanned-skills' };
+  const hidden = { ...catalog, screenshot_import_enabled: false, screenshot_skills: { 2: { cost: 180, tier: null } } };
+  const memory = await loadStaminaMemory(hidden);
+  assert.equal(memory.buildTab, 'build');
+  assert.equal(memory.input.screenshotImport, undefined);
+  assert.equal(memory.draftInput.screenshotImport, undefined);
+  assert.equal(memory.input.build.skills.length, 0);
+  memory.input.build.stats.stamina = 777;
+  await saveStaminaMemory(memory, false);
+  const enabled = { ...hidden, screenshot_import_enabled: true };
+  const restored = await loadStaminaMemory(enabled);
+  assert.deepEqual(plain(restored.input.screenshotImport), scan);
+  assert.deepEqual(plain(restored.draftInput.screenshotImport), scan);
+  assert.equal(restored.input.build.stats.stamina, 777);
+  delete restored.input.screenshotImport;
+  await saveStaminaMemory(restored, true);
+  assert.equal((await loadStaminaMemory(enabled)).input.screenshotImport, undefined);
 });

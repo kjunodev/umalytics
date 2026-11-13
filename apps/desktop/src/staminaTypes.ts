@@ -13,7 +13,7 @@ export interface CatalogUma {
   unique_skill_id: number;
   aptitudes: Pick<StaminaBuild, 'distance' | 'style' | 'ground'>;
 }
-export interface Catalog { courses: Course[]; skills: CatalogSkill[]; umas: CatalogUma[]; local_skill_data: boolean; local_skill_path?: string; local_skill_count?: number; local_icon_count?: number; engine_data_version?: string; screenshot_skills?: ImportCatalog }
+export interface Catalog { courses: Course[]; skills: CatalogSkill[]; umas: CatalogUma[]; local_skill_data: boolean; local_skill_path?: string; local_skill_count?: number; local_icon_count?: number; engine_data_version?: string; screenshot_import_enabled: boolean; screenshot_skills?: ImportCatalog }
 export interface StaminaBuild {
   running_style: number;
   stats: { speed: number; stamina: number; pow: number; guts: number; wiz: number };

@@ -41,6 +41,7 @@ export const screenshotCatalog = {
   ...catalog,
   umas: [...catalog.umas, { card_id: 106802, name: 'Kitasan Black', title: "[Crane's Ambition]", unique_skill_id: 110681,
     aptitudes: { distance: [3, 6, 7, 7], style: [7, 6, 4, 1], ground: [7, 3] } }],
+  screenshot_import_enabled: true,
   screenshot_skills: {
     110311: { cost: null, tier: null },
     210052: { cost: null, tier: null },

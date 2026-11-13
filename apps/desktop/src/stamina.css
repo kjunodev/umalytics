@@ -36,6 +36,7 @@
 .stamina-layout .drawer-tabs { display: flex; margin: 0 14px; padding: 0; border-bottom: 1px solid var(--line); }
 .stamina-layout .drawer-tabs button { flex: 1; border: 0; border-radius: 0; background: transparent; color: var(--tx3); border-bottom: 2px solid transparent; margin-bottom: -1px; min-height: 34px; }
 .stamina-layout .drawer-tabs button[aria-selected=true] { color: var(--tx); border-bottom-color: var(--acc); }
+.stamina-layout .drawer-tabs { flex-shrink: 0; }
 .stamina-layout .build-body { padding: 14px; gap: 14px; overflow-y: auto; overscroll-behavior-y: contain; }
 .stamina-layout .drawer-footer { padding: 10px 14px; gap: 6px; font-size: 11.5px; }
 .stamina-layout .build-body .seg button { font-size: 11.5px; padding: 0 3px; min-height: 28px; }
@@ -196,6 +197,7 @@
 @container desktop-content (max-width: 750px) {
   .stamina-workspace.has-build { grid-template-columns: minmax(0, 1fr); }
   .stamina-layout .build-drawer { position: static; max-height: none; }
+  .stamina-layout .build-drawer[data-tab="scanned-skills"] .build-body { max-height: 46dvh; }
 }
 
 .stamina-toolbar { z-index: var(--layer-popover); }
@@ -216,9 +218,7 @@
 .stamina-data-error pre { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 .stamina-data-error button { justify-self: start; }
 
-.import-actions { display: flex; flex-wrap: wrap; gap: 6px; }
-.import-actions button { padding: 4px 9px; font-size: 12px; }
-.import-actions button:first-child { color: var(--acc); }
+.stamina-layout .import-trigger { align-self: flex-start; color: var(--acc); padding: 4px 9px; font-size: 12px; }
 .stamina-layout .screenshot-dialog {
   display: none;
   width: min(700px, calc(100% - 32px));
@@ -269,15 +269,15 @@
 .import-ignored { display: grid; gap: 4px; color: var(--tx2); overflow-wrap: anywhere; }
 .stamina-layout .import-apply { padding: 0 12px; border: 0; background: var(--acc); color: var(--acc-ink); }
 .stamina-layout .import-apply:disabled { border: 1px solid var(--line); background: var(--s2); color: var(--tx3); }
-.stamina-layout .screenshot-skills { gap: 8px; font-size: 13px; }
-.screenshot-skills > header { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 6px 14px; align-items: baseline; }
+.screenshot-skills { display: grid; gap: 8px; min-width: 0; font-size: 13px; }
+.screenshot-skills .remove-scan { justify-self: start; padding: 4px 9px; font-size: 12px; }
 .import-budget { display: flex; gap: 6px 12px; align-items: baseline; flex-wrap: wrap; }
 .import-budget strong, .import-price { font: 500 12px var(--font-mono); white-space: nowrap; }
 .import-budget small, .import-hint { font-size: 11px; color: var(--tx2); }
 .import-tier-identity { display: grid; gap: 2px; min-width: 0; }
 .import-warning { color: var(--gold); }
-.import-skill-list { display: grid; max-height: min(44dvh, 410px); overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
-.import-chain { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 8px; border-top: 1px solid var(--line); padding: 6px 6px 6px 0; }
+.import-skill-list { display: grid; min-width: 0; }
+.import-chain { display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; border-top: 1px solid var(--line); padding: 6px 0; }
 .import-chain:last-child { border-bottom: 1px solid var(--line); }
 .import-tier { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0 8px; align-items: center; padding: 4px 6px; border-radius: var(--radius-md); min-width: 0; }
 .import-tier[data-selected=true] { background: var(--tone-skill-bg); }
@@ -285,8 +285,8 @@
 .import-skill-name small { color: var(--good); font-size: 11px; }
 .import-skill-name .skill-icon { flex: none; }
 .import-owned { color: var(--tx2); font-size: 11px; }
-.import-price-issue { grid-column: 1 / -1; }
-.import-stepper { display: flex; align-items: center; gap: 4px; }
+.import-price-issue { grid-column: 1 / -1; overflow-wrap: anywhere; }
+.import-stepper { display: flex; align-items: center; justify-self: end; gap: 4px; }
 .import-stepper span { min-width: 31px; text-align: center; font-size: 11px; color: var(--tx2); }
 .stamina-layout .import-stepper button { width: 28px; min-height: 28px; padding: 0; font-size: 15px; }
 .screenshot-skills summary { cursor: pointer; color: var(--tx2); }

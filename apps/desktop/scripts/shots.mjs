@@ -127,8 +127,17 @@ try {
     }, { type, count });
   }
   async function screenshotImportShots() {
-    const page = await open('stamina-screenshot-import', 1120, 980);
+    const page = await open('stamina-screenshot-import', 1120, 980, { compactThreshold: 440 });
     await nav(page, 'Stamina');
+    const tab = page.getByRole('tab', { name: 'Scanned skills', exact: true });
+    const positions = () => page.evaluate(() => ['.stamina-toolbar', '.result-empty'].map(selector => {
+      const rect = document.querySelector(selector).getBoundingClientRect();
+      const origin = document.querySelector('.stamina-layout').getBoundingClientRect();
+      return [Math.round(rect.left - origin.left), Math.round(rect.top - origin.top), Math.round(rect.width)];
+    }).flat().join(','));
+    await page.getByRole('button', { name: 'Import from screenshots' }).waitFor();
+    const originalPositions = await positions();
+    check(await tab.count() === 0, 'Scanned skills is absent before applying a scan');
     await page.getByRole('button', { name: 'Import from screenshots' }).click();
     const dialog = page.getByRole('dialog', { name: 'Import from screenshots' });
     await dialog.waitFor();
@@ -161,6 +170,9 @@ try {
     const panel = page.getByRole('region', { name: 'Screenshot skills' });
     const budget = panel.getByRole('status');
     await budget.getByText('200 SP left', { exact: true }).waitFor();
+    check(await tab.getAttribute('aria-selected') === 'true' && await page.getByRole('tabpanel', { name: 'Scanned skills' }).getByRole('region', { name: 'Screenshot skills' }).isVisible(), 'Applying a scan opens the Scanned skills tab in the build editor');
+    check(await positions() === originalPositions, 'Applying a scan keeps the toolbar and empty result in place');
+    await shot(page, 'stamina-scanned-skills');
     check(await panel.getByText('Owned', { exact: true }).count() === 3, 'Career and Obtained rows are locked and deduplicated');
     const fastPaced = panel.locator('.import-tier').filter({ hasText: 'Fast-Paced' });
     check(await fastPaced.getByText('Hint Lv 3 · 30% off', { exact: true }).count() === 1, 'Obtained rows retain their hints');
@@ -184,6 +196,7 @@ try {
     await increase.click();
     await budget.getByText('28 SP over budget').waitFor();
     check(await budget.getByText('200 SP total', { exact: true }).count() === 1, 'The total remains separate from the over-budget amount');
+    await page.getByRole('tabpanel', { name: 'Scanned skills' }).evaluate(element => { element.scrollTop = 0; });
     await shot(page, 'stamina-import-over-budget');
     const run = page.getByRole('button', { name: 'Run check', exact: true });
     await run.click();
@@ -191,12 +204,46 @@ try {
     const input = await page.evaluate(() => window.__SHOT_CONTROL__.calls.find(call => call.command === 'stamina_check').args.input);
     check(input.build.stats.stamina === 720 && input.build.skills.map(skill => skill.id).join(',') === '110311,200501,200542,210052'
       && input.build.skills[0].level === 5, 'Simulation uses the reviewed stats, level and highest selected tier');
+    await run.scrollIntoViewIfNeeded();
+    await shot(page, 'stamina-results-with-scan');
     await panel.getByRole('button', { name: 'Decrease tier for Go with the Flow' }).click();
     await page.getByText(/Inputs changed since this run/).waitFor();
     await page.reload();
     await nav(page, 'Stamina');
     await budget.getByText('80 SP left').waitFor();
+    await page.getByRole('tab', { name: 'Build', exact: true }).click();
     check(await page.getByRole('spinbutton', { name: 'Stamina', exact: true }).inputValue() === '720', 'Scan, edits and selected tier survive reload');
+    await page.setViewportSize({ width: 440, height: 860 });
+    await tab.click();
+    const narrowPanel = page.getByRole('tabpanel', { name: 'Scanned skills' });
+    const narrowLayout = await narrowPanel.evaluate(element => {
+      const initial = element.scrollTop;
+      element.scrollTop = element.scrollHeight;
+      const scrolls = element.scrollTop > initial;
+      element.scrollTop = initial;
+      const noOverflow = [element, ...element.querySelectorAll('.import-chain, .import-tier')].every(row => row.scrollWidth <= row.clientWidth + 1);
+      return { scrolls, noOverflow, scale: devicePixelRatio };
+    });
+    check(narrowLayout.scale === 1.25 && narrowLayout.scrolls && narrowLayout.noOverflow, 'Scanned skill rows fit and scroll inside the editor at 440px and 125% scaling');
+    await page.getByRole('complementary', { name: 'Build editor' }).scrollIntoViewIfNeeded();
+    await narrowPanel.evaluate(element => { element.scrollTop = 0; });
+    await shot(page, 'stamina-scanned-skills-440');
+    await page.setViewportSize({ width: 1120, height: 980 });
+    await page.evaluate(() => localStorage.setItem('shots:hide-screenshot-import', '1'));
+    await page.reload();
+    await nav(page, 'Stamina');
+    await page.getByRole('heading', { name: 'Build editor' }).waitFor();
+    check(await tab.count() === 0 && await panel.count() === 0 && await page.getByRole('button', { name: 'Import from screenshots' }).count() === 0, 'Hidden catalog exposes neither the import action nor the restored scan');
+    await page.getByRole('spinbutton', { name: 'Stamina', exact: true }).fill('725');
+    await page.waitForFunction(() => JSON.parse(localStorage.getItem('shots:stamina.json:last-inputs-v1')).input.build.stats.stamina === 725);
+    await page.evaluate(() => localStorage.removeItem('shots:hide-screenshot-import'));
+    await page.reload();
+    await nav(page, 'Stamina');
+    await tab.click();
+    await budget.getByText('80 SP left').waitFor();
+    const restoredPositions = await positions();
+    await panel.getByRole('button', { name: 'Remove scan' }).click();
+    check(await tab.count() === 0 && await positions() === restoredPositions, 'Removing the scan hides its tab and keeps the main column in place');
     await page.close();
   }
   async function finishedImportShots() {
@@ -226,11 +273,12 @@ try {
     await apply.click();
     const panel = page.getByRole('region', { name: 'Screenshot skills' });
     await panel.getByRole('heading', { name: 'Finished Uma skills' }).waitFor();
-    check(await panel.getByText('Owned', { exact: true }).count() === 4 && await panel.getByRole('button').count() === 0, 'Finished skills are deduplicated and locked');
+    check(await panel.getByText('Owned', { exact: true }).count() === 4 && await panel.getByRole('group', { name: /Purchase tier/ }).count() === 0, 'Finished skills are deduplicated and locked');
     await shot(page, 'stamina-import-finished-build');
     await page.reload();
     await nav(page, 'Stamina');
     await panel.getByRole('heading', { name: 'Finished Uma skills' }).waitFor();
+    await page.getByRole('tab', { name: 'Build', exact: true }).click();
     check(await page.getByRole('spinbutton', { name: 'Stamina', exact: true }).inputValue() === '669', 'Finished build survives reload');
     await page.close();
   }
