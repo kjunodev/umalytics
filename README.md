@@ -3,20 +3,22 @@
 [![Verify build](https://github.com/kjunodev/umalytics/actions/workflows/verify.yml/badge.svg)](https://github.com/kjunodev/umalytics/actions/workflows/verify.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-A scouting companion for [Uma Drafter](https://drafter.uma.guide): a browser extension that opens a separate window beside your lobby and shows who you are playing, how they perform and what the draft looks like.
+A scouting companion for [Uma Drafter](https://drafter.uma.guide), as a browser extension or a Windows desktop app. It shows who you are playing, how they perform and what the draft looks like, and the desktop app adds a stamina checker for your own builds.
 
 ![The UmaLytics lobby with a player's details open: stats, an Uma table and match history](docs/images/lobby-drawer.png)
 
 ## Download
 
-Latest release: v0.5.5. Each release has a Chromium and a Firefox ZIP and a `SHA256SUMS.txt` for checking them.
+**Browser extension:** latest release v0.5.5. Each release has a Chromium and a Firefox ZIP and a `SHA256SUMS.txt` for checking them.
 
 | Browser | Package |
 | --- | --- |
 | Chrome, Edge, Brave, Opera GX | [Chromium ZIP](https://github.com/kjunodev/umalytics/releases/tag/v0.5.5), loaded as an unpacked extension |
 | Firefox 128 or later, LibreWolf | [Firefox ZIP](https://github.com/kjunodev/umalytics/releases/tag/v0.5.5), loaded as a temporary add-on (unsigned, so load it again after a browser restart) |
 
-Step-by-step instructions: [Install or update UmaLytics](docs/INSTALL.md). Release history: [CHANGELOG](CHANGELOG.md).
+**Desktop app (Windows, beta):** download `UmaLytics_<version>_x64-setup.exe` from the [latest desktop release](https://github.com/kjunodev/umalytics/releases/tag/desktop-v0.1.7) and run it. It updates itself after that. It shows your Uma Drafter room live when local sharing is turned on in Uma Drafter, and includes the stamina checker, Players, History and the Umas catalog.
+
+Step-by-step instructions: [Install or update UmaLytics](docs/INSTALL.md). Release history: [CHANGELOG](CHANGELOG.md) for the extension, [desktop releases](https://github.com/kjunodev/umalytics/releases?q=desktop&expanded=true) for the app.
 
 ## What it does
 
@@ -38,7 +40,7 @@ The screenshots come from the repository's preview harness and use fixture data 
 
 ## Privacy
 
-UmaLytics has no backend and no analytics, and nothing is uploaded automatically. It asks Uma Drafter's public API for the stats of the players in your room and keeps recent results, preferences and a small sanitized diagnostic trace in your browser's extension storage. Match history is display-only: it is never used to calculate statistics, badges or the Private state, and statistics a player has hidden stay hidden. The full list of what is requested and stored is in [PRIVACY.md](PRIVACY.md).
+UmaLytics has no backend and no analytics, and nothing is uploaded automatically. It asks Uma Drafter's public API for the stats of the players in your room and keeps recent results, preferences and a small sanitized diagnostic trace in your browser's extension storage. Match history is display-only: it is never used to calculate statistics, badges or the Private state, and statistics a player has hidden stay hidden. The desktop app follows the same rules and keeps its data in local files on your PC. The full list of what each one requests and stores is in [PRIVACY.md](PRIVACY.md).
 
 ## How it works
 
@@ -68,7 +70,7 @@ See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for the architecture, the test la
 
 ## Feedback
 
-Found a bug or a wrong detection? [Open an issue](https://github.com/kjunodev/umalytics/issues/new?template=bug_report.md) with your browser, the UmaLytics version, what you expected and what happened. If you attach diagnostics from Copy diagnostics, review them first: they can contain room codes and player IDs.
+Found a bug or a wrong detection? [Open an issue](https://github.com/kjunodev/umalytics/issues/new?template=bug_report.md) saying whether you use the extension (and which browser) or the desktop app, the UmaLytics version, what you expected and what happened. If you attach diagnostics from Copy diagnostics, review them first: they can contain room codes and player IDs.
 
 ## License
 

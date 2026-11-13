@@ -7,10 +7,11 @@ assignees: ''
 ---
 
 ## Environment
+- App: browser extension / desktop app
 - UmaLytics version:
-- Browser and version:
+- Browser and version (extension only):
 - Operating system:
-- Downloaded ZIP or local build:
+- Downloaded release or local build:
 - Scene: starting room / draft / completed draft
 - Stats scope: Season / All-time
 - Lobby Lock: on / off

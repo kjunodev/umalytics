@@ -1,6 +1,6 @@
 # UmaLytics privacy and data handling
 
-UmaLytics is a browser extension for Uma Drafter. It reads the room you are in on drafter.uma.guide, asks Uma Drafter's public API for the statistics of the players in that room, and shows the result in its own window. It has no backend, no analytics and no automatic upload of any kind. Everything it keeps stays in your browser's extension storage until you remove it.
+UmaLytics is a browser extension and a Windows desktop app for Uma Drafter. This page describes the extension; the desktop app's differences are under [Desktop app](#desktop-app). The extension reads the room you are in on drafter.uma.guide, asks Uma Drafter's public API for the statistics of the players in that room, and shows the result in its own window. It has no backend, no analytics and no automatic upload of any kind. Everything it keeps stays in your browser's extension storage until you remove it.
 
 ## What it reads on drafter.uma.guide
 
@@ -41,6 +41,15 @@ Requests start at least 350 ms apart, with at most three in flight. If the API a
 - The scouting window's id and the selected drafter tab's id, so both survive background service-worker restarts.
 
 **Memory only**, lost whenever the background worker stops: match-history pages (5 minutes) and other responses such as stats, match and search lookups (60 seconds). A match or search you open in History or Players is kept in the scouting window's memory and resets when the window closes.
+
+## Desktop app
+
+The Windows desktop app has no backend, no analytics and no automatic upload either. It differs from the extension in these ways:
+
+- **How it sees your room:** it does not read drafter.uma.guide pages. When you turn on local sharing in Uma Drafter, the site sends your room's events to the app over a connection on your own PC (127.0.0.1). The app accepts that connection only from drafter.uma.guide, and nothing on it leaves your computer.
+- **What it requests:** the same Uma Drafter API requests as the extension, under the same rate limits, plus a check of the app's update file on GitHub (`releases/download/desktop-updater/latest.json`). Updates are verified with the app's signing key before they install.
+- **What it stores:** local files in the app's data folder (`%APPDATA%\guide.umalytics.desktop`): recent player results (`profiles.json`), preferences and window size (`shell.json`), stamina builds and presets (`stamina.json`) and recent matches (`history.json`). Delete that folder to remove them.
+- **Stamina checks** run on your PC with the bundled race engine and data.
 
 ## Sharing and deletion
 
