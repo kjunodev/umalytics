@@ -47,7 +47,7 @@ pub(super) fn level(text: &str) -> Option<u8> {
 }
 
 pub(super) fn hint_level(text: &str) -> Option<u8> {
-    let header = text.lines().next().unwrap_or(&text);
+    let header = text.lines().next().unwrap_or(text);
     if header
         .split(|c: char| !c.is_ascii_alphabetic())
         .any(|word| word.eq_ignore_ascii_case("max"))
