@@ -1,5 +1,15 @@
 # Install or update UmaLytics
 
+## Desktop app (Windows)
+
+1. Download `UmaLytics_<version>_x64-setup.exe` from the latest desktop release linked in the README.
+2. Run it. The beta installer is unsigned, so Windows SmartScreen may show "Windows protected your PC": choose More info, then Run anyway.
+3. Open UmaLytics. To see your room live, turn on local sharing in Uma Drafter and join a room; the Lobby and Draft screens fill in by themselves.
+
+Updates download in the background and show an Update and restart banner. An update waits until the current live room ends, and Restart now is always available. To uninstall, use Windows' Installed apps list.
+
+## Browser extension
+
 Download the Chromium or Firefox package linked from the README. Extract it into a permanent folder; manifest.json is at the root of the extracted package.
 
 ## Chrome, Edge, Brave and Opera GX
