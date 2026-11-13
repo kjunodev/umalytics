@@ -11,6 +11,9 @@ updates:
         update-types: ["version-update:semver-major"]
       - dependency-name: vite
         update-types: ["version-update:semver-major"]
+      # Moves with the Vite major upgrade.
+      - dependency-name: "@vitejs/plugin-react"
+        update-types: ["version-update:semver-major"]
     groups:
       npm-minor-and-patch:
         update-types:
@@ -34,6 +37,10 @@ updates:
     schedule:
       interval: monthly
     open-pull-requests-limit: 2
+    # tauri-action majors change the updater manifest; upgrade during a tested desktop release.
+    ignore:
+      - dependency-name: tauri-apps/tauri-action
+        update-types: ["version-update:semver-major"]
     groups:
       actions-minor-and-patch:
         update-types:
