@@ -7,6 +7,7 @@ mod tests;
 
 use super::{engine, Skill, Uma};
 use image::{Image, Ocr, Rect, Result};
+pub(super) use image::Apartment;
 use layout::{
     blue_channel_ink, brown_ink, faint_brown_ink, is_event, is_unique, white_ink, Screen,
 };
@@ -124,6 +125,14 @@ pub(super) fn import_skills(
 }
 
 pub(super) fn scan_png(bytes: &[u8]) -> std::result::Result<Import, String> {
+    scan_image(|| Image::from_png(bytes))
+}
+
+pub(super) fn scan_rgba(frame: super::capture::Frame) -> std::result::Result<Import, String> {
+    scan_image(|| Image::from_rgba(frame.width, frame.height, &frame.rgba))
+}
+
+fn scan_image(load: impl FnOnce() -> Result<Image>) -> std::result::Result<Import, String> {
     let engine = engine()?;
     static MATCHER: OnceLock<std::result::Result<Matcher<'static>, String>> = OnceLock::new();
     let matcher = MATCHER
@@ -135,7 +144,7 @@ pub(super) fn scan_png(bytes: &[u8]) -> std::result::Result<Import, String> {
         .map_err(Clone::clone)?;
     let result = (|| {
         let ocr = Ocr::new()?;
-        let image = Image::from_png(bytes)?;
+        let image = load()?;
         scan(&ocr, &image, matcher, &engine.catalog.umas)
     })();
     result.map_err(|error| error.to_string())

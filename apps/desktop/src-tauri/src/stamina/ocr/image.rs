@@ -88,6 +88,24 @@ impl Image {
         })
     }
 
+    pub fn from_rgba(width: i32, height: i32, bytes: &[u8]) -> Result<Self> {
+        debug_assert_eq!(bytes.len(), width as usize * height as usize * 4);
+        let image = Self {
+            width,
+            height,
+            pixels: bytes.as_chunks::<4>().0.iter().map(|&[r, g, b, _]| [r, g, b]).collect(),
+        };
+        let max = OcrEngine::MaxImageDimension()? as i32;
+        let longest = width.max(height);
+        if longest > max {
+            return Ok(image.resample(
+                Rect::new(0, 0, width, height),
+                max as f32 / longest as f32,
+            ));
+        }
+        Ok(image)
+    }
+
     pub fn at(&self, x: i32, y: i32) -> Rgb {
         let x = x.clamp(0, self.width - 1);
         let y = y.clamp(0, self.height - 1);
@@ -250,7 +268,15 @@ pub(super) struct Word {
     pub bounds: Rect,
 }
 
-struct Apartment(PhantomData<Rc<()>>);
+pub(in crate::stamina) struct Apartment(PhantomData<Rc<()>>);
+
+impl Apartment {
+    pub fn new() -> windows::core::Result<Self> {
+        // SAFETY: The guard balances initialization on this thread.
+        unsafe { RoInitialize(RO_INIT_MULTITHREADED)? };
+        Ok(Self(PhantomData))
+    }
+}
 
 impl Drop for Apartment {
     fn drop(&mut self) {
@@ -266,9 +292,7 @@ pub(super) struct Ocr {
 
 impl Ocr {
     pub fn new() -> Result<Self> {
-        // SAFETY: OCR owns the calling thread's apartment until it is dropped.
-        unsafe { RoInitialize(RO_INIT_MULTITHREADED)? };
-        let apartment = Apartment(PhantomData);
+        let apartment = Apartment::new()?;
         let language = Language::CreateLanguage(h!("en-US"))?;
         if !OcrEngine::IsLanguageSupported(&language)? {
             return Err("Install the Windows English (United States) OCR language pack".into());

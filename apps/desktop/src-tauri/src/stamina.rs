@@ -16,6 +16,8 @@ use uma_race_sim::{
     AnalysisOptions, HorseInput, RaceInput, SkillInput, SkillWizCheck,
 };
 #[cfg(windows)]
+pub(crate) mod capture;
+#[cfg(windows)]
 mod ocr;
 mod skill_data;
 
@@ -1341,6 +1343,42 @@ pub async fn scan_stamina_screenshot(
         .await
         .map_err(|_| "The screenshot could not be read.".to_string())?
 }
+#[cfg(windows)]
+#[tauri::command]
+pub async fn capture_stamina_screenshot(
+    from_button: bool,
+    access: tauri::State<'_, crate::ScreenshotImportAccess>,
+) -> Result<ocr::Import, String> {
+    if !access.0 {
+        return Err("Screenshot import is unavailable.".into());
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        let frame = capture::capture(from_button)?;
+        ocr::scan_rgba(frame).map_err(|_| "The captured game window could not be read.".into())
+    })
+    .await
+    .map_err(|_| capture::FAILED.to_string())?
+}
+
+#[cfg(windows)]
+#[tauri::command]
+pub async fn set_stamina_capture_hotkey(
+    enabled: bool,
+    window: tauri::WebviewWindow,
+    access: tauri::State<'_, crate::ScreenshotImportAccess>,
+    shortcut: tauri::State<'_, capture::CaptureShortcut>,
+) -> Result<(), String> {
+    if !access.0 {
+        return Err("Screenshot import is unavailable.".into());
+    }
+    if enabled {
+        shortcut.register(window)?;
+    } else {
+        shortcut.clear();
+    }
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn stamina_check(
     input: Input,

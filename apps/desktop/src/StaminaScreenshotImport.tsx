@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { SkillPicker } from './SkillPicker';
 import { StaminaUmaPicker } from './StaminaUmaPicker';
 import { purchasePlan, tierChains, type Observation, type Screen, type Screenshot, type ScreenshotImport } from './staminaScreenshot';
@@ -25,6 +26,9 @@ const aptitudes = [
   ['style', 'Style', ['Front', 'Pace', 'Late', 'End']],
 ] as const;
 type Source = { id: number; scan: Screenshot; error?: never } | { id: number; error: string; scan?: never };
+const message = (error: unknown) => error instanceof Error ? error.message : String(error);
+// A fast close and reopen must release the old registration before taking the shortcut again.
+let shortcutQueue = Promise.resolve();
 
 async function scanImage(file: File) {
   if (file.size > 32 * 1024 * 1024) throw Error('Choose an image under 32 MB.');
@@ -56,7 +60,14 @@ export function StaminaScreenshotImport({ catalog, recent, onRecent, onClose, on
   const nextId = useRef(0);
   const queue = useRef(Promise.resolve());
   const closed = useRef(false);
+  const capturing = useRef(false);
+  const toastTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const [pending, setPending] = useState(0);
+  const [captureBusy, setCaptureBusy] = useState(false);
+  const [captureError, setCaptureError] = useState<string>();
+  const [captureToast, setCaptureToast] = useState(false);
+  const [hotkeyReady, setHotkeyReady] = useState(false);
+  const [hotkeyError, setHotkeyError] = useState<string>();
   const [pickerError, setPickerError] = useState(false);
   const [sources, setSources] = useState<Source[]>([]);
   const [chosen, setChosen] = useState<number>();
@@ -66,8 +77,66 @@ export function StaminaScreenshotImport({ catalog, recent, onRecent, onClose, on
     const element = dialog.current;
     closed.current = false;
     element?.showModal();
-    return () => { closed.current = true; element?.close(); };
+    return () => {
+      closed.current = true;
+      clearTimeout(toastTimer.current);
+      element?.close();
+    };
   }, []);
+
+  const addSource = useCallback((source: Source) => {
+    setSources(previous => [...previous, source].sort((a, b) => a.id - b.id));
+  }, []);
+  const capture = useCallback(async (fromButton: boolean) => {
+    if (closed.current || capturing.current) return;
+    capturing.current = true;
+    setCaptureBusy(true);
+    setCaptureError(undefined);
+    setCaptureToast(false);
+    clearTimeout(toastTimer.current);
+    const id = nextId.current++;
+    try {
+      const scan = await invoke<Screenshot>('capture_stamina_screenshot', { fromButton });
+      if (closed.current) return;
+      addSource({ id, scan });
+      setCaptureToast(true);
+      toastTimer.current = setTimeout(() => setCaptureToast(false), 2400);
+    } catch (error) {
+      if (!closed.current) setCaptureError(message(error));
+    } finally {
+      capturing.current = false;
+      if (!closed.current) setCaptureBusy(false);
+    }
+  }, [addSource]);
+  useEffect(() => {
+    let active = true;
+    let registered = false;
+    let unlisten: UnlistenFn | undefined;
+    shortcutQueue = shortcutQueue.then(async () => {
+      if (!active) return;
+      try {
+        unlisten = await listen('stamina-capture-hotkey', () => {
+          if (active) void capture(false);
+        });
+        if (!active) return;
+        await invoke('set_stamina_capture_hotkey', { enabled: true });
+        registered = true;
+        if (active) setHotkeyReady(true);
+      } catch (error) {
+        if (active) setHotkeyError(message(error));
+      }
+    });
+    return () => {
+      active = false;
+      shortcutQueue = shortcutQueue.then(async () => {
+        try {
+          if (registered) await invoke('set_stamina_capture_hotkey', { enabled: false });
+        } finally {
+          await unlisten?.();
+        }
+      }).catch(error => console.error('Could not release the capture shortcut', error));
+    };
+  }, [capture]);
 
   const add = (files: File[]) => {
     if (!files.length) return;
@@ -79,9 +148,9 @@ export function StaminaScreenshotImport({ catalog, recent, onRecent, onClose, on
         if (closed.current) return;
         try {
           const scan = await scanImage(file);
-          if (!closed.current) setSources(previous => [...previous, { id, scan }]);
+          if (!closed.current) addSource({ id, scan });
         } catch (error) {
-          if (!closed.current) setSources(previous => [...previous, { id, error: error instanceof Error ? error.message : String(error) }]);
+          if (!closed.current) addSource({ id, error: message(error) });
         } finally { if (!closed.current) setPending(count => count - 1); }
       });
     }
@@ -137,7 +206,7 @@ export function StaminaScreenshotImport({ catalog, recent, onRecent, onClose, on
   const tooMany = purchasePlan(chains, [], 0).skills.length > 100;
   const unresolved = unknown.filter(row => resolved[row.key] === undefined).length;
   const hasScreens = !!numbers && (finished || learn);
-  const canApply = !!(hasScreens && uma && uniqueLevel && !pending && cards.size <= 1 && !mixed && !unresolved && !tooMany);
+  const canApply = !!(hasScreens && uma && uniqueLevel && !pending && !captureBusy && cards.size <= 1 && !mixed && !unresolved && !tooMany);
   const edit = (key: string, value: string) => setEdits(previous => ({ ...previous, [key]: value }));
   const apply = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -164,21 +233,29 @@ export function StaminaScreenshotImport({ catalog, recent, onRecent, onClose, on
         <div className="import-drop" onDragOver={event => { event.preventDefault(); event.dataTransfer.dropEffect = 'copy'; }} onDrop={event => { event.preventDefault(); add(Array.from(event.dataTransfer.files)); }}>
           <strong>Paste or drop screenshots</strong>
           <p>Use <kbd>Ctrl</kbd> + <kbd>V</kbd> or drop images in any order.</p>
-          <button type="button" onClick={() => {
-            setPickerError(false);
-            const picker = fileInput.current;
-            if (!picker) return;
-            try {
-              if (typeof picker.showPicker === 'function') picker.showPicker();
-              else picker.click();
-            } catch { setPickerError(true); }
-          }}>Choose images</button>
+          <div className="import-actions">
+            <button type="button" onClick={() => {
+              setPickerError(false);
+              const picker = fileInput.current;
+              if (!picker) return;
+              try {
+                if (typeof picker.showPicker === 'function') picker.showPicker();
+                else picker.click();
+              } catch { setPickerError(true); }
+            }}>Choose images</button>
+            <button type="button" onClick={() => void capture(true)} disabled={captureBusy}>
+              {captureBusy ? 'Capturing…' : 'Capture game window'}
+            </button>
+          </div>
+          {hotkeyReady && <p className="import-shortcut"><kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>U</kbd> works while the game has focus.</p>}
+          {hotkeyError && <small role="status" className="import-warning">{hotkeyError}</small>}
           <input ref={fileInput} type="file" accept="image/*" multiple hidden onError={() => setPickerError(true)} onChange={event => {
             add(Array.from(event.target.files ?? []));
             event.target.value = '';
           }}/>
         </div>
         {pickerError && <p role="alert" className="import-warning">Couldn’t open the image picker. Paste or drop the screenshot instead.</p>}
+        {captureError && <p role="alert" className="import-warning">{captureError}</p>}
         {finished ? <ul className="import-checklist" aria-label="Screens needed">
           <li data-ready>Finished Uma Details · Scroll the Skills tab to capture all rows</li>
         </ul> : <><ul className="import-checklist" aria-label="Screens needed">
@@ -240,6 +317,7 @@ export function StaminaScreenshotImport({ catalog, recent, onRecent, onClose, on
         <span className="muted">{hasScreens ? 'Applying replaces the current build’s stats, aptitudes and skills.' : 'Add the required screenshots to apply the import.'}</span>
         <button type="submit" className="import-apply" disabled={!canApply}>Apply to build</button>
       </footer>
+      {captureToast && <div className="import-toast" role="status">Game screenshot added</div>}
     </form>
   </dialog>;
 }

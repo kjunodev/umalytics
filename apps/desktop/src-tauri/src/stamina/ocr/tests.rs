@@ -268,12 +268,12 @@ fn benchmark_set(folder: &Path) -> Result<bool> {
     let images = fs::read_dir(folder)?.collect::<std::io::Result<Vec<_>>>()?;
     let images: std::collections::BTreeSet<_> = images
         .iter()
-        .filter_map(|file| {
+        .filter(|file| {
             file.path()
                 .extension()
                 .is_some_and(|ext| ext.eq_ignore_ascii_case("png"))
-                .then(|| file.file_name().to_string_lossy().into_owned())
         })
+        .map(|file| file.file_name().to_string_lossy().into_owned())
         .collect();
     assert!(!expected.is_empty(), "No labeled screenshots");
     assert!(

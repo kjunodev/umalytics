@@ -57,7 +57,7 @@ mockIPC(async (command, args) => {
   }
   if (command === 'engine_catalog') {
     if (scene === 'stamina-missing-engine') throw 'UmaLytics engine data is missing at C:\\UmaLytics\\resources\\engine-data.';
-    if (['stamina-screenshot-import', 'stamina-finished-import', 'stamina-learn-import'].includes(scene)) {
+    if (['stamina-screenshot-import', 'stamina-finished-import', 'stamina-learn-import', 'stamina-capture'].includes(scene)) {
       return { ...screenshotCatalog, screenshot_import_enabled: !localStorage.getItem('shots:hide-screenshot-import') };
     }
     return scene === 'stamina-no-data' ? { ...catalog, local_skill_data: false, local_skill_count: 0, local_icon_count: 0, skills: catalog.skills.map(s => ({ ...s, icon_path: null })) } : catalog;
@@ -66,6 +66,18 @@ mockIPC(async (command, args) => {
     if (!(args instanceof ArrayBuffer) || args.byteLength === 0) throw Error('Expected screenshot bytes');
     const scans = scene === 'stamina-finished-import' ? finishedScans : scene === 'stamina-learn-import' ? learnOnlyScans : screenshotScans;
     return scans[calls.filter(call => call.command === command).length - 1];
+  }
+  if (command === 'set_stamina_capture_hotkey') {
+    const control = window.__SHOT_CONTROL__;
+    if (args.enabled && control.shortcutTaken) throw 'Ctrl+Shift+U is already in use.';
+    control.captureHotkey = args.enabled;
+    return;
+  }
+  if (command === 'capture_stamina_screenshot') {
+    const { captureError, waitForCapture } = window.__SHOT_CONTROL__;
+    if (waitForCapture) await waitForCapture;
+    if (captureError) throw captureError;
+    return screenshotScans[0];
   }
   if (command === 'stamina_check') {
     if (Object.hasOwn(args.input.build, 'umaCardId')) throw new Error('Uma card ID reached single-race IPC');
