@@ -173,7 +173,7 @@ impl Image {
         let mut pixels = Vec::with_capacity(width * ys.len());
         for &(y, weights) in &ys {
             let rows = [0, 1, 2, 3].map(|offset| {
-                (y + offset).clamp(rect.top, rect.bottom - 1) as usize - rect.top as usize
+                ((y + offset).clamp(rect.top, rect.bottom - 1) - rect.top) as usize
             });
             for x in 0..width {
                 let source = rows.map(|row| horizontal[row * width + x]);

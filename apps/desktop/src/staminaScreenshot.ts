@@ -9,6 +9,7 @@ export interface ScreenshotRow {
 }
 export interface Screenshot {
   screen: Screen;
+  small_game_panel?: boolean;
   instruction: string | null;
   attributes: { stats: (number | null)[]; track: string; distance: string; style: string } | null;
   card: { id: number; name: string; title: string } | null;

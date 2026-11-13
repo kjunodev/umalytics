@@ -211,6 +211,8 @@ try {
     check(await dialog.getByLabel('Skill Points').count() === 0, 'Finished Uma review needs no SP');
     const apply = dialog.getByRole('button', { name: 'Apply to build' });
     check(await apply.isDisabled(), 'Circle suggestions need confirmation');
+    const smallPanelHint = dialog.getByText('For finished Umas, a larger game window reads skill names more reliably.');
+    check(await smallPanelHint.isVisible(), 'Small finished Details with unresolved chips shows the window-size hint');
     check(await dialog.getByRole('button', { name: 'Match skill' }).count() === 0, 'A clear circle family shows two direct choices');
     await shot(page, 'stamina-import-variant-choice');
     const doubleCircle = dialog.getByRole('button', { name: 'Medium Corners ◎', exact: true });
@@ -219,6 +221,7 @@ try {
     await dialog.getByRole('button', { name: 'Accept suggestions' }).click();
     check(await doubleCircle.getAttribute('aria-pressed') === 'true', 'Bulk acceptance preserves manual choices');
     check(await dialog.getByRole('button', { name: 'Summer Runner ○', exact: true }).getAttribute('aria-pressed') === 'true', 'Bulk acceptance resolves suggested variants');
+    check(await smallPanelHint.count() === 0, 'Confirming the chips clears the window-size hint');
     await shot(page, 'stamina-import-finished-review');
     await apply.click();
     const panel = page.getByRole('region', { name: 'Screenshot skills' });

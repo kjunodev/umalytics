@@ -104,7 +104,7 @@ const finished = {
 };
 export const finishedScans = [
   scan('finished-details', { ...finished, skills: [read('Bring on the Banquet!', 110681, { level: 5 }), read('Fast-Paced', 200542)] }),
-  scan('finished-details', { ...finished, skills: [read('Fast-Paced', 200542),
+  scan('finished-details', { ...finished, small_game_panel: true, skills: [read('Fast-Paced', 200542),
     { ...read('Medium Corners o', null), variant_choice: { name: 'Medium Corners', circle: 201112, double_circle: 201111, suggested: 201112 } },
     { ...read('Summer Runner', null), variant_choice: { name: 'Summer Runner', circle: 200182, double_circle: 200181, suggested: 200182 } },
   ] }),

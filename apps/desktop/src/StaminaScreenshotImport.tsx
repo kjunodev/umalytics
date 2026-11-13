@@ -97,7 +97,8 @@ export function StaminaScreenshotImport({ catalog, recent, onRecent, onClose, on
   const cardId = chosen ?? numbers?.card?.id ?? (cards.size === 1 ? [...cards][0] : undefined);
   const uma = catalog.umas.find(card => card.card_id === cardId);
   const rows = sources.flatMap(({ id, scan }) => scan?.skills.map((row, index) => ({
-    ...row, key: `${id}-${index}`, screen: scan.screen, learn: scan.screen === 'learn', owned: scan.screen !== 'learn' || row.fields.obtained === true,
+    ...row, key: `${id}-${index}`, screen: scan.screen, smallPanel: scan.small_game_panel,
+    learn: scan.screen === 'learn', owned: scan.screen !== 'learn' || row.fields.obtained === true,
   })) ?? []).sort((a, b) => Number(b.learn) - Number(a.learn));
   const canSimulate = (id: number) => Object.hasOwn(catalog.screenshot_skills ?? {}, id);
   const ignored = [...new Set(rows.flatMap(row => {
@@ -217,6 +218,8 @@ export function StaminaScreenshotImport({ catalog, recent, onRecent, onClose, on
           </section>
           {(unknown.length > 0 || ignored.length > 0) && <section aria-label="Review skill matches">
             {unknown.length > 0 && <><h3>Unmatched skills</h3><p className="muted">Confirm every row before applying.</p>
+              {unknown.some(row => row.screen === 'finished-details' && row.smallPanel && resolved[row.key] === undefined) &&
+                <p className="import-warning">For finished Umas, a larger game window reads skill names more reliably.</p>}
               {suggestions.length > 0 && <button type="button" onClick={() => setResolved(previous => ({ ...Object.fromEntries(suggestions), ...previous }))}>Accept suggestions</button>}
               {unknown.map(({ key, raw_name: raw, variant_choice: variant }) => <div className="import-unmatched" key={key}>
                 {variant ? <><span>{variant.name}</span>

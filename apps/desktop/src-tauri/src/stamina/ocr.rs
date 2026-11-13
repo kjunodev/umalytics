@@ -178,6 +178,7 @@ pub struct Import {
     card: Option<Card>,
     skill_points: Option<u16>,
     skills: Vec<SkillRow>,
+    small_game_panel: bool,
     #[serde(skip)]
     raw: Vec<String>,
 }
@@ -235,13 +236,16 @@ fn scan(ocr: &Ocr, image: &Image, matcher: &Matcher<'_>, umas: &[Uma]) -> Result
     let normalized = resized
         .as_ref()
         .map(|capture| image.resample(capture.frame, capture.scale));
-    scan_at_scale(
+    let mut result = scan_at_scale(
         ocr,
         normalized.as_ref().unwrap_or(image),
         resized.as_ref(),
         matcher,
         umas,
-    )
+    )?;
+    // The Career Profile banner spans approximately a third of the game window.
+    result.small_game_panel = banner.map_or(image.width, |banner| banner.width() * 3) < 1300;
+    Ok(result)
 }
 
 fn scan_at_scale(
@@ -261,6 +265,7 @@ fn scan_at_scale(
         card: None,
         skill_points: None,
         skills: Vec::new(),
+        small_game_panel: false,
         raw: Vec::new(),
     };
     if matches!(
@@ -425,6 +430,12 @@ fn owned_row(
     })
 }
 
+fn adaptive_ink(background: u8, pixel: u8, ink_floor: u8) -> u8 {
+    let darkness = u32::from(background.saturating_sub(pixel)) * 365
+        / u32::from(background.saturating_sub(ink_floor).max(25));
+    255 - darkness.min(255) as u8
+}
+
 fn compact_name(
     ocr: &Ocr,
     image: &Image,
@@ -555,12 +566,7 @@ fn compact_name(
                 let source_x = rect.left + x;
                 let bg = working.at(source_x, 0)[channel]
                     .max(working.at(source_x, working.height - 1)[channel]);
-                let darkness = u16::from(bg.saturating_sub(pixel[channel])) * 365
-                    / u16::from(
-                        bg.saturating_sub(if channel == 0 { 110 } else { 38 })
-                            .max(25),
-                    );
-                [255 - darkness.min(255) as u8; 3]
+                [adaptive_ink(bg, pixel[channel], if channel == 0 { 110 } else { 38 }); 3]
             });
             let raw = ocr.text(&padded)?;
             if !raw.trim().is_empty() {
