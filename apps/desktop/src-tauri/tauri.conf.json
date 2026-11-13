@@ -15,7 +15,8 @@
         "label": "main",
         "title": "UmaLytics",
         "width": 1000,
-        "height": 740
+        "height": 740,
+        "dragDropEnabled": false
       }
     ],
     "security": {

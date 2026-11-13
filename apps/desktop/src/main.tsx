@@ -8,6 +8,13 @@ import './arena.css';
 import './stamina.css';
 import './data.css';
 
+// Keep file drops outside the screenshot import target from navigating the WebView.
+function preventFileNavigation(event: DragEvent) {
+  if (event.dataTransfer?.types.includes('Files')) event.preventDefault();
+}
+window.addEventListener('dragover', preventFileNavigation);
+window.addEventListener('drop', preventFileNavigation);
+
 const root = createRoot(document.getElementById('root')!);
 void initializePlatform().then(() => root.render(<UiServicesProvider services={desktopUiServices}><App /></UiServicesProvider>)).catch(() => {
   root.render(<p role="alert">Unable to initialize desktop storage. Restart UmaLytics to retry.</p>);

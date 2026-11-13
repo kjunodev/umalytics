@@ -4863,6 +4863,7 @@ name = "umalytics-desktop"
 version = "0.1.7"
 dependencies = [
  "futures-util",
+ "png",
  "serde",
  "serde_json",
  "tauri",
@@ -4875,6 +4876,7 @@ dependencies = [
  "tokio",
  "tokio-tungstenite",
  "uma_race_sim",
+ "windows",
 ]
 
 [[package]]

@@ -11,13 +11,14 @@ function UmaLabel({ uma, placeholder = 'No Uma' }: { uma?: CatalogUma; placehold
   </>;
 }
 
-export function StaminaUmaPicker({ umas, selected, uniques, full, onSelect, onAptitudes, onLevel }: {
+export function StaminaUmaPicker({ umas, selected, uniques, full, locked = false, onSelect, onAptitudes, onLevel }: {
   umas: CatalogUma[];
   selected: CatalogUma | undefined;
   uniques: { skill: StaminaBuild['skills'][number]; meta: CatalogSkill }[];
   full: boolean;
+  locked?: boolean;
   onSelect: (uma: CatalogUma | undefined) => void;
-  onAptitudes: (aptitudes: CatalogUma['aptitudes']) => void;
+  onAptitudes?: (aptitudes: CatalogUma['aptitudes']) => void;
   onLevel: (id: number, level: number) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -34,11 +35,11 @@ export function StaminaUmaPicker({ umas, selected, uniques, full, onSelect, onAp
 
   return <div className="field stamina-uma-field" onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false); }}>
     <span>Uma</span>
-    <div className="stamina-uma-actions">
-      <button type="button" className="stamina-uma-trigger" ref={trigger} aria-haspopup="listbox" aria-expanded={open} aria-controls={open ? listId : undefined} onClick={() => { setQuery(''); setActive(0); setOpen(!open); }}>
+    <div className={onAptitudes ? 'stamina-uma-actions' : 'stamina-uma-single'}>
+      <button type="button" className="stamina-uma-trigger" ref={trigger} disabled={locked} aria-haspopup="listbox" aria-expanded={open} aria-controls={open ? listId : undefined} onClick={() => { setQuery(''); setActive(0); setOpen(!open); }}>
         <UmaLabel uma={selected} placeholder={uniques.length ? 'Choose Uma' : 'No Uma'}/><span className="stamina-uma-chevron" aria-hidden="true">▾</span>
       </button>
-      <button type="button" className="stamina-uma-aptitudes" disabled={!selected} onClick={() => { if (selected) onAptitudes(selected.aptitudes); }}>Use base aptitudes</button>
+      {onAptitudes && <button type="button" className="stamina-uma-aptitudes" disabled={!selected} onClick={() => { if (selected) onAptitudes(selected.aptitudes); }}>Use base aptitudes</button>}
     </div>
     {open && <div className="skill-typeahead stamina-uma-typeahead">
       <input autoFocus role="combobox" aria-label="Search Umas" aria-autocomplete="list" aria-expanded="true" aria-controls={listId} aria-activedescendant={options.length ? `${listId}-${index}` : undefined} placeholder="Search by name or title…" value={query} onChange={event => { setQuery(event.target.value); setActive(0); }} onKeyDown={event => {

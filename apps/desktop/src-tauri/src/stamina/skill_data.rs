@@ -123,7 +123,7 @@ pub(super) fn enrich(skills: &mut [Skill]) -> (bool, String, usize, usize) {
     enrich_from(skills, &data_dir())
 }
 
-fn enrich_from(skills: &mut [Skill], dir: &Path) -> (bool, String, usize, usize) {
+pub(super) fn enrich_from(skills: &mut [Skill], dir: &Path) -> (bool, String, usize, usize) {
     let rows = std::fs::read_to_string(dir.join("skills.json"))
         .ok()
         .and_then(|json| serde_json::from_str::<Vec<Value>>(&json).ok());

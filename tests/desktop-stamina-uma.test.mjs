@@ -14,7 +14,7 @@ function load(name, imports = {}) {
 }
 
 const types = load('staminaTypes');
-const state = load('staminaState', { './staminaTypes': types });
+const state = load('staminaState', { './staminaTypes': types, './staminaScreenshot': load('staminaScreenshot') });
 const presets = load('staminaPresetState', { './staminaTypes': types, './staminaState': state, '../src-tauri/data/role-kits.json': { default: kits } });
 const specialWeek = { card_id: 100101, unique_skill_id: 100011, aptitudes: { distance: [2, 5, 7, 7], style: [1, 7, 7, 5], ground: [7, 1] } };
 const ines = { card_id: 103102, unique_skill_id: 110311 };

@@ -15,6 +15,8 @@ use uma_race_sim::{
     sim::{defs::last_spurt_calc_result, race, tick},
     AnalysisOptions, HorseInput, RaceInput, SkillInput, SkillWizCheck,
 };
+#[cfg(windows)]
+mod ocr;
 mod skill_data;
 
 #[derive(Deserialize)]
@@ -102,6 +104,9 @@ pub struct Catalog {
     local_skill_path: String,
     local_skill_count: usize,
     local_icon_count: usize,
+    screenshot_import_enabled: bool,
+    #[cfg(windows)]
+    screenshot_skills: BTreeMap<i32, ocr::ImportSkill>,
 }
 struct Engine {
     data: GameData,
@@ -303,6 +308,8 @@ fn load_engine_from(data_dir: &Path) -> Result<Engine, String> {
         skill_data::enrich(&mut skills);
     skills.sort_by_key(|s| (s.name.clone(), s.id));
     let umas = catalog_umas(&names, &data);
+    #[cfg(windows)]
+    let screenshot_skills = ocr::import_skills(&data.skills, &skills)?;
     Ok(Engine {
         data,
         catalog: Catalog {
@@ -313,6 +320,9 @@ fn load_engine_from(data_dir: &Path) -> Result<Engine, String> {
             local_skill_path,
             local_skill_count,
             local_icon_count,
+            #[cfg(windows)]
+            screenshot_skills,
+            screenshot_import_enabled: false,
         },
     })
 }
@@ -1296,10 +1306,15 @@ fn run_races(
     Ok(results)
 }
 #[tauri::command]
-pub async fn engine_catalog(app: tauri::AppHandle) -> Result<Catalog, String> {
+pub async fn engine_catalog(
+    app: tauri::AppHandle,
+    access: tauri::State<'_, crate::ScreenshotImportAccess>,
+) -> Result<Catalog, String> {
+    let screenshot_import_enabled = cfg!(windows) && access.0;
     tauri::async_runtime::spawn_blocking(move || {
         use tauri::Manager;
-        let catalog = engine()?.catalog.clone();
+        let mut catalog = engine()?.catalog.clone();
+        catalog.screenshot_import_enabled = screenshot_import_enabled;
         for skill in &catalog.skills {
             if let Some(path) = &skill.icon_path {
                 app.asset_protocol_scope()
@@ -1311,6 +1326,20 @@ pub async fn engine_catalog(app: tauri::AppHandle) -> Result<Catalog, String> {
     })
     .await
     .map_err(|_| "Unable to load engine catalog.".to_string())?
+}
+#[cfg(windows)]
+#[tauri::command]
+pub async fn scan_stamina_screenshot(
+    request: tauri::ipc::Request<'_>,
+    access: tauri::State<'_, crate::ScreenshotImportAccess>,
+) -> Result<ocr::Import, String> {
+    if !access.0 {
+        return Err("Screenshot import is unavailable.".into());
+    }
+    let bytes = ocr::screenshot_bytes(request.body())?;
+    tauri::async_runtime::spawn_blocking(move || ocr::scan_png(&bytes))
+        .await
+        .map_err(|_| "The screenshot could not be read.".to_string())?
 }
 #[tauri::command]
 pub async fn stamina_check(

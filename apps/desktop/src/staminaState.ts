@@ -1,8 +1,10 @@
 import { load } from '@tauri-apps/plugin-store';
 import { defaultStaminaInput, type Catalog, type CatalogUma, type StaminaEditorBuild, type StaminaEditorInput, type StaminaInput } from './staminaTypes';
 import type { CourseChoices } from './staminaDraft';
+import { purchasePlan, restoreScreenshotImport, tierChains } from './staminaScreenshot';
 
-export type BuildTab = 'build' | 'presets' | 'race-settings';
+export const buildTabLabels = { build: 'Build', presets: 'Presets', 'race-settings': 'Race settings', 'scanned-skills': 'Scanned skills' } as const;
+export type BuildTab = keyof typeof buildTabLabels;
 export interface StaminaMemory { mechanicsDefaults?: number; input: StaminaEditorInput; draftInput?: StaminaEditorInput; recent: number[]; buildCollapsed: boolean; buildTab?: BuildTab; buildCustomized?: boolean; courseChoices?: CourseChoices }
 const object = (value: unknown): Record<string, unknown> => value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 const integer = (value: unknown, low: number, high: number): value is number => typeof value === 'number' && Number.isInteger(value) && value >= low && value <= high;
@@ -53,24 +55,47 @@ export function restoreStaminaMemory(value: unknown, catalog: Catalog, defaultTa
   if (integer(raw.seeds, 1, 1000)) input.seeds = raw.seeds;
   for (const key of ['assume_skills_activate', 'rushed', 'lane_movement'] as const) if (typeof raw[key] === 'boolean') input[key] = raw[key];
   if (saved.mechanicsDefaults === 2) for (const key of ['spot_struggle', 'dueling'] as const) if (typeof raw[key] === 'boolean') input[key] = raw[key];
+  const screenshotImport = catalog.screenshot_import_enabled
+    ? restoreScreenshotImport(raw.screenshotImport, catalog.screenshot_skills) : undefined;
+  if (screenshotImport && catalog.screenshot_skills) {
+    const plan = purchasePlan(tierChains(screenshotImport.observations, catalog.screenshot_skills), screenshotImport.selected, screenshotImport.points);
+    if (plan.skills.length <= 100) {
+      input.screenshotImport = screenshotImport;
+      input.build.skills = plan.skills;
+    }
+  }
   const courseChoices: CourseChoices = Object.fromEntries(Object.entries(object(saved.courseChoices)).slice(-100).flatMap(([code, entries]) => {
     if (!code.trim() || code.length > 80) return [];
     const valid = Object.entries(object(entries)).filter((entry): entry is [string, string] => entry[0].length <= 2048 && typeof entry[1] === 'string' && catalog.courses.some(c => c.id === entry[1])).slice(-7);
     return valid.length ? [[code, Object.fromEntries(valid)]] : [];
   }));
-  return { input, buildTab: saved.buildTab === 'presets' || saved.buildTab === 'race-settings' ? saved.buildTab : 'build', buildCustomized: typeof saved.buildCustomized === 'boolean' ? saved.buildCustomized : JSON.stringify(input.build) !== JSON.stringify(defaultStaminaInput.build), ...(Object.keys(courseChoices).length ? { courseChoices } : {}), buildCollapsed: saved.buildCollapsed === true, ...(saved.draftInput ? { draftInput: restoreStaminaMemory({ input: saved.draftInput, mechanicsDefaults: saved.mechanicsDefaults }, catalog, defaultTarget).input } : {}), recent: Array.isArray(saved.recent) ? [...new Set(saved.recent.filter((id): id is number => typeof id === 'number' && catalog.skills.some(s => s.id === id)))].slice(0, 30) : [] };
+  const buildTab = saved.buildTab === 'presets' || saved.buildTab === 'race-settings'
+    || (saved.buildTab === 'scanned-skills' && input.screenshotImport) ? saved.buildTab : 'build';
+  return { input, buildTab, buildCustomized: typeof saved.buildCustomized === 'boolean' ? saved.buildCustomized : JSON.stringify(input.build) !== JSON.stringify(defaultStaminaInput.build), ...(Object.keys(courseChoices).length ? { courseChoices } : {}), buildCollapsed: saved.buildCollapsed === true, ...(saved.draftInput ? { draftInput: restoreStaminaMemory({ input: saved.draftInput, mechanicsDefaults: saved.mechanicsDefaults }, catalog, defaultTarget).input } : {}), recent: Array.isArray(saved.recent) ? [...new Set(saved.recent.filter((id): id is number => typeof id === 'number' && catalog.skills.some(s => s.id === id)))].slice(0, 30) : [] };
 }
 
 let store: ReturnType<typeof load> | undefined;
 export const getStaminaStore = () => store ??= load('stamina.json', { autoSave: false, defaults: {} });
 let saving = Promise.resolve();
 export async function loadStaminaMemory(catalog: Catalog, defaultTarget: StaminaInput['target'] = 90) { return restoreStaminaMemory(await (await getStaminaStore()).get('last-inputs-v1'), catalog, defaultTarget); }
-export function saveStaminaMemory(memory: StaminaMemory) {
+export function saveStaminaMemory(memory: StaminaMemory, screenshotImportEnabled = false) {
   const snapshot = structuredClone(memory);
   snapshot.mechanicsDefaults = 2;
   snapshot.input.request_id = '';
   if (snapshot.draftInput) snapshot.draftInput.request_id = '';
-  saving = saving.catch(() => {}).then(async () => { const target = await getStaminaStore(); await target.set('last-inputs-v1', snapshot); await target.save(); });
+  saving = saving.catch(() => {}).then(async () => {
+    const target = await getStaminaStore();
+    if (!screenshotImportEnabled) {
+      const previous = object(await target.get('last-inputs-v1'));
+      for (const key of ['input', 'draftInput'] as const) {
+        const scan = object(previous[key]).screenshotImport;
+        const current = snapshot[key];
+        if (scan !== undefined && current) Object.assign(current, { screenshotImport: scan });
+      }
+    }
+    await target.set('last-inputs-v1', snapshot);
+    await target.save();
+  });
   return saving;
 }
 

@@ -16,6 +16,7 @@ const types = module('../apps/desktop/src/staminaTypes.ts');
 const writes = [];
 const store = { get: async () => undefined, set: async (key, value) => writes.push([key, value]), save: async () => {} };
 const { restoreStaminaMemory, saveStaminaMemory } = module('../apps/desktop/src/staminaState.ts', {
+  './staminaScreenshot': module('../apps/desktop/src/staminaScreenshot.ts'),
   './staminaTypes': types, '@tauri-apps/plugin-store': { load: async path => { assert.equal(path, 'stamina.json'); return store; } }
 });
 const catalog = { courses: [{ id: 'hanshin' }], skills: [{ id: 1, rarity: 'unique' }, { id: 2, rarity: 'gold' }] };

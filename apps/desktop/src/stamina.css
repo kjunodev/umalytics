@@ -36,6 +36,7 @@
 .stamina-layout .drawer-tabs { display: flex; margin: 0 14px; padding: 0; border-bottom: 1px solid var(--line); }
 .stamina-layout .drawer-tabs button { flex: 1; border: 0; border-radius: 0; background: transparent; color: var(--tx3); border-bottom: 2px solid transparent; margin-bottom: -1px; min-height: 34px; }
 .stamina-layout .drawer-tabs button[aria-selected=true] { color: var(--tx); border-bottom-color: var(--acc); }
+.stamina-layout .drawer-tabs { flex-shrink: 0; }
 .stamina-layout .build-body { padding: 14px; gap: 14px; overflow-y: auto; overscroll-behavior-y: contain; }
 .stamina-layout .drawer-footer { padding: 10px 14px; gap: 6px; font-size: 11.5px; }
 .stamina-layout .build-body .seg button { font-size: 11.5px; padding: 0 3px; min-height: 28px; }
@@ -51,8 +52,6 @@
 .stamina-layout .aptitude-grid select { font: 500 12px var(--font-mono); }
 .stamina-layout .build-body .aptitude-grid label { flex-direction: row; align-items: center; justify-content: space-between; gap: 2px; padding: 0 4px; border: 1px solid var(--line); border-radius: 5px; background: var(--s2); }
 .stamina-layout .build-body .aptitude-grid select { appearance: none; width: 18px; min-height: 26px; padding: 0; border: 0; background: transparent; color: var(--acc); text-align: center; }
-.stamina-layout .build-body .aptitude-ground { grid-template-columns: repeat(2, minmax(0, 1fr)) minmax(0, 1.5fr); }
-.stamina-layout .build-body .aptitude-ground select[aria-label="Mood"] { width: 44px; font: 500 11px var(--font-body); }
 .stamina-layout .build-body .field > span { color: var(--tx3); font-size: 10px; text-transform: uppercase; font-weight: 600; letter-spacing: .08em; }
 .stamina-uma-actions { display: grid; grid-template-columns: minmax(0, 1fr) 76px; align-items: stretch; gap: 6px; }
 .stamina-layout .stamina-uma-trigger, .stamina-layout .stamina-uma-options button { display: flex; align-items: center; gap: 7px; text-align: left; white-space: normal; }
@@ -198,6 +197,7 @@
 @container desktop-content (max-width: 750px) {
   .stamina-workspace.has-build { grid-template-columns: minmax(0, 1fr); }
   .stamina-layout .build-drawer { position: static; max-height: none; }
+  .stamina-layout .build-drawer[data-tab="scanned-skills"] .build-body { max-height: 46dvh; }
 }
 
 .stamina-toolbar { z-index: var(--layer-popover); }
@@ -217,3 +217,79 @@
 .stamina-data-error { display: grid; gap: 12px; padding: 20px; }
 .stamina-data-error pre { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 .stamina-data-error button { justify-self: start; }
+
+.stamina-layout .import-trigger { align-self: flex-start; color: var(--acc); padding: 4px 9px; font-size: 12px; }
+.stamina-layout .screenshot-dialog {
+  display: none;
+  width: min(700px, calc(100% - 32px));
+  max-height: calc(100dvh - 32px);
+  padding: 0;
+  margin: auto;
+  color: var(--tx);
+  background: var(--s1);
+  overflow: hidden;
+}
+.stamina-layout .screenshot-dialog[open] { display: flex; }
+.screenshot-dialog::backdrop { background: color-mix(in srgb, var(--bg) 78%, transparent); }
+.screenshot-dialog > form { display: flex; flex-direction: column; min-height: 0; }
+.stamina-layout .screenshot-dialog .drawer-heading { border-bottom: 1px solid var(--line); }
+.stamina-layout .screenshot-dialog .drawer-heading h2 { font-size: 18px; }
+.screenshot-dialog .drawer-footer button { flex: none; }
+.import-dialog-body { font-size: 13px; overscroll-behavior: contain; }
+.import-drop { display: grid; justify-items: center; gap: 6px; text-align: center; padding: 16px; background: var(--s2); border: 1px dashed var(--acc); border-radius: var(--radius-md); }
+.import-drop strong { font-size: 16px; }
+.import-drop p { color: var(--tx2); }
+.import-drop button { margin-top: 4px; padding: 0 10px; }
+.import-drop kbd { color: var(--tx); font: 11px var(--font-mono); }
+.import-checklist, .import-sources, .import-ignored { list-style: none; margin: 0; padding: 0; }
+.import-checklist { display: grid; gap: 6px; color: var(--tx2); }
+.import-checklist li { display: flex; align-items: baseline; gap: 8px; }
+.import-checklist li::before { content: '○'; color: var(--tx3); }
+.import-checklist li.import-recommended::before { content: '–'; }
+.import-checklist li[data-ready=true]::before { content: '✓'; color: var(--good); }
+.import-sources { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr)); gap: 6px; }
+.import-sources li { display: flex; align-items: center; justify-content: space-between; gap: 6px; border: 1px solid var(--line); border-radius: var(--radius-md); padding: 6px 8px; }
+.import-sources li > div { display: grid; gap: 2px; overflow-wrap: anywhere; }
+.import-sources small { color: var(--tx2); }
+.import-sources .import-warning { color: var(--gold); }
+.import-sources button { flex: none; width: 30px; padding: 0; font-size: 16px; }
+.import-review { display: grid; gap: 16px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.import-review > section { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.import-review > section:only-child { grid-column: 1 / -1; }
+.import-review h3, .screenshot-skills h2 { font: 600 16px/1.3 var(--font-body); }
+.stamina-uma-single > button { width: 100%; }
+.import-points { align-self: start; width: 104px; }
+.import-unique-level { display: grid; gap: 4px; }
+.import-unique-level select { max-width: 140px; }
+.import-unmatched { display: grid; gap: 6px; padding: 8px; border-radius: var(--radius-md); border: 1px solid var(--line); overflow-wrap: anywhere; }
+.import-variants { display: flex; flex-wrap: wrap; gap: 6px; }
+.import-variants button { min-width: 44px; }
+.import-variants button[aria-pressed=true] { border-color: var(--acc); }
+.import-variants small { margin-left: 6px; color: var(--tx2); }
+.import-ignored { display: grid; gap: 4px; color: var(--tx2); overflow-wrap: anywhere; }
+.stamina-layout .import-apply { padding: 0 12px; border: 0; background: var(--acc); color: var(--acc-ink); }
+.stamina-layout .import-apply:disabled { border: 1px solid var(--line); background: var(--s2); color: var(--tx3); }
+.screenshot-skills { display: grid; gap: 8px; min-width: 0; font-size: 13px; }
+.screenshot-skills .remove-scan { justify-self: start; padding: 4px 9px; font-size: 12px; }
+.import-budget { display: flex; gap: 6px 12px; align-items: baseline; flex-wrap: wrap; }
+.import-budget strong, .import-price { font: 500 12px var(--font-mono); white-space: nowrap; }
+.import-budget small, .import-hint { font-size: 11px; color: var(--tx2); }
+.import-tier-identity { display: grid; gap: 2px; min-width: 0; }
+.import-warning { color: var(--gold); }
+.import-skill-list { display: grid; min-width: 0; }
+.import-chain { display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; border-top: 1px solid var(--line); padding: 6px 0; }
+.import-chain:last-child { border-bottom: 1px solid var(--line); }
+.import-tier { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0 8px; align-items: center; padding: 4px 6px; border-radius: var(--radius-md); min-width: 0; }
+.import-tier[data-selected=true] { background: var(--tone-skill-bg); }
+.import-skill-name { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; min-width: 0; overflow-wrap: anywhere; }
+.import-skill-name small { color: var(--good); font-size: 11px; }
+.import-skill-name .skill-icon { flex: none; }
+.import-owned { color: var(--tx2); font-size: 11px; }
+.import-price-issue { grid-column: 1 / -1; overflow-wrap: anywhere; }
+.import-stepper { display: flex; align-items: center; justify-self: end; gap: 4px; }
+.import-stepper span { min-width: 31px; text-align: center; font-size: 11px; color: var(--tx2); }
+.stamina-layout .import-stepper button { width: 28px; min-height: 28px; padding: 0; font-size: 15px; }
+.screenshot-skills summary { cursor: pointer; color: var(--tx2); }
+@container desktop-content (max-width: 660px) {
+  .import-review { grid-template-columns: minmax(0, 1fr); }
+}

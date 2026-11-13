@@ -19,6 +19,7 @@ const failures = [];
 const drawerOnly = process.env.DESKTOP_SHOTS_SCENES === 'drawer';
 const updatesOnly = process.env.DESKTOP_SHOTS_SCENES === 'updates';
 const staminaOnly = process.env.DESKTOP_SHOTS_SCENES === 'stamina';
+const importOnly = process.env.DESKTOP_SHOTS_SCENES === 'stamina-import';
 const arenaOnly = process.env.DESKTOP_SHOTS_SCENES === 'arena';
 const statesOnly = process.env.DESKTOP_SHOTS_SCENES === 'states';
 const dataOnly = process.env.DESKTOP_SHOTS_SCENES === 'data';
@@ -38,7 +39,7 @@ try {
     } else await page.locator('.sidebar').getByRole('button', { name, exact: true }).click();
   }
   async function open(scene, width, height, prefs = {}) {
-    const page = await browser.newPage({ viewport: { width, height } });
+    const page = await browser.newPage({ viewport: { width, height }, deviceScaleFactor: ['stamina-screenshot-import', 'stamina-finished-import', 'stamina-learn-import'].includes(scene) ? 1.25 : 1 });
     page.setDefaultTimeout(20000);
     page.on('pageerror', error => failures.push(error.message));
     await page.route('https://**/*', async route => {
@@ -114,9 +115,196 @@ try {
     check(errors.length === 0, `${name}: ${errors.join('; ')}`);
     console.log(`PASS ${name}`);
   }
-  if (drawerOnly) await (await import('./shots-player-drawer.mjs')).runPlayerDrawerShots({ open, nav, shot, check });
+  function sendImages(dialog, type, count) {
+    return dialog.evaluate(async (element, { type, count }) => {
+      const canvas = document.createElement('canvas');
+      const png = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+      const data = new DataTransfer();
+      for (let i = 0; i < count; i++) data.items.add(new File([png], `fixture-${i}.png`, { type: 'image/png' }));
+      const event = type === 'paste' ? new ClipboardEvent(type, { bubbles: true, clipboardData: data })
+        : new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer: data });
+      (type === 'paste' ? element : element.querySelector('.import-drop')).dispatchEvent(event);
+    }, { type, count });
+  }
+  async function screenshotImportShots() {
+    const page = await open('stamina-screenshot-import', 1120, 980, { compactThreshold: 440 });
+    await nav(page, 'Stamina');
+    const tab = page.getByRole('tab', { name: 'Scanned skills', exact: true });
+    const positions = () => page.evaluate(() => ['.stamina-toolbar', '.result-empty'].map(selector => {
+      const rect = document.querySelector(selector).getBoundingClientRect();
+      const origin = document.querySelector('.stamina-layout').getBoundingClientRect();
+      return [Math.round(rect.left - origin.left), Math.round(rect.top - origin.top), Math.round(rect.width)];
+    }).flat().join(','));
+    await page.getByRole('button', { name: 'Import from screenshots' }).waitFor();
+    const originalPositions = await positions();
+    check(await tab.count() === 0, 'Scanned skills is absent before applying a scan');
+    await page.getByRole('button', { name: 'Import from screenshots' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Import from screenshots' });
+    await dialog.waitFor();
+    await shot(page, 'stamina-import-empty');
+    await dialog.locator('input[type=file]').evaluate(input => {
+      input.showPicker = () => { throw new DOMException('Picker unavailable', 'NotAllowedError'); };
+    });
+    await dialog.getByRole('button', { name: 'Choose images' }).click();
+    await dialog.getByText('Couldn’t open the image picker. Paste or drop the screenshot instead.', { exact: true }).waitFor();
+    await sendImages(dialog, 'paste', 1);
+    await dialog.getByText('Learn', { exact: true }).waitFor();
+    check(await dialog.getByText('Couldn’t open the image picker.', { exact: false }).count() === 0, 'A successful paste clears the picker error');
+    await sendImages(dialog, 'drop', 5);
+    await dialog.getByText('Skills Learned screen', { exact: true }).waitFor();
+    check(await dialog.getByText('Switch to the number view', { exact: true }).count() === 1, 'Chart screenshots request number view');
+    const apply = dialog.getByRole('button', { name: 'Apply to build' });
+    check(await apply.isDisabled(), 'Unknown skills block apply');
+    check(await dialog.getByLabel('Turf aptitude').inputValue() === 'S', 'Review shows scanned aptitude');
+    check(await dialog.getByRole('spinbutton', { name: 'Stamina', exact: true }).inputValue() === '715', 'Review shows scanned stamina');
+    await dialog.getByRole('button', { name: 'Remove screenshot 2' }).click();
+    await dialog.getByRole('button', { name: 'Remove screenshot 6' }).click();
+    await shot(page, 'stamina-import-review-unknown');
+    await dialog.getByRole('button', { name: 'Match skill' }).click();
+    await dialog.getByRole('combobox', { name: 'Search skills' }).fill('Ignited');
+    await dialog.getByRole('option', { name: 'Ignited Spirit WIT' }).click();
+    check(await apply.isDisabled(), 'An unconfirmed unique level blocks apply');
+    await dialog.getByLabel('Unique skill level').selectOption('5');
+    await dialog.getByRole('spinbutton', { name: 'Stamina', exact: true }).fill('720');
+    await apply.click();
+    const panel = page.getByRole('region', { name: 'Screenshot skills' });
+    const budget = panel.getByRole('status');
+    await budget.getByText('200 SP left', { exact: true }).waitFor();
+    check(await tab.getAttribute('aria-selected') === 'true' && await page.getByRole('tabpanel', { name: 'Scanned skills' }).getByRole('region', { name: 'Screenshot skills' }).isVisible(), 'Applying a scan opens the Scanned skills tab in the build editor');
+    check(await positions() === originalPositions, 'Applying a scan keeps the toolbar and empty result in place');
+    await shot(page, 'stamina-scanned-skills');
+    check(await panel.getByText('Owned', { exact: true }).count() === 3, 'Career and Obtained rows are locked and deduplicated');
+    const fastPaced = panel.locator('.import-tier').filter({ hasText: 'Fast-Paced' });
+    check(await fastPaced.getByText('Hint Lv 3 · 30% off', { exact: true }).count() === 1, 'Obtained rows retain their hints');
+    check(await panel.getByText('Price mismatch · Scanned 170 SP', { exact: true }).count() === 1, 'Calculated and scanned prices are both visible on mismatch');
+    await shot(page, 'stamina-import-price-mismatch');
+    const arc = panel.locator('.import-tier').filter({ hasText: 'Refraction Arc' });
+    const increaseCorners = panel.getByRole('button', { name: 'Increase tier for Medium Corners ○' });
+    await arc.getByText('282 SP', { exact: true }).waitFor();
+    await increaseCorners.click();
+    await arc.getByText('212 SP', { exact: true }).waitFor();
+    await increaseCorners.click();
+    await arc.getByText('135 SP', { exact: true }).waitFor();
+    await arc.scrollIntoViewIfNeeded();
+    await shot(page, 'stamina-import-incremental-price');
+    const decreaseCorners = panel.getByRole('button', { name: 'Decrease tier for Medium Corners ○' });
+    await decreaseCorners.click();
+    await decreaseCorners.click();
+    const increase = panel.getByRole('button', { name: 'Increase tier for Go with the Flow' });
+    await increase.click();
+    await budget.getByText('80 SP left').waitFor();
+    await increase.click();
+    await budget.getByText('28 SP over budget').waitFor();
+    check(await budget.getByText('200 SP total', { exact: true }).count() === 1, 'The total remains separate from the over-budget amount');
+    await page.getByRole('tabpanel', { name: 'Scanned skills' }).evaluate(element => { element.scrollTop = 0; });
+    await shot(page, 'stamina-import-over-budget');
+    const run = page.getByRole('button', { name: 'Run check', exact: true });
+    await run.click();
+    await page.locator('.stamina-headline').waitFor();
+    const input = await page.evaluate(() => window.__SHOT_CONTROL__.calls.find(call => call.command === 'stamina_check').args.input);
+    check(input.build.stats.stamina === 720 && input.build.skills.map(skill => skill.id).join(',') === '110311,200501,200542,210052'
+      && input.build.skills[0].level === 5, 'Simulation uses the reviewed stats, level and highest selected tier');
+    await run.scrollIntoViewIfNeeded();
+    await shot(page, 'stamina-results-with-scan');
+    await panel.getByRole('button', { name: 'Decrease tier for Go with the Flow' }).click();
+    await page.getByText(/Inputs changed since this run/).waitFor();
+    await page.reload();
+    await nav(page, 'Stamina');
+    await budget.getByText('80 SP left').waitFor();
+    await page.getByRole('tab', { name: 'Build', exact: true }).click();
+    check(await page.getByRole('spinbutton', { name: 'Stamina', exact: true }).inputValue() === '720', 'Scan, edits and selected tier survive reload');
+    await page.setViewportSize({ width: 440, height: 860 });
+    await tab.click();
+    const narrowPanel = page.getByRole('tabpanel', { name: 'Scanned skills' });
+    const narrowLayout = await narrowPanel.evaluate(element => {
+      const initial = element.scrollTop;
+      element.scrollTop = element.scrollHeight;
+      const scrolls = element.scrollTop > initial;
+      element.scrollTop = initial;
+      const noOverflow = [element, ...element.querySelectorAll('.import-chain, .import-tier')].every(row => row.scrollWidth <= row.clientWidth + 1);
+      return { scrolls, noOverflow, scale: devicePixelRatio };
+    });
+    check(narrowLayout.scale === 1.25 && narrowLayout.scrolls && narrowLayout.noOverflow, 'Scanned skill rows fit and scroll inside the editor at 440px and 125% scaling');
+    await page.getByRole('complementary', { name: 'Build editor' }).scrollIntoViewIfNeeded();
+    await narrowPanel.evaluate(element => { element.scrollTop = 0; });
+    await shot(page, 'stamina-scanned-skills-440');
+    await page.setViewportSize({ width: 1120, height: 980 });
+    await page.evaluate(() => localStorage.setItem('shots:hide-screenshot-import', '1'));
+    await page.reload();
+    await nav(page, 'Stamina');
+    await page.getByRole('heading', { name: 'Build editor' }).waitFor();
+    check(await tab.count() === 0 && await panel.count() === 0 && await page.getByRole('button', { name: 'Import from screenshots' }).count() === 0, 'Hidden catalog exposes neither the import action nor the restored scan');
+    await page.getByRole('spinbutton', { name: 'Stamina', exact: true }).fill('725');
+    await page.waitForFunction(() => JSON.parse(localStorage.getItem('shots:stamina.json:last-inputs-v1')).input.build.stats.stamina === 725);
+    await page.evaluate(() => localStorage.removeItem('shots:hide-screenshot-import'));
+    await page.reload();
+    await nav(page, 'Stamina');
+    await tab.click();
+    await budget.getByText('80 SP left').waitFor();
+    const restoredPositions = await positions();
+    await panel.getByRole('button', { name: 'Remove scan' }).click();
+    check(await tab.count() === 0 && await positions() === restoredPositions, 'Removing the scan hides its tab and keeps the main column in place');
+    await page.close();
+  }
+  async function finishedImportShots() {
+    const page = await open('stamina-finished-import', 1120, 900);
+    await nav(page, 'Stamina');
+    await page.getByRole('button', { name: 'Import from screenshots' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Import from screenshots' });
+    await sendImages(dialog, 'drop', 2);
+    await dialog.getByText('Finished Uma Details · Skills', { exact: true }).last().waitFor();
+    await page.waitForFunction(() => document.querySelectorAll('.import-sources > li').length === 2);
+    check(await dialog.getByLabel('Unique skill level').inputValue() === '5', 'Finished Uma review keeps the scanned unique level');
+    check(await dialog.getByLabel('Skill Points').count() === 0, 'Finished Uma review needs no SP');
+    const apply = dialog.getByRole('button', { name: 'Apply to build' });
+    check(await apply.isDisabled(), 'Circle suggestions need confirmation');
+    const smallPanelHint = dialog.getByText('For finished Umas, a larger game window reads skill names more reliably.');
+    check(await smallPanelHint.isVisible(), 'Small finished Details with unresolved chips shows the window-size hint');
+    check(await dialog.getByRole('button', { name: 'Match skill' }).count() === 0, 'A clear circle family shows two direct choices');
+    await shot(page, 'stamina-import-variant-choice');
+    const doubleCircle = dialog.getByRole('button', { name: 'Medium Corners ◎', exact: true });
+    await doubleCircle.click();
+    check(await apply.isDisabled(), 'A direct choice resolves only its row');
+    await dialog.getByRole('button', { name: 'Accept suggestions' }).click();
+    check(await doubleCircle.getAttribute('aria-pressed') === 'true', 'Bulk acceptance preserves manual choices');
+    check(await dialog.getByRole('button', { name: 'Summer Runner ○', exact: true }).getAttribute('aria-pressed') === 'true', 'Bulk acceptance resolves suggested variants');
+    check(await smallPanelHint.count() === 0, 'Confirming the chips clears the window-size hint');
+    await shot(page, 'stamina-import-finished-review');
+    await apply.click();
+    const panel = page.getByRole('region', { name: 'Screenshot skills' });
+    await panel.getByRole('heading', { name: 'Finished Uma skills' }).waitFor();
+    check(await panel.getByText('Owned', { exact: true }).count() === 4 && await panel.getByRole('group', { name: /Purchase tier/ }).count() === 0, 'Finished skills are deduplicated and locked');
+    await shot(page, 'stamina-import-finished-build');
+    await page.reload();
+    await nav(page, 'Stamina');
+    await panel.getByRole('heading', { name: 'Finished Uma skills' }).waitFor();
+    await page.getByRole('tab', { name: 'Build', exact: true }).click();
+    check(await page.getByRole('spinbutton', { name: 'Stamina', exact: true }).inputValue() === '669', 'Finished build survives reload');
+    await page.close();
+  }
+  async function learnOnlyImportShots() {
+    const page = await open('stamina-learn-import', 1120, 980);
+    await nav(page, 'Stamina');
+    await page.getByRole('button', { name: 'Import from screenshots' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Import from screenshots' });
+    await sendImages(dialog, 'drop', 3);
+    await page.waitForFunction(() => document.querySelectorAll('.import-sources > li').length === 3);
+    check(await dialog.getByText('No skills read on this screenshot. Make the game window larger or recapture.').count() === 1, 'An empty Learn capture has a recapture hint');
+    const apply = dialog.getByRole('button', { name: 'Apply to build' });
+    const level = dialog.getByLabel('Unique skill level');
+    check(await level.inputValue() === '' && await apply.isDisabled(), 'Learn alone cannot supply the unique level');
+    await shot(page, 'stamina-import-learn-only');
+    await level.selectOption('5');
+    check(await apply.isEnabled(), 'Attributes and Learn can apply without Career Skills');
+    await apply.click();
+    await page.getByRole('region', { name: 'Screenshot skills' }).getByText('200 SP left', { exact: true }).waitFor();
+    await page.close();
+  }
+  if (importOnly) { await screenshotImportShots(); await finishedImportShots(); await learnOnlyImportShots(); }
+  else if (drawerOnly) await (await import('./shots-player-drawer.mjs')).runPlayerDrawerShots({ open, nav, shot, check });
   else if (updatesOnly) await (await import('./shots-updater.mjs')).runUpdateShots({ open, nav, shot, check });
   else {
+  if (!arenaOnly && !statesOnly && !dataOnly && !usabilityOnly) { await screenshotImportShots(); await finishedImportShots(); await learnOnlyImportShots(); }
   if (!staminaOnly && !arenaOnly && !dataOnly && !usabilityOnly) {
     const page = await open('lobby', 1280, 800);
     await page.waitForFunction(() => document.querySelectorAll('.arena-card[data-state=loaded]').length === 10);

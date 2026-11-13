@@ -37,6 +37,82 @@ export const catalog = {
     { id: 100621, name: 'Go Go Mun!', hp_recovery: false, rarity: 'unique', icon_path: 'fixture-heal.webp' },
     { id: 201241, name: 'Front Runner Straightaways ◎', hp_recovery: false, rarity: 'white', icon_path: 'fixture-heal.webp' }, ...[...new Set([...Object.values(kits).filter(Array.isArray).flat(), 202051, 210052])].map(id => ({ id, name: id === 202051 ? 'Runaway' : id === 210052 ? 'Ignited Spirit WIT' : `Fixture kit skill ${id}`, hp_recovery: false, rarity: 'white', icon_path: null }))]
 };
+export const screenshotCatalog = {
+  ...catalog,
+  umas: [...catalog.umas, { card_id: 106802, name: 'Kitasan Black', title: "[Crane's Ambition]", unique_skill_id: 110681,
+    aptitudes: { distance: [3, 6, 7, 7], style: [7, 6, 4, 1], ground: [7, 3] } }],
+  screenshot_import_enabled: true,
+  screenshot_skills: {
+    110311: { cost: null, tier: null },
+    210052: { cost: null, tier: null },
+    200501: { cost: 120, tier: { group: 20050, rank: 2 } },
+    200502: { cost: 120, tier: { group: 20050, rank: 1 } },
+    910311: { cost: 200, tier: null },
+    110681: { cost: null, tier: null },
+    200542: { cost: 180, tier: { group: 20054, rank: 1 } },
+    200181: { cost: 110, tier: { group: 20018, rank: 2 }, hint_from: 200182 },
+    200182: { cost: 90, tier: { group: 20018, rank: 1 } },
+    201111: { cost: 110, tier: { group: 20111, rank: 2 }, hint_from: 201112 },
+    201112: { cost: 100, tier: { group: 20111, rank: 1 } },
+    201113: { cost: 150, tier: { group: 20111, rank: 3 } },
+  },
+  skills: [
+    ...catalog.skills.filter(skill => ![200181, 200182, 200501, 200502, 910311, 200542, 201111, 201112, 201113].includes(skill.id)),
+    { id: 200501, name: 'Lane Legerdemain', rarity: 'gold', hp_recovery: false, icon_path: 'fixture-heal.webp' },
+    { id: 200502, name: 'Go with the Flow', rarity: 'white', hp_recovery: false, icon_path: 'fixture-heal.webp' },
+    { id: 910311, name: 'Fresh☆Parlor (inherited)', rarity: 'white', hp_recovery: true, icon_path: 'fixture-heal.webp' },
+    { id: 110681, name: 'Bring on the Banquet!', rarity: 'unique', hp_recovery: false, icon_path: 'fixture-heal.webp' },
+    { id: 200542, name: 'Fast-Paced', rarity: 'white', hp_recovery: false, icon_path: 'fixture-heal.webp' },
+    { id: 200181, name: 'Summer Runner ◎', rarity: 'white', hp_recovery: false, icon_path: 'fixture-heal.webp' },
+    { id: 200182, name: 'Summer Runner ○', rarity: 'white', hp_recovery: false, icon_path: 'fixture-heal.webp' },
+    { id: 201111, name: 'Medium Corners ◎', rarity: 'white', hp_recovery: false, icon_path: 'fixture-heal.webp' },
+    { id: 201112, name: 'Medium Corners ○', rarity: 'white', hp_recovery: false, icon_path: 'fixture-heal.webp' },
+    { id: 201113, name: 'Refraction Arc', rarity: 'gold', hp_recovery: false, icon_path: 'fixture-heal.webp' },
+  ],
+};
+
+const read = (raw_name, id, fields) => ({
+  raw_name, resolution: id ? { matched: { id, confidence: 1 } } : null,
+  fields: { level: null, cost: null, hint: null, obtained: null, ...fields },
+});
+const scan = (screen, data) => ({
+  screen, card: null, attributes: null, skill_points: null, instruction: null, skills: [], ...data,
+});
+const card = { id: 103102, name: 'Ines Fujin', title: '[Melt Your Heart]' };
+export const screenshotScans = [
+  scan('learn', { skill_points: 200, skills: [
+    read('Lane Legerdemain', 200501, { cost: 228, hint: 1 }),
+    read('Go with the Flow', 200502, { cost: 120 }),
+    read('Fresh☆Parlor', 910311, { cost: 170, hint: 1 }),
+    read('Fresh☆Parlor', 110311, { obtained: true }),
+    read('Fast-Paced', 200542, { obtained: true, hint: 3 }),
+    read('Refraction Arc', 201113, { cost: 282, hint: 1 }),
+    read('Medium Corners ○', 201112, { cost: 70, hint: 3 }),
+  ] }),
+  scan('attributes-chart', { card, instruction: 'Switch to the number view' }),
+  scan('attributes-numbers', { card, attributes: { stats: [1210, 715, 817, 632, 635], track: 'SE', distance: 'EBSA', style: 'ABCG' } }),
+  scan('career-skills', { card, skills: [
+    read('Fresh☆Parlor', 110311),
+    read('Ignited Spint WIT', null),
+    { ...read('Carnival Bonus', null), resolution: 'ignored_no_race_effect' },
+  ] }),
+  scan('learn', { skill_points: 200, skills: [read('Go with the Flow', 200502, { cost: 120 })] }),
+  scan('unsupported', { instruction: 'Skills Learned screen' }),
+];
+const finished = {
+  card: { id: 106802, name: 'Kitasan Black', title: "[Crane's Ambition]" },
+  attributes: { stats: [1193, 669, 814, 652, 681], track: 'AE', distance: 'EBAA', style: 'ABCG' },
+};
+export const finishedScans = [
+  scan('finished-details', { ...finished, skills: [read('Bring on the Banquet!', 110681, { level: 5 }), read('Fast-Paced', 200542)] }),
+  scan('finished-details', { ...finished, small_game_panel: true, skills: [read('Fast-Paced', 200542),
+    { ...read('Medium Corners o', null), variant_choice: { name: 'Medium Corners', circle: 201112, double_circle: 201111, suggested: 201112 } },
+    { ...read('Summer Runner', null), variant_choice: { name: 'Summer Runner', circle: 200182, double_circle: 200181, suggested: 200182 } },
+  ] }),
+];
+export const learnOnlyScans = [screenshotScans[2], scan('learn', { skill_points: 200 }), {
+  ...screenshotScans[0], skills: [read('Fresh☆Parlor', 110311, { obtained: true, level: 4 }), read('Fast-Paced', 200542, { obtained: true })],
+}];
 export function apiResponse(url, scene) {
   const parsed = new URL(url);
   if (parsed.pathname === '/api/esports/league') return { standings: [{ teamId: 'fixture-team' }] };

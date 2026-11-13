@@ -14,7 +14,9 @@ function module(path, imports = {}) {
   return exports;
 }
 const types = module('../apps/desktop/src/staminaTypes.ts');
-const state = module('../apps/desktop/src/staminaState.ts', { './staminaTypes': types });
+const state = module('../apps/desktop/src/staminaState.ts', {
+  './staminaTypes': types, './staminaScreenshot': module('../apps/desktop/src/staminaScreenshot.ts'),
+});
 const presets = module('../apps/desktop/src/staminaPresetState.ts', { './staminaTypes': types, './staminaState': state, '../src-tauri/data/role-kits.json': { default: bundled } });
 const draft = module('../apps/desktop/src/staminaDraft.ts', { './staminaTypes': types });
 const catalog = { courses: pool.maps.map(m => ({ ...m, track_name: m.track, surface: m.surface === 'Turf' ? 1 : 2 })),
