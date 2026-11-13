@@ -94,6 +94,7 @@ struct Expected {
     attributes: Option<Attributes>,
     card: Option<Card>,
     skill_points: Option<u16>,
+    client_top: Option<i32>,
     #[serde(default)]
     skills: Vec<ExpectedRow>,
 }
@@ -244,7 +245,12 @@ fn screenshot_accuracy() -> Result<()> {
     let folder = std::env::var_os("UMALYTICS_OCR_SAMPLES").ok_or("Set UMALYTICS_OCR_SAMPLES")?;
     let folder = Path::new(&folder);
     let mut passed = benchmark_set(folder)?;
-    for name in ["career-2", "small-window", "retest-2026-11-12"] {
+    for name in [
+        "career-2",
+        "small-window",
+        "retest-2026-11-12",
+        "live-capture-2026-11-13",
+    ] {
         let extra = folder.join(name);
         if extra.is_dir() {
             passed &= benchmark_set(&extra)?;
@@ -255,7 +261,8 @@ fn screenshot_accuracy() -> Result<()> {
 }
 
 fn benchmark_set(folder: &Path) -> Result<bool> {
-    let verify_fields = folder.ends_with("small-window");
+    let live_capture = folder.ends_with("live-capture-2026-11-13");
+    let verify_fields = folder.ends_with("small-window") || live_capture;
     let retest = folder.ends_with("retest-2026-11-12");
     let scales: &[f32] = if verify_fields || retest {
         &[1.0]
@@ -272,6 +279,7 @@ fn benchmark_set(folder: &Path) -> Result<bool> {
             file.path()
                 .extension()
                 .is_some_and(|ext| ext.eq_ignore_ascii_case("png"))
+                && !(live_capture && file.file_name() == "umalytics-price-panel-crop.png")
         })
         .map(|file| file.file_name().to_string_lossy().into_owned())
         .collect();
@@ -349,6 +357,33 @@ fn benchmark_set(folder: &Path) -> Result<bool> {
             };
             let start = Instant::now();
             let actual = scan(&ocr, &screenshot, &matcher, &engine.catalog.umas)?;
+            if let Some(top) = expected.client_top {
+                // Also exercise the RGBA input and client-area framing used by live capture.
+                let client = Rect::new(
+                    0,
+                    (top as f32 * scale).round() as i32,
+                    screenshot.width,
+                    screenshot.height,
+                );
+                let client = screenshot.crop(client, 1.0);
+                let rgba: Vec<u8> = (0..client.height)
+                    .flat_map(|y| {
+                        let client = &client;
+                        (0..client.width).flat_map(move |x| {
+                            let [r, g, b] = client.at(x, y);
+                            [r, g, b, 255]
+                        })
+                    })
+                    .collect();
+                let captured = Image::from_rgba(client.width, client.height, &rgba)?;
+                let captured = scan(&ocr, &captured, &matcher, &engine.catalog.umas)?;
+                compare(
+                    "live client area",
+                    expected,
+                    &captured,
+                    scores.entry(screen).or_default(),
+                );
+            }
             let elapsed = start.elapsed();
             scan_time += elapsed;
             if dump {

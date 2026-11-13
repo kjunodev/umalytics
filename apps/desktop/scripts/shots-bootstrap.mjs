@@ -21,7 +21,7 @@ window.__SHOT_CONTROL__ = { calls, emit, draftMessage, messages, slow: false, fe
 mockWindows('main');
 mockConvertFileSrc('windows');
 mockIPC(async (command, args) => {
-  calls.push({ command, args: structuredClone(args) });
+  calls.push({ command, args: command === 'scan_stamina_while_scrolling' ? { id: args.id } : structuredClone(args) });
   if (command === 'plugin:app|version') return '0.1.0';
   if (command === 'plugin:updater|check') return scene === 'updates' ? { rid: 900, currentVersion: '0.1.0', version: '0.2.0', body: 'Fixture release notes: bundled data and signed updates.', rawJson: {} } : null;
   if (command === 'plugin:updater|download') {
@@ -78,6 +78,26 @@ mockIPC(async (command, args) => {
     if (waitForCapture) await waitForCapture;
     if (captureError) throw captureError;
     return screenshotScans[0];
+  }
+  if (command === 'scan_stamina_while_scrolling') {
+    const control = window.__SHOT_CONTROL__;
+    let index = 0;
+    const update = message => window.__TAURI_INTERNALS__.runCallback(args.updates.id, { index: index++, message });
+    control.scrolling = {
+      id: args.id,
+      scan: fixtureIndex => update({ type: 'screenshot', value: screenshotScans[fixtureIndex] }),
+      finish: (error = null) => {
+        update({ type: 'finished', value: error });
+        window.__TAURI_INTERNALS__.runCallback(args.updates.id, { index, end: true });
+        delete control.scrolling;
+      },
+    };
+    return;
+  }
+  if (command === 'stop_stamina_scrolling_scan') {
+    const scan = window.__SHOT_CONTROL__.scrolling;
+    if (scan?.id === args.id) scan.finish();
+    return;
   }
   if (command === 'stamina_check') {
     if (Object.hasOwn(args.input.build, 'umaCardId')) throw new Error('Uma card ID reached single-race IPC');

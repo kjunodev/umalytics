@@ -50,17 +50,78 @@ fn save(folder: &Path, frame: &Frame) -> Result<(), Box<dyn std::error::Error>> 
     let sequence = SEQUENCE.fetch_add(1, Ordering::Relaxed);
     let time = SystemTime::now().duration_since(UNIX_EPOCH)?.as_millis();
     let pid = std::process::id();
-    let file = OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(folder.join(format!("capture-{time}-{pid}-{sequence}.png")))?;
+    save_png(
+        &folder.join(format!("capture-{time}-{pid}-{sequence}.png")),
+        frame,
+    )
+}
+
+fn save_png(path: &Path, frame: &Frame) -> Result<(), Box<dyn std::error::Error>> {
+    let file = OpenOptions::new().write(true).create_new(true).open(path)?;
     let mut encoder = png::Encoder::new(file, frame.width as u32, frame.height as u32);
     encoder.set_color(png::ColorType::Rgba);
     encoder.set_depth(png::BitDepth::Eight);
+    encoder.set_compression(png::Compression::Fast);
     let mut png = encoder.write_header()?;
     png.write_image_data(&frame.rgba)?;
     png.finish()?;
     Ok(())
+}
+
+pub(super) struct SessionRecorder {
+    folder: Option<PathBuf>,
+    start: std::time::Instant,
+    next: u32,
+}
+
+impl SessionRecorder {
+    pub fn new() -> Self {
+        let folder = (std::env::var_os("UMALYTICS_CAPTURE_DUMP_RAW").as_deref()
+            == Some("1".as_ref()))
+        .then(|| std::env::var_os("UMALYTICS_CAPTURE_DUMP"))
+        .flatten()
+        .filter(|folder| !folder.is_empty())
+        .and_then(|folder| {
+            let result = (|| {
+                let folder = outside_git(Path::new(&folder))?;
+                let stamp = SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .map_err(io::Error::other)?
+                    .as_nanos();
+                let session = folder.join(format!("scroll-{stamp}-{}", std::process::id()));
+                fs::create_dir_all(&session)?;
+                outside_git(&session)
+            })();
+            match result {
+                Ok(path) => Some(path),
+                Err(error) => {
+                    eprintln!("Could not open scrolling capture folder: {error}");
+                    None
+                }
+            }
+        });
+        Self {
+            folder,
+            start: std::time::Instant::now(),
+            next: 0,
+        }
+    }
+
+    pub fn record(&mut self, frame: &Frame) {
+        let Some(folder) = &self.folder else {
+            return;
+        };
+        let millis = self.start.elapsed().as_millis();
+        let name = format!("frame-{:04}-{millis:06}ms.png", self.next);
+        self.next += 1;
+        if let Err(error) = outside_git(folder)
+            .map_err(Into::into)
+            .and_then(|folder| save_png(&folder.join(name), frame))
+        {
+            eprintln!("Could not save scrolling frame: {error}");
+            self.folder = None;
+        }
+    }
 }
 
 pub(super) fn record(frame: &Frame) {

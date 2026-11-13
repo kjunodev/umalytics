@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
-import { invoke } from '@tauri-apps/api/core';
+import { Channel, invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { SkillPicker } from './SkillPicker';
 import { StaminaUmaPicker } from './StaminaUmaPicker';
@@ -29,6 +29,9 @@ type Source = { id: number; scan: Screenshot; error?: never } | { id: number; er
 const message = (error: unknown) => error instanceof Error ? error.message : String(error);
 // A fast close and reopen must release the old registration before taking the shortcut again.
 let shortcutQueue = Promise.resolve();
+let nextScanId = 0;
+type ScanUpdate = { type: 'screenshot'; value: Screenshot } | { type: 'finished'; value: string | null };
+const stopScrolling = (id: number) => invoke('stop_stamina_scrolling_scan', { id });
 
 async function scanImage(file: File) {
   if (file.size > 32 * 1024 * 1024) throw Error('Choose an image under 32 MB.');
@@ -61,11 +64,13 @@ export function StaminaScreenshotImport({ catalog, recent, onRecent, onClose, on
   const queue = useRef(Promise.resolve());
   const closed = useRef(false);
   const capturing = useRef(false);
+  const scrollingId = useRef<number | undefined>(undefined);
   const toastTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const [pending, setPending] = useState(0);
   const [captureBusy, setCaptureBusy] = useState(false);
   const [captureError, setCaptureError] = useState<string>();
   const [captureToast, setCaptureToast] = useState(false);
+  const [scrolling, setScrolling] = useState(false);
   const [hotkeyReady, setHotkeyReady] = useState(false);
   const [hotkeyError, setHotkeyError] = useState<string>();
   const [pickerError, setPickerError] = useState(false);
@@ -80,6 +85,9 @@ export function StaminaScreenshotImport({ catalog, recent, onRecent, onClose, on
     return () => {
       closed.current = true;
       clearTimeout(toastTimer.current);
+      const id = scrollingId.current;
+      scrollingId.current = undefined;
+      if (id !== undefined) void stopScrolling(id).catch(console.error);
       element?.close();
     };
   }, []);
@@ -108,6 +116,43 @@ export function StaminaScreenshotImport({ catalog, recent, onRecent, onClose, on
       if (!closed.current) setCaptureBusy(false);
     }
   }, [addSource]);
+  const toggleScrolling = async () => {
+    const running = scrollingId.current;
+    if (running !== undefined) {
+      scrollingId.current = undefined;
+      setScrolling(false);
+      try {
+        await stopScrolling(running);
+      } catch (error) {
+        if (!closed.current) setCaptureError(message(error));
+      }
+      return;
+    }
+    const id = ++nextScanId;
+    scrollingId.current = id;
+    setScrolling(true);
+    setCaptureError(undefined);
+    const updates = new Channel<ScanUpdate>(update => {
+      if (closed.current || scrollingId.current !== id) return;
+      if (update.type === 'screenshot') {
+        const scan = update.value;
+        if (scan.screen !== 'unsupported') addSource({ id: nextId.current++, scan });
+      } else {
+        scrollingId.current = undefined;
+        setScrolling(false);
+        if (update.value) setCaptureError(update.value);
+      }
+    });
+    try {
+      await invoke('scan_stamina_while_scrolling', { id, updates });
+    } catch (error) {
+      if (!closed.current && scrollingId.current === id) {
+        scrollingId.current = undefined;
+        setScrolling(false);
+        setCaptureError(message(error));
+      }
+    }
+  };
   useEffect(() => {
     let active = true;
     let registered = false;
@@ -192,6 +237,7 @@ export function StaminaScreenshotImport({ catalog, recent, onRecent, onClose, on
     return [{ id, owned: row.owned, learn: row.learn, level: row.fields.level, price: row.fields.cost,
       hint: row.fields.hint, hintUnreadable: row.fields.hint_unreadable, hintConflict: row.fields.hint_conflict }];
   });
+  const scannedLearnSkills = new Set(observations.filter(row => row.learn).map(row => row.id)).size;
   const uniqueKey = `unique-${uma?.unique_skill_id}`;
   const levels = [...new Set(rows.flatMap(row =>
     (row.screen === 'details-skills' || row.screen === 'finished-details') && row.resolution && row.resolution !== 'ignored_no_race_effect'
@@ -206,7 +252,7 @@ export function StaminaScreenshotImport({ catalog, recent, onRecent, onClose, on
   const tooMany = purchasePlan(chains, [], 0).skills.length > 100;
   const unresolved = unknown.filter(row => resolved[row.key] === undefined).length;
   const hasScreens = !!numbers && (finished || learn);
-  const canApply = !!(hasScreens && uma && uniqueLevel && !pending && !captureBusy && cards.size <= 1 && !mixed && !unresolved && !tooMany);
+  const canApply = !!(hasScreens && uma && uniqueLevel && !pending && !captureBusy && !scrolling && cards.size <= 1 && !mixed && !unresolved && !tooMany);
   const edit = (key: string, value: string) => setEdits(previous => ({ ...previous, [key]: value }));
   const apply = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -246,9 +292,16 @@ export function StaminaScreenshotImport({ catalog, recent, onRecent, onClose, on
             <button type="button" onClick={() => void capture(true)} disabled={captureBusy}>
               {captureBusy ? 'Capturing…' : 'Capture game window'}
             </button>
+            <button type="button" onClick={() => void toggleScrolling()}>
+              {scrolling ? 'Stop' : 'Start scanning'}
+            </button>
           </div>
           {hotkeyReady && <p className="import-shortcut"><kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>U</kbd> works while the game has focus.</p>}
           {hotkeyError && <small role="status" className="import-warning">{hotkeyError}</small>}
+          {scrolling && <p role="status" className="import-scanning">
+            <strong>Learn · {scannedLearnSkills} {scannedLearnSkills === 1 ? 'skill' : 'skills'} so far</strong>
+            <span>Scroll the skill list in the game and pause on each view.</span>
+          </p>}
           <input ref={fileInput} type="file" accept="image/*" multiple hidden onError={() => setPickerError(true)} onChange={event => {
             add(Array.from(event.target.files ?? []));
             event.target.value = '';

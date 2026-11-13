@@ -85,12 +85,41 @@ test('deduplicates overlapping Learn and owned rows while retaining scanned pric
   }
 });
 
-test('Taking the Lead flags 180 versus 228 until the missing Early Lead hint is captured', () => {
+test('Taking the Lead infers the missing Early Lead discount', () => {
   const takingTheLead = offer(200531, 180, 1);
   assert.deepEqual(costs(tierChains([takingTheLead], catalog)[0]),
-    [[200532, 120, 'Price unverified'], [200531, 228, 'Price mismatch']]);
+    [[200532, 72, null], [200531, 180, null]]);
   assert.deepEqual(costs(tierChains([takingTheLead, offer(200532, 72, 5)], catalog)[0]),
     [[200532, 72, null], [200531, 180, null]]);
+});
+
+test('Escape Artist at 234 SP and hint 3 implies Fast-Paced at 108 SP and Max', () => {
+  const gold = offer(200541, 234, 3);
+  const [chain] = tierChains([gold], catalog);
+  assert.deepEqual(costs(chain), [[200542, 108, null], [200541, 234, null]]);
+  assert.equal(chain.steps[0].hint, 5);
+  assert.equal(chain.steps[0].inferredFrom, 200541);
+  assert.equal(priceAfterTier(chain, chain.steps[1], 200542), 126);
+  assert.equal(purchasePlan([chain], [200541], 234).left, 0);
+  assert.equal(tierChains([gold, offer(200542, 108, 5)], catalog)[0].steps[0].inferredFrom, undefined);
+});
+
+test('keeps price flags when the remainder is invalid, conflicting, or two prerequisites are missing', () => {
+  for (const offers of [[offer(200541, 235, 3)], [offer(200541, 234, 3), offer(200541, 252, 3)]]) {
+    assert.deepEqual(costs(tierChains(offers, catalog)[0]),
+      [[200542, 180, 'Price unverified'], [200541, 306, 'Price mismatch']]);
+  }
+  const [chain] = tierChains([refractionArc], catalog);
+  assert.equal(chain.steps[0].inferredFrom, undefined);
+  assert.equal(chain.steps[1].inferredFrom, undefined);
+  assert.equal(chain.steps[2].priceIssue, 'Price mismatch');
+});
+
+test('a scanned double-circle price can establish the missing single-circle discount', () => {
+  const [chain] = tierChains([offer(200181, 131, 3)], catalog);
+  assert.deepEqual(costs(chain), [[200182, 54, null], [200181, 131, null]]);
+  assert.equal(chain.steps[0].hint, 5);
+  assert.equal(chain.steps[0].inferredFrom, 200181);
 });
 
 test('recovers a Max hint from an overlapping screenshot and flags an unreadable price', () => {

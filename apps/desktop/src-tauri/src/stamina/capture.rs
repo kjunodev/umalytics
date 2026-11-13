@@ -1,7 +1,11 @@
 #[cfg(debug_assertions)]
 mod dump;
 mod hotkey;
+mod scrolling;
 pub(crate) use hotkey::CaptureShortcut;
+pub(super) use scrolling::scan_while_scrolling;
+pub(crate) use scrolling::ScanUpdate;
+pub(crate) use scrolling::ScrollingScans;
 
 use super::ocr::Apartment;
 use std::{
@@ -9,7 +13,7 @@ use std::{
     ops::Range,
     slice,
     sync::{mpsc, OnceLock},
-    time::Duration,
+    time::{Duration, Instant},
 };
 use windows::{
     core::{factory, Interface, PWSTR},
@@ -24,7 +28,7 @@ use windows::{
     },
     Security::Authorization::AppCapabilityAccess::AppCapabilityAccessStatus,
     Win32::{
-        Foundation::{CloseHandle, E_NOINTERFACE, HWND, LPARAM, POINT, RECT},
+        Foundation::{CloseHandle, E_NOINTERFACE, E_POINTER, HWND, LPARAM, POINT, RECT, S_OK},
         Graphics::{
             Direct3D::D3D_DRIVER_TYPE_HARDWARE,
             Direct3D11::{
@@ -50,7 +54,7 @@ use windows::{
             HiDpi::{SetThreadDpiAwarenessContext, DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2},
             WindowsAndMessaging::{
                 EnumWindows, GetClientRect, GetWindowTextW, GetWindowThreadProcessId, IsIconic,
-                IsWindowVisible,
+                IsWindow, IsWindowVisible,
             },
         },
     },
@@ -213,8 +217,8 @@ fn device() -> windows::core::Result<(ID3D11Device, ID3D11DeviceContext, IDirect
             None,
             Some(&mut context),
         )?;
-        let device = device.ok_or(windows::Win32::Foundation::E_POINTER)?;
-        let context = context.ok_or(windows::Win32::Foundation::E_POINTER)?;
+        let device = device.ok_or(E_POINTER)?;
+        let context = context.ok_or(E_POINTER)?;
         let dxgi: IDXGIDevice = device.cast()?;
         let winrt = CreateDirect3D11DeviceFromDXGIDevice(&dxgi)?.cast()?;
         Ok((device, context, winrt))
@@ -233,34 +237,6 @@ fn borderless(may_prompt: bool) -> bool {
         // A global hotkey can be pressed from the game, where a consent prompt could take focus.
         ALLOWED.get().copied().unwrap_or(false)
     }
-}
-
-fn next_frame(
-    pool: &Direct3D11CaptureFramePool,
-    session: &GraphicsCaptureSession,
-    may_prompt: bool,
-) -> Result<Direct3D11CaptureFrame, &'static str> {
-    session.SetIsCursorCaptureEnabled(false).map_err(|error| {
-        if error.code() == E_NOINTERFACE {
-            UNSUPPORTED
-        } else {
-            FAILED
-        }
-    })?;
-    if borderless(may_prompt) {
-        let _ = session.SetIsBorderRequired(false);
-    }
-    let (send, receive) = mpsc::sync_channel(1);
-    pool.FrameArrived(&TypedEventHandler::new(move |_, _| {
-        let _ = send.try_send(());
-        Ok(())
-    }))
-    .map_err(|_| FAILED)?;
-    session.StartCapture().map_err(|_| FAILED)?;
-    receive
-        .recv_timeout(Duration::from_secs(2))
-        .map_err(|_| FAILED)?;
-    pool.TryGetNextFrame().map_err(|_| FAILED)
 }
 
 fn read_frame(
@@ -320,42 +296,139 @@ fn read_frame(
     }
 }
 
-pub(super) fn capture(may_prompt: bool) -> Result<Frame, &'static str> {
-    let hwnd = game_window().ok_or("Umamusume is not running.")?;
-    if unsafe { IsIconic(hwnd) }.as_bool() {
-        return Err(MINIMIZED);
-    }
-    let _apartment = Apartment::new().map_err(|_| FAILED)?;
-    if !GraphicsCaptureSession::IsSupported().unwrap_or(false) {
-        return Err(UNSUPPORTED);
-    }
-    let interop =
-        factory::<GraphicsCaptureItem, IGraphicsCaptureItemInterop>().map_err(|_| UNSUPPORTED)?;
-    let item: GraphicsCaptureItem = unsafe { interop.CreateForWindow(hwnd) }.map_err(|_| FAILED)?;
-    let (device, context, winrt) = device().map_err(|_| FAILED)?;
-    let size = item.Size().map_err(|_| FAILED)?;
-    let pool = Direct3D11CaptureFramePool::CreateFreeThreaded(&winrt, FORMAT, 1, size)
-        .map_err(|_| FAILED)?;
-    let result = (|| {
-        let session = pool.CreateCaptureSession(&item).map_err(|_| FAILED)?;
-        let result = next_frame(&pool, &session, may_prompt).and_then(|frame| {
-            let (window, client) = client_bounds(hwnd).map_err(|_| FAILED)?;
-            if size != frame.ContentSize().map_err(|_| FAILED)? {
-                return Err(FAILED);
+struct WindowCapture {
+    hwnd: HWND,
+    session: Option<GraphicsCaptureSession>,
+    pool: Direct3D11CaptureFramePool,
+    device: ID3D11Device,
+    context: ID3D11DeviceContext,
+    winrt: IDirect3DDevice,
+    size: SizeInt32,
+    ready: mpsc::Receiver<()>,
+    _apartment: Apartment,
+}
+
+impl WindowCapture {
+    fn open(may_prompt: bool) -> Result<Self, &'static str> {
+        let hwnd = game_window().ok_or("Umamusume is not running.")?;
+        if unsafe { IsIconic(hwnd) }.as_bool() {
+            return Err(MINIMIZED);
+        }
+        let apartment = Apartment::new().map_err(|_| FAILED)?;
+        if !GraphicsCaptureSession::IsSupported().unwrap_or(false) {
+            return Err(UNSUPPORTED);
+        }
+        let interop = factory::<GraphicsCaptureItem, IGraphicsCaptureItemInterop>()
+            .map_err(|_| UNSUPPORTED)?;
+        let item: GraphicsCaptureItem =
+            unsafe { interop.CreateForWindow(hwnd) }.map_err(|_| FAILED)?;
+        let (device, context, winrt) = device().map_err(|_| FAILED)?;
+        let size = item.Size().map_err(|_| FAILED)?;
+        let pool = Direct3D11CaptureFramePool::CreateFreeThreaded(&winrt, FORMAT, 1, size)
+            .map_err(|_| FAILED)?;
+        let (send, ready) = mpsc::sync_channel(1);
+        let mut capture = Self {
+            hwnd,
+            session: None,
+            pool,
+            device,
+            context,
+            winrt,
+            size,
+            ready,
+            _apartment: apartment,
+        };
+        let session = capture
+            .pool
+            .CreateCaptureSession(&item)
+            .map_err(|_| FAILED)?;
+        capture.session = Some(session);
+        let session = capture.session.as_ref().unwrap();
+        session.SetIsCursorCaptureEnabled(false).map_err(|error| {
+            if error.code() == E_NOINTERFACE {
+                UNSUPPORTED
+            } else {
+                FAILED
             }
-            read_frame(&frame, &device, &context, window, client)
-        });
-        let _ = session.Close();
-        result
-    })();
-    let _ = pool.Close();
-    if unsafe { IsIconic(hwnd) }.as_bool() {
-        return Err(MINIMIZED);
+        })?;
+        if borderless(may_prompt) {
+            let _ = session.SetIsBorderRequired(false);
+        }
+        capture
+            .pool
+            .FrameArrived(&TypedEventHandler::new(move |_, _| {
+                let _ = send.try_send(());
+                Ok(())
+            }))
+            .map_err(|_| FAILED)?;
+        session.StartCapture().map_err(|_| FAILED)?;
+        Ok(capture)
     }
-    let frame = result?;
-    #[cfg(debug_assertions)]
-    dump::record(&frame);
-    Ok(frame)
+
+    fn check_window(&self) -> Result<(), &'static str> {
+        if !unsafe { IsWindow(Some(self.hwnd)) }.as_bool() {
+            return Err("Umamusume is not running.");
+        }
+        if unsafe { IsIconic(self.hwnd) }.as_bool() {
+            return Err(MINIMIZED);
+        }
+        Ok(())
+    }
+
+    fn sample(&mut self, timeout: Duration) -> Result<Option<Frame>, &'static str> {
+        self.check_window()?;
+        let ready = self.ready.recv_timeout(timeout);
+        self.check_window()?;
+        match ready {
+            Ok(()) => {}
+            Err(mpsc::RecvTimeoutError::Timeout) => return Ok(None),
+            Err(mpsc::RecvTimeoutError::Disconnected) => return Err(FAILED),
+        }
+        let frame = match self.pool.TryGetNextFrame() {
+            Ok(frame) => frame,
+            // A notification can outlive its frame when the pool is recreated.
+            Err(error) if error.code() == S_OK => return Ok(None),
+            Err(_) => return Err(FAILED),
+        };
+        let size = frame.ContentSize().map_err(|_| FAILED)?;
+        if size != self.size {
+            drop(frame);
+            self.pool
+                .Recreate(&self.winrt, FORMAT, 1, size)
+                .map_err(|_| FAILED)?;
+            self.size = size;
+            return Ok(None);
+        }
+        let bounds = client_bounds(self.hwnd);
+        self.check_window()?;
+        let (window, client) = bounds.map_err(|_| FAILED)?;
+        let result = read_frame(&frame, &self.device, &self.context, window, client);
+        self.check_window()?;
+        result.map(Some)
+    }
+}
+
+impl Drop for WindowCapture {
+    fn drop(&mut self) {
+        if let Some(session) = self.session.take() {
+            let _ = session.Close();
+        }
+        let _ = self.pool.Close();
+    }
+}
+
+pub(super) fn capture(may_prompt: bool) -> Result<Frame, &'static str> {
+    let mut capture = WindowCapture::open(may_prompt)?;
+    let deadline = Instant::now() + Duration::from_secs(2);
+    while let Some(remaining) = deadline.checked_duration_since(Instant::now()) {
+        if let Some(frame) = capture.sample(remaining)? {
+            drop(capture);
+            #[cfg(debug_assertions)]
+            dump::record(&frame);
+            return Ok(frame);
+        }
+    }
+    Err(FAILED)
 }
 
 #[cfg(test)]

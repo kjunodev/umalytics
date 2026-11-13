@@ -48,9 +48,11 @@ fn main() {
     #[cfg(windows)]
     let builder = builder
         .manage(stamina::capture::CaptureShortcut::default())
+        .manage(stamina::capture::ScrollingScans::default())
         .on_page_load(|webview, payload| {
             if matches!(payload.event(), tauri::webview::PageLoadEvent::Started) {
                 webview.state::<stamina::capture::CaptureShortcut>().clear();
+                webview.state::<stamina::capture::ScrollingScans>().stop(None);
             }
         });
     builder
@@ -75,6 +77,10 @@ fn main() {
             stamina::capture_stamina_screenshot,
             #[cfg(windows)]
             stamina::set_stamina_capture_hotkey,
+            #[cfg(windows)]
+            stamina::scan_stamina_while_scrolling,
+            #[cfg(windows)]
+            stamina::stop_stamina_scrolling_scan,
             stamina::stamina_check,
             stamina::stamina_check_races,
             stamina::cancel_stamina_check

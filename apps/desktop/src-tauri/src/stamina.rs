@@ -1379,6 +1379,42 @@ pub async fn set_stamina_capture_hotkey(
     Ok(())
 }
 
+#[cfg(windows)]
+#[tauri::command]
+pub fn scan_stamina_while_scrolling(
+    id: u32,
+    updates: tauri::ipc::Channel<capture::ScanUpdate>,
+    app: tauri::AppHandle,
+    access: tauri::State<'_, crate::ScreenshotImportAccess>,
+    scans: tauri::State<'_, capture::ScrollingScans>,
+) -> Result<(), String> {
+    if !access.0 {
+        return Err("Screenshot import is unavailable.".into());
+    }
+    use tauri::Manager;
+    let token = scans.start(id);
+    tauri::async_runtime::spawn_blocking(move || {
+        let result = capture::scan_while_scrolling(&token, &updates);
+        app.state::<capture::ScrollingScans>().finish(&token);
+        let _ = updates.send(capture::ScanUpdate::Finished(result.err()));
+    });
+    Ok(())
+}
+
+#[cfg(windows)]
+#[tauri::command]
+pub fn stop_stamina_scrolling_scan(
+    id: u32,
+    access: tauri::State<'_, crate::ScreenshotImportAccess>,
+    scans: tauri::State<'_, capture::ScrollingScans>,
+) -> Result<(), &'static str> {
+    if !access.0 {
+        return Err("Screenshot import is unavailable.");
+    }
+    scans.stop(Some(id));
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn stamina_check(
     input: Input,

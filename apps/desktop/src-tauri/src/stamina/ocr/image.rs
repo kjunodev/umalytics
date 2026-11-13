@@ -9,10 +9,10 @@ use windows::{
 };
 
 pub(super) type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
-pub(super) type Rgb = [u8; 3];
+pub(in crate::stamina) type Rgb = [u8; 3];
 
 #[derive(Clone, Copy, Debug)]
-pub(super) struct Rect {
+pub(in crate::stamina) struct Rect {
     pub left: i32,
     pub top: i32,
     pub right: i32,

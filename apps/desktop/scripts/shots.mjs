@@ -365,6 +365,41 @@ try {
     await capture.click();
     await tiles.getByText('Learn', { exact: true }).waitFor();
     check(await tiles.count() === 1, 'Capture button works when the shortcut is taken');
+    await close();
+    await page.evaluate(() => { window.__SHOT_CONTROL__.shortcutTaken = false; });
+    await openImport.click();
+    await dialog.getByText('works while the game has focus.').waitFor();
+    const start = dialog.getByRole('button', { name: 'Start scanning' });
+    const stop = dialog.getByRole('button', { name: 'Stop', exact: true });
+    const startScan = async () => {
+      await start.click();
+      await page.waitForFunction(() => !!window.__SHOT_CONTROL__.scrolling);
+    };
+    await startScan();
+    await dialog.getByText('Learn · 0 skills so far', { exact: true }).waitFor();
+    await page.evaluate(() => {
+      window.__SHOT_CONTROL__.scrolling.scan(0);
+      window.__SHOT_CONTROL__.scrolling.scan(4);
+    });
+    await dialog.getByText('Learn · 7 skills so far', { exact: true }).waitFor();
+    check(await tiles.count() === 2, 'Settled views reach review and overlapping skills are counted once');
+    await shot(page, 'stamina-scrolling-on');
+    await hotkey();
+    await page.waitForFunction(() => document.querySelectorAll('.import-sources li').length === 3);
+    check(await stop.isVisible(), 'The capture shortcut works during a scrolling scan');
+    await dialog.getByText('Game screenshot added', { exact: true }).waitFor({ state: 'hidden' });
+    await stop.click();
+    await page.waitForFunction(() => !window.__SHOT_CONTROL__.scrolling);
+    check(await start.isVisible() && await tiles.count() === 3, 'Stop keeps the scanned tiles for review');
+    await shot(page, 'stamina-scrolling-off');
+    await startScan();
+    await page.evaluate(() => window.__SHOT_CONTROL__.scrolling.finish());
+    await start.waitFor();
+    check(await dialog.getByText('skills so far').count() === 0, 'Session completion returns to the idle state');
+    await startScan();
+    await close();
+    await page.waitForFunction(() => !window.__SHOT_CONTROL__.scrolling);
+    check(await page.evaluate(() => window.__SHOT_CONTROL__.calls.filter(call => call.command === 'stop_stamina_scrolling_scan').length === 2), 'Closing import stops the current scrolling session');
     await page.close();
   }
 

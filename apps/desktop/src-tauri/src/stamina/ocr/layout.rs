@@ -72,23 +72,31 @@ fn green([r, g, b]: Rgb) -> bool {
 // The Career Profile banner scales with the game UI, even when the OS title bar
 // and capture margins do not. Its rounded, wide green band is visible behind popups.
 pub(super) fn profile_banner(image: &Image) -> Option<Rect> {
+    find_profile_banner(image.width, image.height, |x, y| image.at(x, y))
+}
+
+pub(in crate::stamina) fn find_profile_banner(
+    width: i32,
+    height: i32,
+    at: impl Fn(i32, i32) -> Rgb,
+) -> Option<Rect> {
     let is_banner = |[r, g, b]: Rgb| g >= 146 && g.saturating_sub(r) >= 23 && b < 135;
-    let (band, y) = (0..image.height / 6)
+    let (band, y) = (0..height / 6)
         .flat_map(|y| {
             // White lettering can interrupt the green span inside the banner.
             join_gaps(
-                runs(image.width / 3..image.width, |x| is_banner(image.at(x, y))),
-                image.width / 34,
+                runs(width / 3..width, |x| is_banner(at(x, y))),
+                width / 34,
             )
             .into_iter()
             .map(move |band| (band, y))
         })
-        .filter(|(band, _)| length(band) >= image.width / 5 && length(band) <= image.width / 2)
+        .filter(|(band, _)| length(band) >= width / 5 && length(band) <= width / 2)
         .max_by_key(|(band, _)| length(band))?;
     let width = length(&band);
     let probe = band.start + width / 7;
     let vertical = runs(y - width / 7..y + width / 7, |y| {
-        is_banner(image.at(probe, y))
+        is_banner(at(probe, y))
     })
     .into_iter()
     .find(|span| span.contains(&y))?;

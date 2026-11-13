@@ -41,6 +41,7 @@ export function StaminaScreenshotSkills({ scan, chains, skills, running, onChang
                 {step.hint && <small className="import-hint">{step.hint === 5 ? 'Hint Max' : `Hint Lv ${step.hint}`} · {hintDiscount(step.hint)}% off</small>}
               </span>
               {step.owned ? <span className="import-owned">Owned</span> : <span className="import-price">{price === null ? '— SP' : `${format(price)} SP`}</span>}
+              {step.inferredFrom !== undefined && <small className="muted import-price-issue">Price from {name(step.inferredFrom)}'s row</small>}
               {step.priceIssue && <small className="import-warning import-price-issue">{step.priceIssue}
                 {(step.owned || price !== step.total) && step.total !== null && ` · Calculated ${format(step.total)} SP at scan`}
                 {step.scanned.length ? ` · Scanned ${step.scanned.map(format).join(' / ')} SP` : ' · No scanned price'}

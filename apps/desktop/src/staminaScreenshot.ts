@@ -60,6 +60,7 @@ export interface TierStep {
   tierPrice: number | null;
   total: number | null;
   scanned: number[];
+  inferredFrom?: number;
   priceIssue: 'Price mismatch' | 'Price unverified' | null;
 }
 export interface SkillChain {
@@ -113,19 +114,54 @@ export function tierChains(rows: Observation[], catalog: ImportCatalog): SkillCh
       if (rank(id) > ownedRank && (rank(id) < lastOfferedRank || unlockedCircle) && !ids.some(existing => rank(existing) === rank(id))) ids.push(id);
     }
     ids.sort((a, b) => rank(a) - rank(b) || a - b);
-    const needsHint = (id: number) => {
+    const prerequisitesFor = (id: number) => ids.filter(lower => rank(lower) > ownedRank && rank(lower) < rank(id));
+    const needsObservation = (id: number) => {
       const from = catalog[id]?.hint_from;
       return !seen.get(id)?.learn.length && (from === undefined || !seen.get(from)?.learn.length);
     };
+    const candidates = new Map<number, { hint: number | null; from: number }[]>();
+    for (const id of ids) {
+      if (rank(id) <= ownedRank) continue;
+      const prerequisites = prerequisitesFor(id);
+      const missing = prerequisites.filter(lower => !seen.has(lower));
+      if (missing.length !== 1) continue;
+      const lower = missing[0]!;
+      if (!needsObservation(lower)) continue;
+      const base = catalog[lower]?.cost;
+      const ownHint = hintFor(id);
+      const own = price(id, ownHint);
+      if (base == null || own === null) continue;
+      const known = prerequisites.filter(other => other !== lower);
+      if (known.some(other => needsObservation(other) ||
+        seen.get(other)?.learn.some(read => read.hintConflict || read.hintUnreadable))) continue;
+      const knownPrices = known.map(other => price(other, hintFor(other)));
+      if (knownPrices.some(value => value === null)) continue;
+      const knownTotal = knownPrices.reduce<number>((sum, value) => sum + (value ?? 0), 0);
+      const offers = seen.get(id)?.learn.filter(read => !read.owned) ?? [];
+      if (!offers.length || offers.some(read => read.price === null || read.hintConflict || read.hintUnreadable ||
+        (read.hint !== null && read.hint !== ownHint))) continue;
+      const hints = [null, 1, 2, 3, 4, 5].filter(hint => offers.every(read =>
+        discountedPrice(base, hint) === read.price! - own - knownTotal));
+      if (hints.length !== 1) continue;
+      const matches = candidates.get(lower) ?? [];
+      matches.push({ hint: hints[0]!, from: id });
+      candidates.set(lower, matches);
+    }
+    const inferred = new Map([...candidates].flatMap(([id, matches]) => {
+      const first = matches[0]!;
+      return matches.every(match => match.hint === first.hint) ? [[id, first] as const] : [];
+    }));
+    const effectiveHint = (id: number) => inferred.has(id) ? inferred.get(id)!.hint : hintFor(id);
+    const needsHint = (id: number) => !inferred.has(id) && needsObservation(id);
     const steps = ids.flatMap<TierStep>(id => {
       const reads = seen.get(id)?.learn ?? [];
       const offers = reads.filter(row => !row.owned);
       const scanned = [...new Set(offers.flatMap(offer => offer.price === null ? [] : [offer.price]))].sort((a, b) => a - b);
-      const prerequisites = ids.filter(lower => rank(lower) > ownedRank && rank(lower) < rank(id));
-      const prices = prerequisites.map(lower => price(lower, hintFor(lower)));
+      const prerequisites = prerequisitesFor(id);
+      const prices = prerequisites.map(lower => price(lower, effectiveHint(lower)));
       const prefix = prices.some(value => value === null) ? null : prices.reduce<number>((sum, value) => sum + (value ?? 0), 0);
       const withPrerequisite = (own: number | null) => own === null || prefix === null ? null : own + prefix;
-      const hint = hintFor(id);
+      const hint = effectiveHint(id);
       const tierPrice = price(id, hint);
       const total = withPrerequisite(tierPrice);
       const mismatch = offers.some(offer => {
@@ -137,6 +173,7 @@ export function tierChains(rows: Observation[], catalog: ImportCatalog): SkillCh
         || reads.some(row => row.hintUnreadable || row.hintConflict || (!row.owned && row.price === null));
       if (isOwned && !seen.get(id)?.owned && !offers.length) return [];
       return [{ id, rank: rank(id), owned: isOwned, selectable: !isOwned, hint: hint ?? null, tierPrice, total, scanned,
+        inferredFrom: inferred.get(id)?.from,
         priceIssue: mismatch ? 'Price mismatch' : unverified ? 'Price unverified' : null }];
     });
     return { key, owned, steps };
