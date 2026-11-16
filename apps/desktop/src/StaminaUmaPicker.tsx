@@ -1,8 +1,7 @@
 import { useId, useRef, useState } from 'react';
 import { UmaImage, getFallbackUmaImageUrl } from '@umalytics/ui/common/UmaImage';
-import { SkillIcon } from './SkillPicker';
 import { fuzzyScore } from './staminaState';
-import type { CatalogSkill, CatalogUma, StaminaBuild } from './staminaTypes';
+import type { CatalogUma } from './staminaTypes';
 
 function UmaLabel({ uma, placeholder = 'No Uma' }: { uma?: CatalogUma; placeholder?: string }) {
   return <>
@@ -11,15 +10,14 @@ function UmaLabel({ uma, placeholder = 'No Uma' }: { uma?: CatalogUma; placehold
   </>;
 }
 
-export function StaminaUmaPicker({ umas, selected, uniques, full, locked = false, onSelect, onAptitudes, onLevel }: {
+export function StaminaUmaPicker({ umas, selected, hasUnique = false, full, locked = false, onSelect, onAptitudes }: {
   umas: CatalogUma[];
   selected: CatalogUma | undefined;
-  uniques: { skill: StaminaBuild['skills'][number]; meta: CatalogSkill }[];
+  hasUnique?: boolean;
   full: boolean;
   locked?: boolean;
   onSelect: (uma: CatalogUma | undefined) => void;
   onAptitudes?: (aptitudes: CatalogUma['aptitudes']) => void;
-  onLevel: (id: number, level: number) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -37,7 +35,7 @@ export function StaminaUmaPicker({ umas, selected, uniques, full, locked = false
     <span>Uma</span>
     <div className={onAptitudes ? 'stamina-uma-actions' : 'stamina-uma-single'}>
       <button type="button" className="stamina-uma-trigger" ref={trigger} disabled={locked} aria-haspopup="listbox" aria-expanded={open} aria-controls={open ? listId : undefined} onClick={() => { setQuery(''); setActive(0); setOpen(!open); }}>
-        <UmaLabel uma={selected} placeholder={uniques.length ? 'Choose Uma' : 'No Uma'}/><span className="stamina-uma-chevron" aria-hidden="true">▾</span>
+        <UmaLabel uma={selected} placeholder={hasUnique ? 'Choose Uma' : 'No Uma'}/><span className="stamina-uma-chevron" aria-hidden="true">▾</span>
       </button>
       {onAptitudes && <button type="button" className="stamina-uma-aptitudes" disabled={!selected} onClick={() => { if (selected) onAptitudes(selected.aptitudes); }}>Use base aptitudes</button>}
     </div>
@@ -57,8 +55,5 @@ export function StaminaUmaPicker({ umas, selected, uniques, full, locked = false
         {full ? <p role="status">Remove a skill to choose an Uma.</p> : !options.length && <p role="status">No matching Umas.</p>}
       </div>
     </div>}
-    {uniques.map(({ skill, meta }) => <div className="skill-chips" key={skill.id}><span className="skill-chip rarity-unique"><SkillIcon skill={meta}/><span>{meta.name}</span>
-      <label className="skill-level">Lv<select aria-label={`${meta.name} level`} value={skill.level} onChange={event => onLevel(skill.id, Number(event.target.value))}>{[1, 2, 3, 4, 5, 6].map(level => <option key={level}>{level}</option>)}</select></label>
-    </span></div>)}
   </div>;
 }

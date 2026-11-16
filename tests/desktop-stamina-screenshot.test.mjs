@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-  dedupeRows, discountedPrice, hintDiscount, priceAfterTier, purchasePlan,
+  dedupeRows, discountedPrice, hintDiscount, importedBuildSkills, priceAfterTier, purchaseList, purchasePlan,
   restoreScreenshotImport, selectTier, tierChains,
 } from '../apps/desktop/src/staminaScreenshot.ts';
 
@@ -29,12 +29,13 @@ const escapeArtist = offer(200541, 252, 3);
 const mediumCorners = offer(201112, 70, 3);
 const refractionArc = offer(201113, 282, 1);
 const costs = chain => chain.steps.filter(step => step.selectable).map(step => [step.id, step.total, step.priceIssue]);
+const planState = ({ left, overBy, skills }) => ({ left, overBy, skills });
 
 test('Tokyo Racecourse × is owned until its removal is selected, including older Learn imports', () => {
   const removal = offer(200033, 50, null);
   const [chain] = tierChains([owned(200033), removal], catalog);
-  assert.deepEqual(purchasePlan([chain], [], 200), { left: 200, overBy: 0, skills: [{ id: 200033, level: 1 }] });
-  assert.deepEqual(purchasePlan([chain], [200033], 200), { left: 150, overBy: 0, skills: [] });
+  assert.deepEqual(planState(purchasePlan([chain], [], 200)), { left: 200, overBy: 0, skills: [{ id: 200033, level: 1 }] });
+  assert.deepEqual(planState(purchasePlan([chain], [200033], 200)), { left: 150, overBy: 0, skills: [] });
   assert.deepEqual(purchasePlan(tierChains([removal], catalog), [], 200).skills, [{ id: 200033, level: 1 }]);
   assert.deepEqual(chain.steps.filter(step => step.selectable).map(step => [step.id, step.total, !!step.estimated]),
     [[200033, 50, false], [200032, 140, true], [200031, 250, true]]);
@@ -47,7 +48,7 @@ test('Tokyo Racecourse ○ replaces the debuff and accounts for the removal once
   assert.equal(circle.total, 140);
   assert.equal(circle.estimated, true);
   assert.equal(priceAfterTier(chain, circle, 200033), 90);
-  assert.deepEqual(purchasePlan([chain], selectTier([200033], chain, 200032), 200),
+  assert.deepEqual(planState(purchasePlan([chain], selectTier([200033], chain, 200032), 200)),
     { left: 60, overBy: 0, skills: [{ id: 200032, level: 1 }] });
   assert.deepEqual(purchasePlan(tierChains([owned(200032), offer(200033, 50, null)], catalog), [], 200).skills,
     [{ id: 200032, level: 1 }]);
@@ -66,7 +67,7 @@ test('Escape Artist shows 252, then 126 after selecting Fast-Paced', () => {
   let selected = selectTier([], chain, 200542);
   assert.equal(priceAfterTier(chain, chain.steps[1], selected[0]), 126);
   selected = selectTier(selected, chain, 200541);
-  assert.deepEqual(purchasePlan(chains, selected, 200), {
+  assert.deepEqual(planState(purchasePlan(chains, selected, 200)), {
     left: -52, overBy: 52, skills: [{ id: 200541, level: 1 }],
   });
   assert.equal(purchasePlan(chains, selectTier(selected, chain), 200).left, 200);
@@ -162,7 +163,23 @@ test('restores scans and keeps a finished Uma build without a budget or purchasa
   const restored = restoreScreenshotImport(JSON.parse(JSON.stringify(scan)), catalog);
   assert.deepEqual(restored, { points: 252, observations: [fastPaced, escapeArtist], selected: [200541], ignored: ['Carnival Bonus'] });
   const finished = restoreScreenshotImport({ ...scan, points: null, observations: [owned(110681, 5), owned(200182), fastPaced] }, catalog);
-  assert.deepEqual(purchasePlan(tierChains(finished.observations, catalog), finished.selected, finished.points), {
+  assert.deepEqual(planState(purchasePlan(tierChains(finished.observations, catalog), finished.selected, finished.points)), {
     left: null, overBy: 0, skills: [{ id: 110681, level: 5 }, { id: 200182, level: 1 }],
   });
+});
+
+test('Buying uses the total across selected tiers and copies plain names and prices', () => {
+  const chains = tierChains([fastPaced, escapeArtist, owned(200033), offer(200033, 50, null)], catalog);
+  const plan = purchasePlan(chains, [200541, 200033], 250);
+  assert.equal(plan.spent, 302);
+  assert.equal(plan.left, -52);
+  assert.equal(plan.purchases.length, 2);
+  const names = { 200541: 'Escape Artist', 200033: 'Tokyo Racecourse ×' };
+  assert.equal(purchaseList(plan.purchases, id => names[id]), 'Escape Artist — 252 SP\nRemove Tokyo Racecourse × — 50 SP');
+});
+
+test('manual skills augment a scan without replacing purchases or duplicating scanned tiers', () => {
+  const chains = tierChains([fastPaced, escapeArtist], catalog);
+  assert.deepEqual(importedBuildSkills({ selected: [200541], points: 252, manualSkills: [9, 9, 200542] }, chains, catalog),
+    [{ id: 9, level: 1 }, { id: 200541, level: 1 }]);
 });

@@ -27,6 +27,7 @@ export interface ScreenshotImport {
   observations: Observation[];
   ignored: string[];
   selected: number[];
+  manualSkills?: number[];
 }
 
 export const hintDiscount = (hint: number | null) => [0, 10, 20, 30, 35, 40][hint ?? 0] ?? 0;
@@ -213,16 +214,36 @@ export function purchasePlan(chains: SkillChain[], selected: number[], points: n
   let spent = 0;
   let hasUnknownPrice = false;
   const skills: StaminaBuild['skills'] = [];
+  const purchases: TierStep[] = [];
   for (const chain of chains) {
     const choice = [...chain.steps].reverse().find(step => step.selectable && selected.includes(step.id));
     if (choice) {
+      purchases.push(choice);
       if (choice.total === null) hasUnknownPrice = true;
       else spent += choice.total;
       if (!choice.removal) skills.push({ id: choice.id, level: 1 });
     } else if (chain.owned) skills.push(chain.owned);
   }
   skills.sort((a, b) => a.id - b.id);
-  return { skills, left: hasUnknownPrice || points === null ? null : points - spent, overBy: points === null ? 0 : Math.max(0, spent - points) };
+  return { skills, purchases, spent: hasUnknownPrice ? null : spent,
+    left: hasUnknownPrice || points === null ? null : points - spent, overBy: points === null ? 0 : Math.max(0, spent - points) };
+}
+
+export function purchaseList(purchases: TierStep[], name: (id: number) => string): string {
+  return purchases.map(step => `${step.removal ? 'Remove ' : ''}${name(step.id)} — ${step.total === null ? 'Unknown price' : `${step.total.toLocaleString('en-US')} SP`}`).join('\n');
+}
+
+export function scanSkillIds(chains: SkillChain[], catalog: ImportCatalog): Set<number> {
+  const ids = new Set(chains.flatMap(chain => chain.steps.map(step => step.id)));
+  const groups = new Set([...ids].map(id => catalog[id]?.tier?.group).filter(group => group !== undefined));
+  for (const [id, skill] of Object.entries(catalog)) if (skill.tier && groups.has(skill.tier.group)) ids.add(Number(id));
+  return ids;
+}
+
+export function importedBuildSkills(scan: ScreenshotImport, chains: SkillChain[], catalog: ImportCatalog): StaminaBuild['skills'] {
+  const scanned = scanSkillIds(chains, catalog);
+  const manual = [...new Set(scan.manualSkills)].filter(id => !scanned.has(id));
+  return [...purchasePlan(chains, scan.selected, scan.points).skills, ...manual.map(id => ({ id, level: 1 }))].sort((a, b) => a.id - b.id);
 }
 
 export function selectTier(selected: number[], chain: SkillChain, id: number | undefined) {
@@ -231,7 +252,7 @@ export function selectTier(selected: number[], chain: SkillChain, id: number | u
 
 export function restoreScreenshotImport(value: unknown, catalog: ImportCatalog | undefined): ScreenshotImport | undefined {
   if (!catalog || !value || typeof value !== 'object') return undefined;
-  const { points, observations, selected, ignored } = value as Partial<ScreenshotImport>;
+  const { points, observations, selected, ignored, manualSkills } = value as Partial<ScreenshotImport>;
   if (points === undefined || (points !== null && (!Number.isInteger(points) || points < 0 || points > 65535)) || !Array.isArray(observations)) return undefined;
   const validNumber = (n: number | null, low: number, high: number) =>
     n === null || (Number.isInteger(n) && n >= low && n <= high);
@@ -243,5 +264,6 @@ export function restoreScreenshotImport(value: unknown, catalog: ImportCatalog |
     observations: rows,
     selected: points !== null && Array.isArray(selected) ? [...new Set(selected.filter(id => Number.isInteger(id) && Object.hasOwn(catalog, id)))] : [],
     ignored: Array.isArray(ignored) ? ignored.filter(text => typeof text === 'string') : [],
+    ...(Array.isArray(manualSkills) ? { manualSkills: [...new Set(manualSkills.filter(Number.isInteger))].slice(0, 100) } : {}),
   };
 }

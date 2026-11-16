@@ -1,6 +1,6 @@
 import bundled from '../src-tauri/data/role-kits.json';
 import { getStaminaStore, restoreStaminaMemory } from './staminaState';
-import { defaultStaminaInput, withStrategy, type Catalog, type CatalogUma, type StaminaBuild, type StaminaEditorBuild } from './staminaTypes';
+import { defaultStamina, defaultStaminaInput, staminaValue, withStrategy, type Catalog, type CatalogUma, type StaminaBuild, type StaminaEditorBuild } from './staminaTypes';
 
 export const roles = ['front', 'pace', 'late', 'end', 'runaway'] as const;
 export type Role = typeof roles[number];
@@ -8,7 +8,7 @@ export const defaultKits = bundled;
 export interface BuildPreset { id: string; name: string; build: StaminaEditorBuild }
 export interface PresetMemory { builds: BuildPreset[]; kits: Partial<Record<Role, number[]>>; defaults: StaminaBuild }
 export const ballparkDefaults: StaminaBuild = { ...structuredClone(defaultStaminaInput.build),
-  stats: { speed: 1600, stamina: 800, pow: 1200, guts: 600, wiz: 1200 } };
+  stats: { speed: 1600, stamina: defaultStamina, pow: 1200, guts: 600, wiz: 1200 } };
 const object = (v: unknown): Record<string, unknown> => v && typeof v === 'object' && !Array.isArray(v) ? v as Record<string, unknown> : {};
 export function restorePresets(value: unknown, catalog: Catalog): PresetMemory {
   const raw = object(value), kits = object(raw.kits);
@@ -17,7 +17,7 @@ export function restorePresets(value: unknown, catalog: Catalog): PresetMemory {
     memory.defaults = restoreStaminaMemory({ input: { build: { ...ballparkDefaults, ...object(raw.defaults), stats: { ...ballparkDefaults.stats, ...object(object(raw.defaults).stats) } } } }, catalog).input.build;
   }
   const rawStats = object(object(raw.defaults).stats);
-  for (const key of ['speed', 'pow', 'guts', 'wiz'] as const) if (!(typeof rawStats[key] === 'number' && Number.isInteger(rawStats[key]) && rawStats[key] >= 1 && rawStats[key] <= 2000)) memory.defaults.stats[key] = ballparkDefaults.stats[key];
+  for (const key of ['speed', 'stamina', 'pow', 'guts', 'wiz'] as const) if (!(typeof rawStats[key] === 'number' && Number.isInteger(rawStats[key]) && rawStats[key] >= 1 && rawStats[key] <= 2000)) memory.defaults.stats[key] = ballparkDefaults.stats[key];
   const ids = new Set<string>();
   if (Array.isArray(raw.builds)) for (const item of raw.builds.slice(0, 100)) {
     const preset = object(item);
@@ -33,7 +33,8 @@ export function ballparkBuild(role: Role, memory: PresetMemory, current: Stamina
   const limit = 100 - Number(role === 'runaway') - Number(!!uma);
   const skills = (memory.kits[role] ?? bundled[role]).filter(id => id !== 202051).slice(0, limit).map(id => ({ id, level: 1 }));
   if (uma) skills.push(unique ?? { id: uma.unique_skill_id, level: 4 });
-  return { ...withStrategy({ ...structuredClone(memory.defaults), stats: { ...memory.defaults.stats, stamina: current.stats.stamina }, skills }, roles.indexOf(role) + 1), umaCardId: uma?.card_id };
+  return { ...withStrategy({ ...structuredClone(memory.defaults), stats: { ...memory.defaults.stats, stamina: staminaValue(current, memory.defaults.stats.stamina) }, skills }, roles.indexOf(role) + 1),
+    umaCardId: uma?.card_id, usesDefaultStamina: current.usesDefaultStamina };
 }
 export async function loadPresets(catalog: Catalog): Promise<PresetMemory> { return restorePresets(await (await getStaminaStore()).get('presets-v1'), catalog); }
 let saving = Promise.resolve();

@@ -86,7 +86,6 @@
 /* Shared tables and later-round pages inherit the Arena palette and table font. */
 .desktop-shell table { font-variant-numeric: tabular-nums; }
 .desktop-shell :is(td:not([colspan]), .uma-table-value) { font-family: var(--font-mono); }
-.build-drawer { width: min(440px, calc(100vw - var(--rail-width) - 24px)); }
 .feed-banner { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; padding: 10px 14px; border: 1px solid; border-radius: var(--radius-lg); margin-bottom: 16px; font-size: 13px; }
 .feed-banner.error { background: #24101A; border-color: #5A1F2E; color: #FFD1DA; }
 .feed-banner.reconnect { background: #231C0C; border-color: #4A3B16; color: #F8E2A8; }

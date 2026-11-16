@@ -7,9 +7,9 @@ export function SkillIcon({ skill }: { skill: CatalogSkill | undefined }) {
   const [failed, setFailed] = useState(false);
   return skill?.icon_path && !failed ? <img className="skill-icon" alt="" loading="lazy" decoding="async" src={convertFileSrc(skill.icon_path)} onError={() => setFailed(true)}/> : <span className="skill-icon skill-icon-fallback" aria-hidden="true">◇</span>;
 }
-export function SkillPicker({ catalog, skills, onChange, recent, onRecent, limit, resolving = false }: {
+export function SkillPicker({ catalog, skills, onChange, recent, onRecent, limit, resolving = false, showSelected = true, addLabel }: {
   catalog: Catalog; skills: StaminaBuild['skills']; onChange: (skills: StaminaBuild['skills']) => void;
-  recent: number[]; onRecent: (recent: number[]) => void; limit: number; resolving?: boolean;
+  recent: number[]; onRecent: (recent: number[]) => void; limit: number; resolving?: boolean; showSelected?: boolean; addLabel?: string;
 }) {
   const listId = useId();
   const [adding, setAdding] = useState(false), [query, setQuery] = useState(''), [active, setActive] = useState(0);
@@ -26,12 +26,12 @@ export function SkillPicker({ catalog, skills, onChange, recent, onRecent, limit
     setAdding(false); setQuery(''); setActive(0); requestAnimationFrame(() => addButton.current?.focus());
   };
   return <div className="skill-picker">
-    <div className="skill-chips">{skills.map(skill => {
+    <div className="skill-chips">{showSelected && skills.map(skill => {
       const meta = catalog.skills.find(s => s.id === skill.id);
       return <span className={`skill-chip rarity-${meta?.rarity ?? 'white'}`} key={skill.id}><SkillIcon skill={meta}/><span>{meta?.name ?? `Skill ${skill.id}`}</span>
         <button type="button" aria-label={`Remove skill ${skill.id}`} onClick={() => onChange(skills.filter(s => s.id !== skill.id))}>×</button></span>;
     })}
-    {!adding ? <button ref={addButton} type="button" className="add-skill" disabled={skills.length >= limit} onClick={() => setAdding(true)}>{resolving ? 'Match skill' : '+ Add skill'}</button> : <div className="skill-typeahead" ref={typeahead}>
+    {!adding ? <button ref={addButton} type="button" className="add-skill" disabled={skills.length >= limit} onClick={() => setAdding(true)}>{addLabel ?? (resolving ? 'Match skill' : '+ Add skill')}</button> : <div className="skill-typeahead" ref={typeahead}>
       <input autoFocus role="combobox" aria-label="Search skills" aria-autocomplete="list" aria-expanded="true" aria-controls={listId} aria-activedescendant={matches.length ? `${listId}-${selected}` : undefined} value={query} placeholder="Type a skill name…" onChange={e => { setQuery(e.target.value); setActive(0); }} onKeyDown={e => {
         if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setAdding(false); requestAnimationFrame(() => addButton.current?.focus()); }
         if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); const next = (selected + (e.key === 'ArrowDown' ? 1 : -1) + matches.length) % Math.max(1, matches.length); setActive(next); document.getElementById(`${listId}-${next}`)?.scrollIntoView({ block: 'nearest' }); }

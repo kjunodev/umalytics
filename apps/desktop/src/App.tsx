@@ -8,6 +8,7 @@ import { useUiServices, type RequestedMatch } from '@umalytics/ui';
 import type { EsportsTeamIconMap, PlayerProfileSummary, PlayerStatsScope } from '@umalytics/shared';
 import { DesktopRoom, feedDiagnostics, type FeedEnvelope, type FeedStatus } from './feed';
 import { Stamina, type DraftRun } from './Stamina';
+import type { StaminaView } from './staminaState';
 import { CompactStamina } from './CompactStamina';
 import { Players } from './Players';
 import { History } from './History';
@@ -40,6 +41,7 @@ export function App() {
   const [prefs, setPrefs] = useState({ ...preferences });
   const [draftRun, setDraftRun] = useState<DraftRun>();
   const [openStaminaDraft, setOpenStaminaDraft] = useState(0);
+  const [staminaView, setStaminaView] = useState<StaminaView>('requirement');
   const [showRaceDataError, setShowRaceDataError] = useState(false);
   const [shellError, setShellError] = useState('');
   const room = useRef(new DesktopRoom());
@@ -198,11 +200,14 @@ export function App() {
         <span className="compact-room num" title={feedLabel}><i className={status?.state === 'connected' ? 'live-dot' : 'idle-dot'}/>{code ?? 'No room'}</span>
         <button className="icon-button" aria-label="Pin on top" aria-pressed={pinned} disabled={windowBusy} onClick={() => { void togglePin(); }}><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 2h4l-.5 4 2.5 2v1H4V8l2.5-2L6 2zM8 9v5"/></svg></button>
         <button className="icon-button" aria-label="Expand to full mode" disabled={windowBusy} onClick={() => { void toggleMode(); }}><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M9.5 2.5h4v4M6.5 13.5h-4v-4M13.5 2.5 9 7M2.5 13.5 7 9"/></svg></button>
-      </header> : <header className="page-header"><h1>{displayedPage === 'Stamina' ? 'Stamina check' : displayedPage}</h1>{displayedPage === 'Live' ? tabs : <span className="subtitle">{displayedPage === 'Stamina' && !showRaceDataError ? 'Full spurt and survival' : ''}</span>}
+      </header> : <header className={`page-header${displayedPage === 'Stamina' ? ' stamina-page-header' : ''}`}><h1>{displayedPage}</h1>{displayedPage === 'Live' ? tabs : displayedPage === 'Stamina' && !showRaceDataError && <div className="seg stamina-view-switch" role="group" aria-label="Stamina mode">
+        <button type="button" aria-pressed={staminaView === 'requirement'} onClick={() => setStaminaView('requirement')}>Requirement</button>
+        <button type="button" aria-pressed={staminaView === 'assessment'} onClick={() => setStaminaView('assessment')}>Assessment</button>
+      </div>}
         <div className="page-actions">{feedBox}{['Live', 'History', 'Players'].includes(displayedPage) && <div className="seg" role="group" aria-label="Stats scope">{(['currentSeason', 'allTime'] as const).map(value => <button key={value} aria-pressed={scope === value} onClick={() => setScope(value)}>{value === 'currentSeason' ? 'Season' : 'All-time'}</button>)}</div>}
         <button disabled={windowBusy} onClick={() => { void toggleMode(); }}>Compact</button></div></header>}
       <UpdateBanner updates={updates} roomActive={roomActive}/>
-      <main className={`content ${liveView && liveTab === 'Umas' ? 'live-umas-content' : ''}`}>
+      <main className={`content${liveView && liveTab === 'Umas' ? ' live-umas-content' : ''}${displayedPage === 'Stamina' && !compact ? ' stamina-content' : ''}`}>
         {shellError && <div className="feed-banner error" role="alert">{shellError}</div>}
         {liveView && !feedBlocked && (feedError || status?.state === 'error') && <div className="feed-banner error" role="alert"><b>{feedError || 'Feed unavailable. Available data remains visible.'}</b><button disabled={feedBusy} onClick={() => { void retryFeed(); }}>Retry feed</button></div>}
         {liveView && !feedBlocked && profileError && <div className="feed-banner error" role="alert"><span>{profileError}</span><button disabled={profilesLoading} onClick={() => setRefresh(value => value + 1)}>Retry stats</button></div>}
@@ -214,7 +219,7 @@ export function App() {
             {liveTab === 'Umas' && <Umas roster={roster ?? { players: [] }} profiles={profiles} scope={scope} compact={compact}/>}
           </div>
         </>}
-        <div className="desktop-tool" hidden={displayedPage !== 'Stamina'}><Stamina draft={draft} openDraft={openStaminaDraft} onDraftRunChange={setDraftRun} onDataError={setShowRaceDataError}/></div>
+        <div className="desktop-tool" hidden={displayedPage !== 'Stamina'}><Stamina draft={draft} openDraft={openStaminaDraft} view={staminaView} onViewChange={setStaminaView} onDraftRunChange={setDraftRun} onDataError={setShowRaceDataError}/></div>
         {displayedPage === 'Players' && <Players onScopeChange={setScope} scope={scope} teamIcons={teamIcons} onOpenMatch={openMatch}/>}
         <div hidden={displayedPage !== 'History'}><History onScopeChange={setScope} scope={scope} requestedMatch={requestedMatch} teamIcons={teamIcons} onOpenMatch={openMatch}/></div>
         {displayedPage === 'Settings' && <Settings updates={updates} prefs={prefs} update={persist} pinned={pinned} busy={windowBusy} togglePin={() => { void togglePin(); }} copyDiagnostics={() => { void copyDiagnostics(); }} copyStatus={copyStatus}/>}

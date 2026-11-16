@@ -2,7 +2,7 @@ import { NumberField } from './NumberField';
 import { useState } from 'react';
 import { SkillPicker } from './SkillPicker';
 import { ballparkBuild, ballparkDefaults, defaultKits, roles, type PresetMemory, type Role } from './staminaPresetState';
-import { roleNames, strategy, type Catalog, type StaminaBuild, type StaminaEditorBuild } from './staminaTypes';
+import { roleNames, staminaValue, strategy, type Catalog, type StaminaBuild, type StaminaEditorBuild } from './staminaTypes';
 
 export function StaminaPresets({ catalog, memory, onChange, build, onLoad, recent, onRecent }: {
   catalog: Catalog; memory: PresetMemory; onChange: (value: PresetMemory) => void; build: StaminaEditorBuild; onLoad: (build: StaminaEditorBuild) => void;
@@ -20,7 +20,7 @@ export function StaminaPresets({ catalog, memory, onChange, build, onLoad, recen
     </form>
     {!memory.builds.length && <p className="muted">No saved builds yet.</p>}
     {memory.builds.map(preset => <div className="saved-build" key={preset.id}>
-      <strong>{preset.name}</strong><small className="muted">{roleNames[strategy(preset.build) - 1]} · {Object.values(preset.build.stats).join('/')} · {preset.build.skills.length} skills</small>
+      <strong>{preset.name}</strong><small className="muted">{roleNames[strategy(preset.build) - 1]} · {Object.values({ ...preset.build.stats, stamina: staminaValue(preset.build, memory.defaults.stats.stamina) }).join('/')} · {preset.build.skills.length} skills</small>
       <div className="preset-actions"><button type="button" onClick={() => onLoad(structuredClone(preset.build))}>Load {preset.name}</button>
         <button type="button" onClick={() => { setRenaming(preset.id); setRename(preset.name); }}>Rename</button>
         <button type="button" disabled={memory.builds.length >= 100} onClick={() => onChange({ ...memory, builds: [...memory.builds, { ...structuredClone(preset), id: crypto.randomUUID(), name: `${preset.name.slice(0, 73)} (copy)` }] })}>Duplicate</button>
@@ -36,7 +36,7 @@ export function StaminaPresets({ catalog, memory, onChange, build, onLoad, recen
       </div>}
       <small className="muted kit-source">{defaultKits.source}</small>
     </section>
-    <details className="ballpark-defaults"><summary>Ballpark defaults</summary><p className="muted">Stamina is kept from the current build.</p><div className="defaults-stats">{(['speed', 'pow', 'guts', 'wiz'] as const).map(key => <label key={key}>{({ speed: 'Speed', pow: 'Power', guts: 'Guts', wiz: 'Wit' })[key]}<NumberField aria-label={`Default ${key}`} min={1} max={2000} required value={memory.defaults.stats[key]} onChange={value => update({ ...memory.defaults, stats: { ...memory.defaults.stats, [key]: value } })}/></label>)}</div>
+    <details className="ballpark-defaults"><summary>Ballpark defaults</summary><p className="muted">Default stamina applies when the build has no stamina entered.</p><div className="defaults-stats">{(['speed', 'stamina', 'pow', 'guts', 'wiz'] as const).map(key => <label key={key}>{({ speed: 'Speed', stamina: 'Stamina', pow: 'Power', guts: 'Guts', wiz: 'Wit' })[key]}<NumberField aria-label={`Default ${key}`} min={1} max={2000} required value={memory.defaults.stats[key]} onChange={value => update({ ...memory.defaults, stats: { ...memory.defaults.stats, [key]: value } })}/></label>)}</div>
       <label>Mood<select aria-label="Default mood" value={memory.defaults.motivation} onChange={e => update({ ...memory.defaults, motivation: Number(e.target.value) })}>{['Awful', 'Bad', 'Normal', 'Good', 'Great'].map((name, i) => <option key={name} value={i + 1}>{name}</option>)}</select></label>
       {(['distance', 'style', 'ground'] as const).map(group => <div className={`aptitude-grid aptitude-${group}`} key={group}>{({ distance: ['Sprint', 'Mile', 'Medium', 'Long'], style: roleNames.slice(0, 4), ground: ['Turf', 'Dirt'] })[group].map((label, i) => <label key={label}>{label}<select aria-label={`Default ${label} aptitude`} value={memory.defaults[group][i]} onChange={e => { const values = [...memory.defaults[group]]; values[i] = Number(e.target.value); update({ ...memory.defaults, [group]: values }); }}>{['G', 'F', 'E', 'D', 'C', 'B', 'A', 'S'].map((grade, j) => <option key={grade} value={j + 1}>{grade}</option>)}</select></label>)}</div>)}
       <button type="button" onClick={() => update(structuredClone(ballparkDefaults))}>Reset ballpark defaults</button>

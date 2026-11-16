@@ -20,6 +20,7 @@ const drawerOnly = process.env.DESKTOP_SHOTS_SCENES === 'drawer';
 const updatesOnly = process.env.DESKTOP_SHOTS_SCENES === 'updates';
 const staminaOnly = process.env.DESKTOP_SHOTS_SCENES === 'stamina';
 const importOnly = process.env.DESKTOP_SHOTS_SCENES === 'stamina-import';
+const redesignOnly = process.env.DESKTOP_SHOTS_SCENES === 'stamina-redesign';
 const arenaOnly = process.env.DESKTOP_SHOTS_SCENES === 'arena';
 const statesOnly = process.env.DESKTOP_SHOTS_SCENES === 'states';
 const dataOnly = process.env.DESKTOP_SHOTS_SCENES === 'data';
@@ -39,8 +40,8 @@ try {
       await page.getByRole('group', { name: 'Live view', exact: true }).getByRole('button', { name, exact: true }).click();
     } else await page.locator('.sidebar').getByRole('button', { name, exact: true }).click();
   }
-  async function open(scene, width, height, prefs = {}) {
-    const page = await browser.newPage({ viewport: { width, height }, deviceScaleFactor: ['stamina-screenshot-import', 'stamina-finished-import', 'stamina-learn-import', 'blessing', 'stamina-capture'].includes(scene) ? 1.25 : 1 });
+  async function open(scene, width, height, prefs = {}, staminaMemory) {
+    const page = await browser.newPage({ viewport: { width, height }, deviceScaleFactor: ['stamina-redesign', 'stamina-screenshot-import', 'stamina-finished-import', 'stamina-learn-import', 'blessing', 'stamina-capture'].includes(scene) ? 1.25 : 1 });
     page.setDefaultTimeout(20000);
     page.on('pageerror', error => failures.push(error.message));
     await page.route('https://**/*', async route => {
@@ -52,7 +53,11 @@ try {
     });
     await page.route('http://asset.localhost/**', route => fixtureIcon ? route.fulfill({ contentType: 'image/webp', body: fixtureIcon }) : route.abort());
     await page.exposeFunction('__resizeShot__', size => page.setViewportSize({ width: Math.round(size.width), height: Math.round(size.height) }));
-    await page.addInitScript(({ scene, prefs }) => { window.__SHOT_SCENE__ = scene; if (Object.keys(prefs).length && !localStorage.getItem('shots:shell.json:shell')) localStorage.setItem('shots:shell.json:shell', JSON.stringify(prefs)); }, { scene, prefs });
+    await page.addInitScript(({ scene, prefs, staminaMemory }) => {
+      window.__SHOT_SCENE__ = scene;
+      if (Object.keys(prefs).length && !localStorage.getItem('shots:shell.json:shell')) localStorage.setItem('shots:shell.json:shell', JSON.stringify(prefs));
+      if (staminaMemory && !localStorage.getItem('shots:stamina.json:last-inputs-v1')) localStorage.setItem('shots:stamina.json:last-inputs-v1', JSON.stringify(staminaMemory));
+    }, { scene, prefs, staminaMemory });
     await page.goto(origin);
     await page.locator('.app-shell').waitFor();
     await page.waitForFunction(() => window.__SHOT_CONTROL__.feedReady);
@@ -130,7 +135,7 @@ try {
   async function screenshotImportShots() {
     const page = await open('stamina-screenshot-import', 1120, 980, { compactThreshold: 440 });
     await nav(page, 'Stamina');
-    const tab = page.getByRole('tab', { name: 'Scanned skills', exact: true });
+    const tab = page.getByRole('tab', { name: 'Skills', exact: true });
     const positions = () => page.evaluate(() => ['.stamina-toolbar', '.result-empty'].map(selector => {
       const rect = document.querySelector(selector).getBoundingClientRect();
       const origin = document.querySelector('.stamina-layout').getBoundingClientRect();
@@ -138,7 +143,8 @@ try {
     }).flat().join(','));
     await page.getByRole('button', { name: 'Import from screenshots' }).waitFor();
     const originalPositions = await positions();
-    check(await tab.count() === 0, 'Scanned skills is absent before applying a scan');
+    check(await tab.count() === 1 && await page.locator('.import-budget').count() === 0, 'Skills is available before applying a scan');
+    await page.getByRole('button', { name: 'Assessment', exact: true }).click();
     await page.getByRole('button', { name: 'Import from screenshots' }).click();
     const dialog = page.getByRole('dialog', { name: 'Import from screenshots' });
     await dialog.waitFor();
@@ -168,14 +174,14 @@ try {
     await dialog.getByLabel('Unique skill level').selectOption('5');
     await dialog.getByRole('spinbutton', { name: 'Stamina', exact: true }).fill('720');
     await apply.click();
-    const panel = page.getByRole('region', { name: 'Screenshot skills' });
-    const budget = panel.getByRole('status');
-    await budget.getByText('200 SP left', { exact: true }).waitFor();
-    check(await tab.getAttribute('aria-selected') === 'true' && await page.getByRole('tabpanel', { name: 'Scanned skills' }).getByRole('region', { name: 'Screenshot skills' }).isVisible(), 'Applying a scan opens the Scanned skills tab in the build editor');
+    const panel = page.getByRole('tabpanel', { name: 'Skills' });
+    const budget = panel.locator('.import-budget');
+    await budget.getByText('200 / 200 SP left', { exact: true }).waitFor();
+    check(await tab.getAttribute('aria-selected') === 'true' && await panel.isVisible(), 'Applying a scan opens the Skills tab in the build editor');
     check(await positions() === originalPositions, 'Applying a scan keeps the toolbar and empty result in place');
     await shot(page, 'stamina-scanned-skills');
-    check(await panel.getByText('Owned', { exact: true }).count() === 3, 'Career and Obtained rows are locked and deduplicated');
-    const fastPaced = panel.locator('.import-tier').filter({ hasText: 'Fast-Paced' });
+    check(await panel.getByRole('region', { name: 'Owned' }).locator('.build-skill-row').count() === 3, 'Career and Obtained rows are locked and deduplicated');
+    const fastPaced = panel.getByRole('region', { name: 'Owned' }).locator('.build-skill-row').filter({ hasText: 'Fast-Paced' });
     check(await fastPaced.getByText('Hint Lv 3 · 30% off', { exact: true }).count() === 1, 'Obtained rows retain their hints');
     check(await panel.getByText('Price mismatch · Scanned 170 SP', { exact: true }).count() === 1, 'Calculated and scanned prices are both visible on mismatch');
     await shot(page, 'stamina-import-price-mismatch');
@@ -193,11 +199,11 @@ try {
     await decreaseCorners.click();
     const increase = panel.getByRole('button', { name: 'Increase tier for Go with the Flow' });
     await increase.click();
-    await budget.getByText('80 SP left').waitFor();
+    await budget.getByText('80 / 200 SP left').waitFor();
     await increase.click();
     await budget.getByText('28 SP over budget').waitFor();
-    check(await budget.getByText('200 SP total', { exact: true }).count() === 1, 'The total remains separate from the over-budget amount');
-    await page.getByRole('tabpanel', { name: 'Scanned skills' }).evaluate(element => { element.scrollTop = 0; });
+    check(await budget.getByText('-28 / 200 SP left', { exact: true }).count() === 1, 'The total remains visible when over budget');
+    await page.getByRole('tabpanel', { name: 'Skills' }).locator('.skills-scroll').evaluate(element => { element.scrollTop = 0; });
     await shot(page, 'stamina-import-over-budget');
     const run = page.getByRole('button', { name: 'Run check', exact: true });
     await run.click();
@@ -211,12 +217,12 @@ try {
     await page.getByText(/Inputs changed since this run/).waitFor();
     await page.reload();
     await nav(page, 'Stamina');
-    await budget.getByText('80 SP left').waitFor();
-    await page.getByRole('tab', { name: 'Build', exact: true }).click();
+    await budget.getByText('80 / 200 SP left').waitFor();
+    await page.getByRole('tab', { name: 'Attributes', exact: true }).click();
     check(await page.getByRole('spinbutton', { name: 'Stamina', exact: true }).inputValue() === '720', 'Scan, edits and selected tier survive reload');
     await page.setViewportSize({ width: 440, height: 860 });
     await tab.click();
-    const narrowPanel = page.getByRole('tabpanel', { name: 'Scanned skills' });
+    const narrowPanel = page.getByRole('tabpanel', { name: 'Skills' }).locator('.skills-scroll');
     const narrowLayout = await narrowPanel.evaluate(element => {
       const initial = element.scrollTop;
       element.scrollTop = element.scrollHeight;
@@ -233,23 +239,33 @@ try {
     await page.evaluate(() => localStorage.setItem('shots:hide-screenshot-import', '1'));
     await page.reload();
     await nav(page, 'Stamina');
-    await page.getByRole('heading', { name: 'Build editor' }).waitFor();
-    check(await tab.count() === 0 && await panel.count() === 0 && await page.getByRole('button', { name: 'Import from screenshots' }).count() === 0, 'Hidden catalog exposes neither the import action nor the restored scan');
+    await page.getByRole('complementary', { name: 'Build editor' }).waitFor();
+    check(await tab.count() === 1 && await budget.count() === 0 && await page.getByRole('button', { name: 'Import from screenshots' }).count() === 0, 'Hidden catalog exposes neither the import action nor the restored scan');
+    await page.getByRole('tab', { name: 'Attributes' }).click();
     await page.getByRole('spinbutton', { name: 'Stamina', exact: true }).fill('725');
     await page.waitForFunction(() => JSON.parse(localStorage.getItem('shots:stamina.json:last-inputs-v1')).input.build.stats.stamina === 725);
     await page.evaluate(() => localStorage.removeItem('shots:hide-screenshot-import'));
     await page.reload();
     await nav(page, 'Stamina');
     await tab.click();
-    await budget.getByText('80 SP left').waitFor();
+    await budget.getByText('80 / 200 SP left').waitFor();
+    await panel.getByRole('button', { name: 'Add any skill', exact: true }).click();
+    await panel.getByRole('combobox', { name: 'Search skills' }).fill('Replay Recovery II');
+    await panel.getByRole('option', { name: 'Replay Recovery II', exact: true }).click();
+    check(await panel.getByRole('region', { name: 'Owned' }).getByText('Replay Recovery II', { exact: true }).count() === 1 &&
+      await budget.getByText('80 / 200 SP left').count() === 1, 'A manual skill can augment a scan without spending SP');
     const restoredPositions = await positions();
     await panel.getByRole('button', { name: 'Remove scan' }).click();
-    check(await tab.count() === 0 && await positions() === restoredPositions, 'Removing the scan hides its tab and keeps the main column in place');
+    check(await budget.count() === 0 && await positions() === restoredPositions, 'Removing the scan clears the budget and keeps the main column in place');
+    const undo = page.getByRole('button', { name: 'Undo import' });
+    await undo.click();
+    check(await page.getByRole('spinbutton', { name: 'Stamina', exact: true }).inputValue() === '600' && await undo.isDisabled(), 'Undo import restores the pre-import build after reload');
     await page.close();
   }
   async function finishedImportShots() {
     const page = await open('stamina-finished-import', 1120, 900);
     await nav(page, 'Stamina');
+    await page.getByRole('button', { name: 'Assessment', exact: true }).click();
     await page.getByRole('button', { name: 'Import from screenshots' }).click();
     const dialog = page.getByRole('dialog', { name: 'Import from screenshots' });
     await sendImages(dialog, 'drop', 2);
@@ -272,14 +288,14 @@ try {
     check(await smallPanelHint.count() === 0, 'Confirming the chips clears the window-size hint');
     await shot(page, 'stamina-import-finished-review');
     await apply.click();
-    const panel = page.getByRole('region', { name: 'Screenshot skills' });
-    await panel.getByRole('heading', { name: 'Finished Uma skills' }).waitFor();
-    check(await panel.getByText('Owned', { exact: true }).count() === 4 && await panel.getByRole('group', { name: /Purchase tier/ }).count() === 0, 'Finished skills are deduplicated and locked');
+    const panel = page.getByRole('tabpanel', { name: 'Skills' });
+    await panel.getByRole('heading', { name: 'Owned' }).waitFor();
+    check(await panel.getByRole('region', { name: 'Owned' }).locator('.build-skill-row').count() === 4 && await panel.getByRole('group', { name: /Purchase tier/ }).count() === 0, 'Finished skills are deduplicated and locked');
     await shot(page, 'stamina-import-finished-build');
     await page.reload();
     await nav(page, 'Stamina');
-    await panel.getByRole('heading', { name: 'Finished Uma skills' }).waitFor();
-    await page.getByRole('tab', { name: 'Build', exact: true }).click();
+    await panel.getByRole('heading', { name: 'Owned' }).waitFor();
+    await page.getByRole('tab', { name: 'Attributes', exact: true }).click();
     check(await page.getByRole('spinbutton', { name: 'Stamina', exact: true }).inputValue() === '669', 'Finished build survives reload');
     await page.close();
   }
@@ -298,7 +314,7 @@ try {
     await level.selectOption('5');
     check(await apply.isEnabled(), 'Attributes and Learn can apply without Career Skills');
     await apply.click();
-    await page.getByRole('region', { name: 'Screenshot skills' }).getByText('200 SP left', { exact: true }).waitFor();
+    await page.getByRole('tabpanel', { name: 'Skills' }).getByText('200 / 200 SP left', { exact: true }).waitFor();
     await page.close();
   }
   async function captureShots() {
@@ -427,23 +443,137 @@ try {
     check(await apply.isEnabled(), 'Full Stats Skills and Learn can apply together');
     await shot(page, 'stamina-full-stats-review');
     await apply.click();
-    const scanned = page.getByRole('region', { name: 'Screenshot skills' });
+    const scanned = page.getByRole('tabpanel', { name: 'Skills' });
     await scanned.getByText('Remove Tokyo Racecourse ×', { exact: true }).waitFor();
     check(await scanned.getByText('Estimated upgrade price after removing Tokyo Racecourse ×', { exact: true }).isVisible(), 'Positive upgrade from a debuff is marked estimated');
     await shot(page, 'stamina-remove-negative-skill');
     const purchase = scanned.getByRole('button', { name: 'Increase tier for Tokyo Racecourse ×' });
     await purchase.click();
-    await scanned.getByText('150 SP left', { exact: true }).waitFor();
+    await scanned.getByText('150 / 200 SP left', { exact: true }).waitFor();
     await purchase.click();
-    await scanned.getByText('60 SP left', { exact: true }).waitFor();
+    await scanned.getByText('60 / 200 SP left', { exact: true }).waitFor();
     await page.close();
   }
-  if (importOnly) await importShots();
+  async function staminaRedesignShots() {
+    const storageKey = 'shots:stamina.json:last-inputs-v1';
+    for (const [width, height] of [[1280, 800], [1000, 700], [440, 860]]) {
+      const race = { map_id: 'hanshin-3200-turf-outer-to-inner', ground_condition: 1, weather: 1, season: 4 };
+      const build = {
+        umaCardId: 106802, running_style: 1, stats: { speed: 1193, stamina: 800, pow: 814, guts: 652, wiz: 681 },
+        skills: [{ id: 110681, level: 5 }, { id: 1, level: 1 }],
+      };
+      const page = await open('stamina-redesign', width, height, { compactThreshold: 440 }, {
+        input: { race, build }, draftInput: { race, build: { ...build, stats: { ...build.stats, stamina: 1120 } } }, buildTab: 'build',
+      });
+      const name = suffix => `stamina-redesign-${suffix}-${width}x${height}`;
+      await nav(page, 'Stamina');
+      const modes = page.getByRole('group', { name: 'Stamina mode' });
+      const requirement = modes.getByRole('button', { name: 'Requirement' });
+      const assessment = modes.getByRole('button', { name: 'Assessment' });
+      const editor = page.getByRole('complementary', { name: 'Build editor' });
+      const stamina = editor.getByRole('spinbutton', { name: 'Stamina', exact: true });
+      const attributes = editor.getByRole('tab', { name: 'Attributes' });
+      const skills = editor.getByRole('tab', { name: 'Skills' });
+      const summary = editor.locator('.build-heading h2');
+      await editor.waitFor();
+      check(await requirement.getAttribute('aria-pressed') === 'true' && await stamina.count() === 0, 'Requirement starts without a stamina field');
+      check(await attributes.getAttribute('aria-selected') === 'true', 'Saved Build tab migrates to Attributes');
+      check(await page.evaluate(() => {
+        const title = document.querySelector('.stamina-view-switch').getBoundingClientRect();
+        const toolbar = document.querySelector('.stamina-toolbar').getBoundingClientRect();
+        return devicePixelRatio === 1.25 && title.bottom <= toolbar.top && toolbar.top - document.querySelector('.page-header').getBoundingClientRect().bottom <= 6;
+      }), 'Mode control is in the title above the toolbar at 125%');
+      await assessment.click();
+      check(await stamina.inputValue() === '800', 'Assessment shows the same build’s trained stamina');
+      await page.waitForFunction(key => JSON.parse(localStorage.getItem(key))?.view === 'assessment', storageKey);
+      await page.reload();
+      await stamina.waitFor();
+      check(await assessment.getAttribute('aria-pressed') === 'true', 'Assessment survives a reload');
+      const editorBody = editor.getByRole('tabpanel', { name: 'Attributes' });
+      check(await editorBody.evaluate(el => el.scrollHeight <= el.clientHeight + 1), 'Attributes fit without internal scrolling');
+      if (width >= 1000) {
+        check(await page.locator('.stamina-content').evaluate(el => el.scrollHeight <= el.clientHeight + 1), 'Attributes fit without page scrolling');
+        check(await editor.evaluate(el => el.getBoundingClientRect().bottom <= innerHeight), 'Full editor is visible with the Attributes tab open');
+      }
+      if (width === 1280) check(await editor.evaluate(el => Math.round(el.getBoundingClientRect().width) === 440), 'Editor reaches its designed 440px width');
+      await editor.scrollIntoViewIfNeeded();
+      await shot(page, name('attributes'));
+      await skills.click();
+      check((await summary.innerText()).includes('Kitasan Black · Front · 1193 · 800 · 814 · 652 · 681'), 'Build summary stays visible on Skills');
+      check(await editor.getByRole('button', { name: 'Add any skill' }).isVisible() && await editor.locator('.import-budget').count() === 0, 'Skills without a scan supports manual search');
+      await editor.scrollIntoViewIfNeeded();
+      await shot(page, name('skills-without-scan'));
+      await attributes.click();
+      await requirement.click();
+      await page.getByRole('button', { name: 'Run check' }).click();
+      const result = page.locator('.stamina-headline');
+      await result.getByRole('heading', { name: '1,070 stamina' }).waitFor();
+      check(await result.getByText(/Without recoveries/).count() === 1 && await result.getByText(/At 95%/).count() === 1, 'Requirement shows both data-backed estimates');
+      await shot(page, name('requirement'));
+      await assessment.click();
+      await result.getByRole('heading', { name: '270 short' }).waitFor();
+      check(await result.locator('.scale-track i').count() === 2, 'Assessment marks your stamina and the requirement');
+      check(await page.evaluate(() => window.__SHOT_CONTROL__.calls.filter(call => call.command === 'stamina_check').length === 1), 'View changes reuse the run');
+      await shot(page, name('assessment'));
+      await page.getByText('Run details', { exact: true }).click();
+      await page.getByText('Run details', { exact: true }).evaluate(el => el.scrollIntoView({ block: 'start' }));
+      await shot(page, name('run-details-open'));
+
+      await page.evaluate(async () => {
+        const c = window.__SHOT_CONTROL__;
+        await c.emit('feed-message', c.draftMessage(false));
+      });
+      await page.getByRole('group', { name: 'Course mode' }).getByRole('button', { name: 'Draft', exact: true }).click();
+      await requirement.click();
+      await page.getByRole('button', { name: 'Run 7 races' }).click();
+      const ledger = page.getByRole('table', { name: 'Draft race results' });
+      await ledger.locator('.draft-race-link').last().waitFor();
+      check((await ledger.getByRole('columnheader').allTextContents()).join(',') === 'Race,Need', 'Requirement ledger only shows Need');
+      await shot(page, name('draft-requirement'));
+      await assessment.click();
+      check((await ledger.getByRole('columnheader').allTextContents()).join(',') === 'Race,Need,You,Margin' && await ledger.locator('.margin-bar').count() === 7, 'Assessment ledger adds raw stamina and signed margin bars');
+      await shot(page, name('draft-assessment'));
+
+      await page.evaluate(key => {
+        const saved = JSON.parse(localStorage.getItem(key));
+        const row = (id, owned, price, level = null) => ({ id, owned, price, level, hint: null });
+        saved.buildTab = 'scanned-skills';
+        saved.input.screenshotImport = { points: 200, selected: [200502], ignored: [],
+          observations: [row(110681, true, null, 5), row(910311, false, 170), row(200033, true, null), row(200033, false, 50),
+            row(200032, false, 140), row(200502, false, 120), row(200501, false, 240), row(200182, false, 90),
+            row(200181, false, 200), row(201112, false, 100), row(201113, false, 360)] };
+        localStorage.setItem(key, JSON.stringify(saved));
+      }, storageKey);
+      await page.reload();
+      const budget = editor.locator('.import-budget');
+      await budget.getByText('80 / 200 SP left').waitFor();
+      check(await skills.getAttribute('aria-selected') === 'true', 'Saved Scanned skills migrates to Skills');
+      check(await editor.getByRole('region', { name: 'Owned' }).getByText('Remove · 50 SP').count() === 1, 'Owned displays the debuff removal price');
+      check(await editor.getByRole('region', { name: 'Buying' }).getByText('1 skill · 120 SP').count() === 1, 'Buying shows the selected count and total');
+      await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+      await editor.getByRole('button', { name: 'Copy list' }).click();
+      await editor.getByText('List copied', { exact: true }).waitFor();
+      check(await page.evaluate(() => navigator.clipboard.readText()) === 'Go with the Flow — 120 SP', 'Copy list writes plain names and prices');
+      const scroll = editor.locator('.skills-scroll');
+      const before = await budget.evaluate(el => el.getBoundingClientRect().top);
+      const scrolls = await scroll.evaluate(el => { el.scrollTop = el.scrollHeight; return { top: el.scrollTop, height: el.scrollHeight, visible: el.clientHeight }; });
+      check(scrolls.top > 0 && await budget.evaluate(el => el.getBoundingClientRect().top) === before, `SP is pinned above the scrolling list at ${width}px (${scrolls.height}/${scrolls.visible})`);
+      await scroll.evaluate(el => { el.scrollTop = 0; });
+      await editor.scrollIntoViewIfNeeded();
+      await shot(page, name('skills-with-scan'));
+      await page.close();
+    }
+  }
+  if (redesignOnly) await staminaRedesignShots();
+  else if (importOnly) await importShots();
   else if (drawerOnly) await (await import('./shots-player-drawer.mjs')).runPlayerDrawerShots({ open, nav, shot, check });
   else if (updatesOnly) await (await import('./shots-updater.mjs')).runUpdateShots({ open, nav, shot, check });
   else if (blessingOnly) await (await import('./shots-blessing.mjs')).runBlessingShots({ open, nav, shot, check });
   else {
-  if (!arenaOnly && !statesOnly && !dataOnly && !usabilityOnly) await importShots();
+  if (!arenaOnly && !statesOnly && !dataOnly && !usabilityOnly) {
+    await staminaRedesignShots();
+    await importShots();
+  }
   if (!staminaOnly && !arenaOnly && !dataOnly && !usabilityOnly) {
     const page = await open('lobby', 1280, 800);
     await page.waitForFunction(() => document.querySelectorAll('.arena-card[data-state=loaded]').length === 10);
@@ -689,6 +819,7 @@ try {
     await page.getByRole('button', { name: 'Stamina', exact: true }).click();
     await shot(page, `stamina-empty-${width}x${height}`);
     check(await page.getByRole('button', { name: 'Race settings', exact: true }).count() === 0, 'Toolbar gear removed');
+    await page.getByRole('button', { name: 'Assessment', exact: true }).click();
     const staminaField = page.getByRole('spinbutton', { name: 'Stamina', exact: true });
     const previousStamina = await staminaField.inputValue();
     await staminaField.fill('');
@@ -710,16 +841,16 @@ try {
     await page.getByRole('group', { name: 'Track', exact: true }).getByRole('button', { name: 'Hanshin', exact: true }).click();
     await page.getByRole('group', { name: 'Race', exact: true }).getByRole('button', { name: '3200 · Turf · Outer to Inner', exact: true }).click();
     await page.getByRole('button', { name: /^Run (check|\d+ races)$/ }).click();
-    await page.locator('.stamina-chart').waitFor();
+    await page.locator('.stamina-headline').waitFor();
+    check(!(await page.locator('.run-details').getAttribute('open')), 'Run details are collapsed by default');
     check(await page.locator('.stale-notice').count() === 0, 'Reordered engine input keys do not mark an unchanged result stale');
     check(!(await page.locator('.result-table').getAttribute('open')), 'Per-stamina table collapsed by default');
     check((await page.locator('.stamina-headline').innerText()).includes('1,070'), 'Headline uses the joint threshold');
-    check(await page.locator('.joint-curve').count() === 1, 'Curve includes joint outcomes');
     check(await page.locator('.stamina-toolbar .run').evaluate(el => parseFloat(getComputedStyle(el).paddingLeft) >= 12), 'Run button keeps its padding');
     await shot(page, `stamina-toolbar-${width}x${height}`);
     await shot(page, `stamina-results-${width}x${height}`);
     const resultTop = await page.locator('.stamina-headline').evaluate(el => el.getBoundingClientRect().top);
-    await page.getByRole('complementary', { name: 'Build editor', exact: true }).getByRole('tab', { name: 'Build', exact: true }).click();
+    await page.getByRole('complementary', { name: 'Build editor', exact: true }).getByRole('tab', { name: 'Attributes', exact: true }).click();
     check(await page.locator('.stamina-workspace').evaluate(el => el.querySelector('.stamina-results').getBoundingClientRect().right <= el.querySelector('.build-drawer').getBoundingClientRect().left), 'Dock sits beside results without covering them');
     check(await page.locator('.stamina-headline').evaluate(el => el.getBoundingClientRect().top) === resultTop, 'Opening the dock keeps the results top stable');
     await shot(page, `stamina-results-panel-${width}x${height}`);
@@ -733,8 +864,7 @@ try {
       await page.keyboard.press('Escape');
       check(await page.getByRole('button', { name, exact: true }).evaluate(el => el === document.activeElement), `${name} restores focus`);
     }
-    if (await page.getByRole('button', { name: 'Expand build panel', exact: true }).count()) await page.getByRole('button', { name: 'Expand build panel', exact: true }).click();
-    await page.getByRole('tab', { name: 'Race settings', exact: true }).click();
+    await page.getByRole('tab', { name: 'Race', exact: true }).click();
     const field = page.getByRole('group', { name: 'Field', exact: true });
     check(await field.getByRole('button', { name: 'Average lobby', exact: true }).getAttribute('aria-pressed') === 'true', 'Average remains the default field');
     await field.getByRole('button', { name: 'Mirror', exact: true }).click();
@@ -750,11 +880,11 @@ try {
     await page.getByRole('group', { name: 'Weather', exact: true }).getByRole('button', { name: 'Rainy', exact: true }).click();
     await page.getByRole('button', { name: 'Season', exact: true }).click();
     await page.getByRole('group', { name: 'Season', exact: true }).getByRole('button', { name: 'Summer', exact: true }).click();
-    await page.getByRole('complementary', { name: 'Build editor', exact: true }).getByRole('tab', { name: 'Build', exact: true }).click();
+    await page.getByRole('complementary', { name: 'Build editor', exact: true }).getByRole('tab', { name: 'Attributes', exact: true }).click();
     const build = page.getByRole('complementary', { name: 'Build editor', exact: true });
-    await build.getByRole('tab', { name: 'Race settings', exact: true }).click();
+    await build.getByRole('tab', { name: 'Race', exact: true }).click();
     check(await build.getByRole('combobox', { name: 'Mood', exact: true }).inputValue() === '4', 'Mood shared by advanced settings and build');
-    await build.getByRole('tab', { name: 'Build', exact: true }).click();
+    await build.getByRole('tab', { name: 'Attributes', exact: true }).click();
     check(await build.locator('.aptitude-grid select[aria-label$="aptitude"]').count() === 10, 'All distance, surface, and strategy aptitudes exposed');
     check(await build.locator('.aptitude-grid select[aria-label$="aptitude"]').evaluateAll(els => els.every(el => el.value === '7')), 'All aptitudes default A');
     await build.getByRole('spinbutton', { name: 'Speed', exact: true }).fill('1600');
@@ -764,20 +894,22 @@ try {
     await build.getByRole('combobox', { name: 'Long aptitude', exact: true }).selectOption('8');
     await build.getByRole('group', { name: 'Strategy', exact: true }).getByRole('button', { name: 'Front', exact: true }).click();
     await shot(page, `stamina-build-${width}x${height}`);
+    await build.getByRole('tab', { name: 'Skills', exact: true }).click();
     check((await page.locator('.stale-notice').innerText()).includes('Inputs changed'), 'Edits mark the old result stale');
-    await build.getByRole('button', { name: '+ Add skill', exact: true }).first().click();
+    await build.getByRole('button', { name: 'Add any skill', exact: true }).click();
     const search = build.getByRole('combobox', { name: 'Search skills', exact: true });
     await search.fill('rply rcvy');
     check(await build.getByRole('listbox', { name: 'Matching skills' }).getByRole('option').count() === 2, 'Type-ahead fuzzy subsequence match');
     await search.scrollIntoViewIfNeeded();
     await shot(page, `stamina-skill-search-${width}x${height}`);
     await search.press('Enter');
-    check(await build.locator('.skill-chip.rarity-gold').count() === 1, 'Enter adds gold chip');
+    check(await build.locator('.build-skill-row').count() === 1, 'Enter adds the skill to Owned');
     check(await build.locator('.skill-level').count() === 0, 'Nonunique skill has no level control');
     if (fixtureIcon) {
-      await build.locator('.skill-chip img').evaluate(img => img.decode());
-      check(await build.locator('.skill-chip img').evaluate(img => img.naturalWidth > 0), 'External local icon loads');
+      await build.locator('.build-skill-row img').evaluate(img => img.decode());
+      check(await build.locator('.build-skill-row img').evaluate(img => img.naturalWidth > 0), 'External local icon loads');
     }
+    await build.getByRole('tab', { name: 'Attributes', exact: true }).click();
     const umaTrigger = build.locator('.stamina-uma-trigger');
     const umaSearch = build.getByRole('combobox', { name: 'Search Umas', exact: true });
     const baseAptitudes = build.getByRole('button', { name: 'Use base aptitudes', exact: true });
@@ -791,9 +923,11 @@ try {
     check(await build.getByRole('option', { name: 'Ines Fujin [Melt Your Heart]', exact: true }).count() === 1, 'Uma search accepts a fuzzy subsequence');
     await umaShot('search');
     await umaSearch.press('Enter');
-    check(await inesLevel.inputValue() === '4', 'An Uma starts with unique level 4');
     check(await build.getByRole('combobox', { name: 'Long aptitude', exact: true }).inputValue() === '8', 'Selecting an Uma leaves aptitudes alone');
     await umaShot('selected');
+    await build.getByRole('tab', { name: 'Skills', exact: true }).click();
+    check(await inesLevel.inputValue() === '4', 'An Uma starts with unique level 4');
+    await build.getByRole('tab', { name: 'Attributes', exact: true }).click();
     await baseAptitudes.click();
     check(await build.getByRole('combobox', { name: 'Long aptitude', exact: true }).inputValue() === '5', 'Base distance aptitude applied');
     check(await build.getByRole('combobox', { name: 'Pace aptitude', exact: true }).inputValue() === '5', 'Base strategy aptitude applied');
@@ -801,7 +935,10 @@ try {
     await umaShot('base-aptitudes');
     await umaTrigger.click();
     await build.getByRole('option', { name: 'No Uma', exact: true }).click();
-    check(await inesLevel.count() === 0 && await baseAptitudes.isDisabled(), 'No Uma clears the unique and disables base aptitudes');
+    check(await baseAptitudes.isDisabled(), 'No Uma disables base aptitudes');
+    await build.getByRole('tab', { name: 'Skills', exact: true }).click();
+    check(await inesLevel.count() === 0, 'No Uma clears the unique');
+    await build.getByRole('tab', { name: 'Attributes', exact: true }).click();
     await umaShot('none');
     await umaTrigger.click();
     await umaSearch.fill('clippety');
@@ -810,43 +947,37 @@ try {
     await umaTrigger.click();
     await umaSearch.fill('Melt Your Heart');
     await umaSearch.press('Enter');
-    await inesLevel.selectOption('6');
     await build.getByRole('combobox', { name: 'Long aptitude', exact: true }).selectOption('8');
+    await build.getByRole('tab', { name: 'Skills', exact: true }).click();
+    await inesLevel.selectOption('6');
     check(await build.locator('.skill-level').count() === 1, 'Only unique has a level control');
-    await build.getByRole('button', { name: '+ Add skill', exact: true }).first().click();
+    await build.getByRole('button', { name: 'Add any skill', exact: true }).click();
     await search.fill('Straightaways ◎'); check(await build.getByRole('listbox', { name: 'Matching skills' }).getByRole('option').count() === 1, 'Double circle skill visible without source metadata');
     await build.getByRole('listbox', { name: 'Matching skills' }).getByRole('option').click();
     await shot(page, `stamina-skills-${width}x${height}`);
     await build.getByRole('button', { name: 'Remove skill 1', exact: true }).click();
-    await build.getByRole('button', { name: '+ Add skill', exact: true }).first().click();
+    await build.getByRole('button', { name: 'Add any skill', exact: true }).click();
     check((await build.getByRole('listbox', { name: 'Matching skills' }).getByRole('option').first().innerText()).includes('Replay Recovery'), 'Recent skill first after removal');
     await search.press('Enter');
     await page.keyboard.press('Escape');
     check(await page.getByRole('complementary', { name: 'Build editor', exact: true }).isVisible(), 'Escape keeps the build panel expanded');
-    await page.getByRole('button', { name: 'Collapse build panel', exact: true }).click();
-    check(await page.getByRole('button', { name: 'Expand build panel', exact: true }).evaluate(el => el === document.activeElement), 'Collapse focuses expand');
-    check(await page.locator('.build-rail').evaluate(el => el.getBoundingClientRect().width === 52), 'Collapsed rail is 52px wide');
-    await shot(page, 'stamina-collapsed-' + width + 'x' + height);
-    await page.getByRole('button', { name: 'Expand build panel', exact: true }).click();
-    check(await page.getByRole('button', { name: 'Collapse build panel', exact: true }).evaluate(el => el === document.activeElement), 'Expand focuses collapse');
+    check(await page.locator('.build-rail').count() === 0, 'Build editor stays open');
     await page.setViewportSize({ width: 780, height: 700 });
-    check(await build.evaluate(el => el.getBoundingClientRect().top >= document.querySelector('.stamina-results').getBoundingClientRect().bottom), 'Narrow full mode keeps the stacked expanded panel');
-    await page.getByRole('button', { name: 'Collapse build panel', exact: true }).click();
-    check(await page.getByRole('button', { name: 'Expand build panel', exact: true }).evaluate(el => el === document.activeElement), 'Stacked collapse focuses expand');
-    if (await page.getByRole('button', { name: 'Expand build panel', exact: true }).count()) await page.getByRole('button', { name: 'Expand build panel', exact: true }).click();
-    await page.getByRole('tab', { name: 'Race settings', exact: true }).click();
-    check(await build.getByRole('tab', { name: 'Race settings', exact: true }).getAttribute('aria-selected') === 'true', 'Expanding the panel exposes the Race settings tab');
-    check(await build.getByRole('tab', { name: 'Race settings', exact: true }).evaluate(el => el === document.activeElement), 'Selecting Race settings focuses the tab');
+    check(await build.evaluate(el => el.getBoundingClientRect().top >= document.querySelector('.stamina-results').getBoundingClientRect().bottom), 'Narrow full mode stacks the build editor');
+    await page.getByRole('tab', { name: 'Race', exact: true }).click();
+    check(await build.getByRole('tab', { name: 'Race', exact: true }).getAttribute('aria-selected') === 'true', 'Race settings are reachable in the stacked editor');
+    check(await build.getByRole('tab', { name: 'Race', exact: true }).evaluate(el => el === document.activeElement), 'Selecting Race settings focuses the tab');
     await page.setViewportSize({ width, height });
     await page.locator('.content').evaluate(el => { el.scrollTop = 0; });
     await page.getByRole('button', { name: /^Run (check|\d+ races)$/ }).click();
     await page.waitForFunction(() => document.querySelector('.stamina-headline.insufficient'));
-    if (await page.getByRole('button', { name: 'Expand build panel', exact: true }).count()) await page.getByRole('button', { name: 'Expand build panel', exact: true }).click();
-    await page.getByRole('tab', { name: 'Race settings', exact: true }).click();
+    await page.getByRole('tab', { name: 'Race', exact: true }).click();
     await page.getByRole('checkbox', { name: 'Assume skills activate', exact: true }).check();
     await page.keyboard.press('Escape');
     await page.getByRole('button', { name: /^Run (check|\d+ races)$/ }).click();
     await page.waitForFunction(() => document.querySelector('.stamina-headline.sufficient'));
+    await page.getByText('Run details', { exact: true }).click();
+    check(await page.locator('.joint-curve').count() === 1, 'Curve includes joint outcomes');
     check((await page.locator('.heal-contributions').innerText()).includes('Replay Recovery'), 'Heal contribution names included');
     await shot(page, `stamina-heal-${width}x${height}`);
     check(!(await page.locator('.heal-contributions').innerText()).includes('fires'), 'Full activation uses the plain heal amount');
@@ -871,7 +1002,7 @@ try {
     await page.evaluate(() => { window.__SHOT_CONTROL__.healRate = 1; });
     await page.getByRole('button', { name: /^Run (check|\d+ races)$/ }).click();
     await page.waitForFunction(() => !document.querySelector('.heal-contributions').textContent.includes('fires'));
-    await page.getByRole('complementary', { name: 'Build editor', exact: true }).getByRole('tab', { name: 'Build', exact: true }).click();
+    await page.getByRole('complementary', { name: 'Build editor', exact: true }).getByRole('tab', { name: 'Attributes', exact: true }).click();
     await shot(page, `stamina-results-panel-populated-${width}x${height}`);
     await page.keyboard.press('Escape');
     await page.locator('.result-table summary').click();
@@ -879,11 +1010,10 @@ try {
     await page.locator('.result-table').evaluate(el => el.scrollIntoView({ block: 'start' }));
     await shot(page, `stamina-table-${width}x${height}`);
     await page.locator('.result-table summary').click();
-    if (await page.getByRole('button', { name: 'Expand build panel', exact: true }).count()) await page.getByRole('button', { name: 'Expand build panel', exact: true }).click();
-    await page.getByRole('tab', { name: 'Race settings', exact: true }).click();
+    await page.getByRole('tab', { name: 'Race', exact: true }).click();
     await page.getByRole('checkbox', { name: 'Assume skills activate', exact: true }).uncheck();
     await page.keyboard.press('Escape');
-    await page.getByRole('complementary', { name: 'Build editor', exact: true }).getByRole('tab', { name: 'Build', exact: true }).click();
+    await page.getByRole('complementary', { name: 'Build editor', exact: true }).getByRole('tab', { name: 'Attributes', exact: true }).click();
     await page.evaluate(() => { window.__SHOT_CONTROL__.slow = true; });
     await page.getByRole('button', { name: /^Run (check|\d+ races)$/ }).click();
     await page.getByText('Mapping the curve', { exact: true }).waitFor();
@@ -907,30 +1037,30 @@ try {
     await shot(page, `stamina-cancelled-${width}x${height}`);
     await page.waitForFunction(() => JSON.parse(localStorage.getItem('shots:stamina.json:last-inputs-v1'))?.input.build.stats.stamina === 1120);
     await page.reload();
-    await page.getByRole('complementary', { name: 'Build editor', exact: true }).getByRole('tab', { name: 'Build', exact: true }).click();
+    await page.getByRole('complementary', { name: 'Build editor', exact: true }).getByRole('tab', { name: 'Attributes', exact: true }).click();
     check(await build.getByRole('spinbutton', { name: 'Stamina', exact: true }).inputValue() === '1120', 'Stats restored');
     check(await build.getByRole('combobox', { name: 'Long aptitude', exact: true }).inputValue() === '8', 'Aptitudes restored');
-    check(await inesLevel.inputValue() === '6' && (await umaTrigger.innerText()).includes('Ines Fujin'), 'Uma and unique level restored');
+    check((await umaTrigger.innerText()).includes('Ines Fujin'), 'Uma');
+    await build.getByRole('tab', { name: 'Skills', exact: true }).click();
+    check(await inesLevel.inputValue() === '6', 'Unique level stays at 6');
     check(await build.getByRole('checkbox', { name: 'Show all regions', exact: true }).count() === 0, 'Region filter removed');
-    await build.getByRole('button', { name: 'Collapse build panel', exact: true }).click();
     check((await page.getByRole('button', { name: 'Race', exact: true }).innerText()).includes('Hanshin 3200'), 'Race restored');
     for (const name of ['Heavy', 'Rainy', 'Summer']) check((await page.locator('.condition-chips').innerText()).includes(name), `${name} condition restored`);
-    if (await page.getByRole('button', { name: 'Expand build panel', exact: true }).count()) await page.getByRole('button', { name: 'Expand build panel', exact: true }).click();
-    await page.getByRole('tab', { name: 'Race settings', exact: true }).click();
+    await page.getByRole('tab', { name: 'Race', exact: true }).click();
     check(await field.getByRole('button', { name: 'Mirror', exact: true }).getAttribute('aria-pressed') === 'true', 'Field restored');
     check(!(await page.getByRole('checkbox', { name: 'Assume skills activate', exact: true }).isChecked()), 'Engine settings restored');
     check(await page.getByRole('combobox', { name: 'Mood', exact: true }).inputValue() === '4', 'Mood restored');
     await page.keyboard.press('Escape');
     // Round 2b: independent inputs, presets, targets and a real feed-shaped draft fixture.
-    if (await page.getByRole('button', { name: 'Expand build panel', exact: true }).count()) await page.getByRole('button', { name: 'Expand build panel', exact: true }).click();
-    await page.getByRole('tab', { name: 'Race settings', exact: true }).click();
+    await page.getByRole('tab', { name: 'Race', exact: true }).click();
     await page.getByRole('group', { name: 'Target', exact: true }).getByRole('button', { name: '95%', exact: true }).click();
     await shot(page, 'stamina-target-95-' + width + 'x' + height);
     await page.keyboard.press('Escape');
     await page.getByRole('button', { name: /^Run (check|\d+ races)$/ }).click();
-    await page.getByText('95% full spurt + survival · same races', { exact: true }).waitFor();
+    await page.getByText('Hanshin 3200 · 95% target', { exact: true }).waitFor();
+    await page.getByText('Run details', { exact: true }).click();
     check((await page.locator('.chart-heading').innerText()).includes('95%'), 'Chart target follows setting');
-    await page.getByRole('complementary', { name: 'Build editor', exact: true }).getByRole('tab', { name: 'Build', exact: true }).click();
+    await page.getByRole('complementary', { name: 'Build editor', exact: true }).getByRole('tab', { name: 'Attributes', exact: true }).click();
     await build.getByRole('tab', { name: 'Presets', exact: true }).click();
     await build.getByRole('textbox', { name: 'Preset name', exact: true }).fill('Long draft');
     await build.getByRole('button', { name: 'Save current build', exact: true }).click();
@@ -958,22 +1088,27 @@ try {
     await build.getByRole('button', { name: 'Load ballpark Front build', exact: true }).click();
     check(await build.getByRole('spinbutton', { name: 'Speed', exact: true }).inputValue() === '1600', 'Ballpark stats');
     check(await build.getByRole('spinbutton', { name: 'Stamina', exact: true }).inputValue() === '1120', 'Ballpark keeps stamina');
-    check(await inesLevel.inputValue() === '6' && (await umaTrigger.innerText()).includes('Ines Fujin'), 'Ballpark keeps the Uma and unique level');
+    check((await umaTrigger.innerText()).includes('Ines Fujin'), 'Ballpark keeps the Uma');
+    await build.getByRole('tab', { name: 'Skills', exact: true }).click();
+    check(await inesLevel.inputValue() === '6', 'Unique level stays at 6');
     check(await build.getByRole('button', { name: 'Remove skill 201241', exact: true }).count() === 1, 'Ballpark applies edited role kit');
     await shot(page, 'stamina-ballpark-' + width + 'x' + height);
     await build.getByRole('tab', { name: 'Presets', exact: true }).click();
     await build.getByRole('button', { name: 'Load ballpark Runaway build', exact: true }).click();
     check(await build.getByRole('group', { name: 'Strategy', exact: true }).getByRole('button', { name: 'Runaway', exact: true }).getAttribute('aria-pressed') === 'true', 'Runaway strategy derived from skill');
+    await build.getByRole('tab', { name: 'Skills', exact: true }).click();
     check(await build.getByRole('button', { name: 'Remove skill 202051', exact: true }).count() === 1, 'Runaway skill included');
     await shot(page, 'stamina-runaway-' + width + 'x' + height);
-    await build.getByRole('button', { name: '+ Add skill', exact: true }).first().click();
+    await build.getByRole('button', { name: 'Add any skill', exact: true }).click();
     await search.fill('Straightaways ◎');
     await search.scrollIntoViewIfNeeded();
     await shot(page, 'stamina-double-circle-' + width + 'x' + height);
     await page.keyboard.press('Escape');
     await build.getByRole('tab', { name: 'Presets', exact: true }).click();
     await build.getByRole('button', { name: 'Load Saved front', exact: true }).click();
-    check(await inesLevel.inputValue() === '6' && (await umaTrigger.innerText()).includes('Ines Fujin'), 'Preset load restores Uma and unique level');
+    check((await umaTrigger.innerText()).includes('Ines Fujin'), 'Preset load restores Uma');
+    await build.getByRole('tab', { name: 'Skills', exact: true }).click();
+    check(await inesLevel.inputValue() === '6', 'Unique level stays at 6');
     await build.getByRole('tab', { name: 'Presets', exact: true }).click();
     await build.locator('.ballpark-defaults summary').click();
     await build.getByRole('spinbutton', { name: 'Default speed', exact: true }).fill('1550');
@@ -981,9 +1116,9 @@ try {
     await build.getByRole('combobox', { name: 'Default Long aptitude', exact: true }).selectOption('8');
     await build.getByRole('button', { name: 'Load ballpark Pace build', exact: true }).click();
     check(await build.getByRole('spinbutton', { name: 'Speed', exact: true }).inputValue() === '1550', 'Edited ballpark speed applied');
-    await build.getByRole('tab', { name: 'Race settings', exact: true }).click();
+    await build.getByRole('tab', { name: 'Race', exact: true }).click();
     check(await build.getByRole('combobox', { name: 'Mood', exact: true }).inputValue() === '4', 'Edited ballpark mood applied');
-    await build.getByRole('tab', { name: 'Build', exact: true }).click();
+    await build.getByRole('tab', { name: 'Attributes', exact: true }).click();
     check(await build.getByRole('combobox', { name: 'Long aptitude', exact: true }).inputValue() === '8', 'Edited ballpark aptitude applied');
     await build.getByRole('tab', { name: 'Presets', exact: true }).click();
     await build.locator('.ballpark-defaults summary').click();
@@ -991,7 +1126,7 @@ try {
     await build.getByRole('button', { name: 'Load Saved front', exact: true }).click();
     await page.keyboard.press('Escape');
     await page.reload();
-    await page.getByRole('complementary', { name: 'Build editor', exact: true }).getByRole('tab', { name: 'Build', exact: true }).click();
+    await page.getByRole('complementary', { name: 'Build editor', exact: true }).getByRole('tab', { name: 'Attributes', exact: true }).click();
     await build.getByRole('tab', { name: 'Presets', exact: true }).click();
     check(await build.getByRole('button', { name: 'Load Saved front', exact: true }).count() === 1, 'Saved preset persists');
     await build.getByRole('button', { name: 'Edit Front kit', exact: true }).click();
@@ -1001,14 +1136,14 @@ try {
     await page.keyboard.press('Escape');
     await page.evaluate(async () => { const c = window.__SHOT_CONTROL__; await c.emit('feed-message', c.draftMessage(true)); });
     await page.getByRole('group', { name: 'Course mode', exact: true }).getByRole('button', { name: 'Draft', exact: true }).click();
-    check(await page.locator('.draft-races > div > button').count() === 7, 'Partial draft pads seven slots');
-    check(await page.locator('.draft-races').getByText('Awaiting draft race', { exact: false }).count() === 6, 'Partial draft has six placeholders');
+    check(await page.locator('.draft-race-table tbody tr').count() === 7, 'Partial draft pads seven slots');
+    check(await page.locator('.draft-race-table').getByText('Awaiting draft race', { exact: false }).count() === 6, 'Partial draft has six placeholders');
     await shot(page, 'stamina-partial-draft-' + width + 'x' + height);
     await page.evaluate(async () => { const c = window.__SHOT_CONTROL__, message = c.draftMessage(true, 1002); message.event.state.team1.pickedMaps[0].id = 'unknown'; message.event.state.team1.pickedMaps[0].track = 'Unknown fixture course'; await c.emit('feed-message', message); });
     await page.getByText('Unknown course', { exact: true }).waitFor();
     check(await page.getByRole('button', { name: /^Run (check|\d+ races)$/ }).isDisabled(), 'Unresolved draft never guesses a course');
-    check((await page.locator('.draft-races').innerText()).includes('Unknown fixture course'), 'Unknown course preserves raw text');
-    await page.getByRole('complementary', { name: 'Build editor' }).getByRole('tab', { name: 'Build', exact: true }).click();
+    check((await page.locator('.draft-race-table').innerText()).includes('Unknown fixture course'), 'Unknown course preserves raw text');
+    await page.getByRole('complementary', { name: 'Build editor' }).getByRole('tab', { name: 'Attributes', exact: true }).click();
     await shot(page, 'stamina-unknown-draft-' + width + 'x' + height);
     await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
     await page.getByRole('button', { name: 'Copy diagnostics', exact: true }).click();
@@ -1033,18 +1168,15 @@ try {
     await poolPicker.getByRole('button', { name: 'Hanshin 3200 · Turf · Outer to Inner', exact: true }).click();
     check(await page.getByRole('button', { name: 'Run 1 races', exact: true }).isEnabled(), 'Explicit choice enables the partial batch');
     await page.getByRole('button', { name: 'Run 1 races', exact: true }).click();
-    await page.waitForFunction(() => document.querySelectorAll('.draft-races > div > button:enabled').length === 1);
+    await page.waitForFunction(() => document.querySelectorAll('.draft-race-table .draft-race-link').length === 1);
     const mappedInput = await page.evaluate(() => window.__SHOT_CONTROL__.calls.filter(c => c.command === 'stamina_check_races').at(-1).args.input.races[0]);
     check(mappedInput.map_id === 'hanshin-3200-turf-outer-to-inner' && mappedInput.ground_condition === 1 && mappedInput.weather === 1 && mappedInput.season === 1, 'Manual course uses the draft conditions');
     await page.evaluate(async message => { message.roomCode = 'XYZ789'; message.event.matchId = 'XYZ789'; message.event.version = 1003; await window.__SHOT_CONTROL__.emit('feed-message', message); }, unknownMessage);
     await page.getByText('Unknown course', { exact: true }).waitFor();
     check(await page.getByRole('button', { name: 'Choose the course', exact: true }).isEnabled(), 'A previous room’s results do not hide the new room’s unknown course');
-    await page.getByRole('button', { name: 'Collapse build panel', exact: true }).click();
-    await page.waitForFunction(() => { const m = JSON.parse(localStorage.getItem('shots:stamina.json:last-inputs-v1')); return m?.buildCollapsed === true && Object.keys(m?.courseChoices?.ABC123 ?? {}).length === 1; });
+    await page.waitForFunction(() => { const m = JSON.parse(localStorage.getItem('shots:stamina.json:last-inputs-v1')); return Object.keys(m?.courseChoices?.ABC123 ?? {}).length === 1; });
     await page.reload();
     await page.locator('.feed-status b').filter({ hasText: 'CAS7R1' }).waitFor();
-    check(await page.getByRole('complementary', { name: 'Build panel, collapsed', exact: true }).isVisible(), 'Collapsed dock persists across reload');
-    await page.getByRole('button', { name: 'Expand build panel', exact: true }).click();
     await page.evaluate(async message => { await window.__SHOT_CONTROL__.emit('feed-message', message); }, unknownMessage);
     await page.getByRole('group', { name: 'Course mode', exact: true }).getByRole('button', { name: 'Draft', exact: true }).click();
     check(await page.getByRole('button', { name: 'Run 1 races', exact: true }).isEnabled(), 'Course choice persists for the same match');
@@ -1053,25 +1185,27 @@ try {
     check(await page.getByRole('button', { name: 'Run 0 races', exact: true }).isDisabled(), 'Course choice never leaks to another match');
     await page.evaluate(async () => { const c = window.__SHOT_CONTROL__; await c.emit('feed-message', c.draftMessage(false, 1003)); });
     await page.getByText('7 of 7 races known', { exact: true }).waitFor();
-    check(await page.locator('.draft-races > div > button:enabled').count() === 0, 'Feed changes do not auto-run');
-    await build.getByRole('tab', { name: 'Build', exact: true }).click();
-    await build.getByRole('button', { name: '+ Add skill', exact: true }).first().click();
+    check(await page.locator('.draft-race-table .draft-race-link').count() === 0, 'Feed changes do not auto-run');
+    await build.getByRole('tab', { name: 'Skills', exact: true }).click();
+    await build.getByRole('button', { name: 'Add any skill', exact: true }).click();
     await search.fill('Replay Recovery');
     await build.getByRole('listbox', { name: 'Matching skills' }).getByRole('option').first().click();
     await page.keyboard.press('Escape');
     await page.getByRole('button', { name: /^Run (check|\d+ races)$/ }).click();
-    await page.waitForFunction(() => document.querySelectorAll('.draft-races > div > button:enabled').length === 7);
-    await page.getByRole('complementary', { name: 'Build editor', exact: true }).getByRole('tab', { name: 'Build', exact: true }).click();
+    await page.waitForFunction(() => document.querySelectorAll('.draft-race-table .draft-race-link').length === 7);
+    await page.getByRole('complementary', { name: 'Build editor', exact: true }).getByRole('tab', { name: 'Attributes', exact: true }).click();
     await shot(page, 'stamina-draft-results-' + width + 'x' + height);
-    await page.locator('.draft-races > div > button').nth(4).click();
+    await page.locator('.draft-race-table .draft-race-link').nth(4).click();
+    await page.getByText('Run details', { exact: true }).click();
     await page.locator('.stamina-chart').waitFor();
     await shot(page, 'stamina-race-detail-' + width + 'x' + height);
     check(!(await page.locator('.heal-contributions').innerText()).includes('fires'), 'Draft full activation uses the plain amount');
     for (const [rate, state, text] of [[0.5, 'partial', 'fires in 50% of races'], [0, 'never', 'Never fires in this race'], [1, 'full', 'Replay Recovery']]) {
       await page.evaluate(rate => { window.__SHOT_CONTROL__.healRate = rate; }, rate);
       await page.getByRole('button', { name: /^Run (check|\d+ races)$/ }).click();
-      await page.waitForFunction(() => document.querySelectorAll('.draft-races > div > button:enabled').length === 7);
-      await page.locator('.draft-races > div > button').nth(4).click();
+      await page.waitForFunction(() => document.querySelectorAll('.draft-race-table .draft-race-link').length === 7);
+      await page.locator('.draft-race-table .draft-race-link').nth(4).click();
+      await page.getByText('Run details', { exact: true }).click();
       await page.locator('.heal-contributions').getByText(text, { exact: false }).first().waitFor();
       if (rate === 0) check(await page.locator('.heal-inactive strong').first().innerText() === '+0', 'Draft never fires contributes zero');
       if (rate < 1) await shot(page, `stamina-race-detail-heal-${state}-${width}x${height}`);
@@ -1081,19 +1215,18 @@ try {
     await page.getByText('Draft changed since this run', { exact: true }).waitFor();
     await page.evaluate(() => { window.__SHOT_CONTROL__.slow = true; });
     await page.getByRole('button', { name: /^Run (check|\d+ races)$/ }).click();
-    await page.waitForFunction(() => document.querySelectorAll('.draft-races > div > button:enabled').length === 2);
+    await page.waitForFunction(() => document.querySelectorAll('.draft-race-table .draft-race-link').length === 2);
     await page.evaluate(async () => { const c = window.__SHOT_CONTROL__, request_id = c.calls.filter(c => c.command === 'stamina_check_races').at(-1).args.input.request_id; await c.emit('stamina-progress', { request_id, race_index: 2, race_total: 7, stage: 'refining', percent: 38 }); await c.emit('stamina-progress', { request_id, race_index: 1, race_total: 7, stage: 'mapping', percent: 20 }); });
     await page.getByText('Race 3 of 7 · Refining thresholds', { exact: true }).waitFor();
     check(await page.getByRole('progressbar').getAttribute('value') === '38', 'Batch progress moves only forward');
     await shot(page, 'stamina-draft-progress-' + width + 'x' + height);
     await page.getByRole('button', { name: 'Cancel', exact: true }).click();
     await page.getByRole('button', { name: /^Run (check|\d+ races)$/ }).waitFor({ state: 'visible' });
-    check(await page.locator('.draft-races > div > button:enabled').count() === 2, 'Cancel keeps finished races');
+    check(await page.locator('.draft-race-table .draft-race-link').count() === 2, 'Cancel keeps finished races');
     await shot(page, `stamina-draft-cancelled-${width}x${height}`);
     await page.getByRole('group', { name: 'Course mode', exact: true }).getByRole('button', { name: 'Any course', exact: true }).click();
     check((await page.getByRole('button', { name: 'Race', exact: true }).innerText()).includes('Hanshin 3200'), 'Draft never overwrites any-course race');
-    if (await page.getByRole('button', { name: 'Expand build panel', exact: true }).count()) await page.getByRole('button', { name: 'Expand build panel', exact: true }).click();
-    await page.getByRole('tab', { name: 'Race settings', exact: true }).click();
+    await page.getByRole('tab', { name: 'Race', exact: true }).click();
     check(await page.getByRole('group', { name: 'Target', exact: true }).getByRole('button', { name: '95%', exact: true }).getAttribute('aria-pressed') === 'true', 'Target remembered independently');
     }
     await page.close();
@@ -1113,7 +1246,7 @@ try {
   await compactUma.locator('.stamina-uma-trigger').click();
   await compactUma.getByRole('option', { name: 'Matikanetannhauser [Clippety-Tippety-Clop]' }).click();
   await compactUma.getByRole('button', { name: 'Run 1 races', exact: true }).click();
-  await compactUma.waitForFunction(() => document.querySelectorAll('.draft-races > div > button:enabled').length === 1);
+  await compactUma.waitForFunction(() => document.querySelectorAll('.draft-race-table .draft-race-link').length === 1);
   check(await compactUma.evaluate(() => window.__SHOT_CONTROL__.calls.filter(c => c.command === 'stamina_check_races').at(-1).args.input.build.skills.some(s => s.id === 100621)), 'Draft IPC includes the selected Uma’s unique');
   await nav(compactUma, 'Draft');
   await compactUma.getByRole('button', { name: 'Compact', exact: true }).click();
@@ -1138,10 +1271,8 @@ try {
   await engineError.getByText('Engine error', { exact: true }).waitFor();
   await shot(engineError, `stamina-engine-error-${width}x${height}`);
   await engineError.getByRole('complementary', { name: 'Build editor' }).waitFor();
-  await engineError.waitForFunction(() => JSON.parse(localStorage.getItem('shots:stamina.json:last-inputs-v1'))?.buildCollapsed === false);
   await engineError.reload();
   await engineError.getByRole('complementary', { name: 'Build editor' }).waitFor();
-  check(await engineError.getByRole('button', { name: 'Collapse build panel', exact: true }).getAttribute('aria-expanded') === 'true', 'Expanded dock persists across reload');
   await engineError.getByRole('spinbutton', { name: 'Speed', exact: true }).focus();
   check(await engineError.getByRole('spinbutton', { name: 'Speed', exact: true }).evaluate(el => getComputedStyle(el).outlineStyle !== 'none'), 'Stamina input keyboard focus is visible');
   await engineError.close();
@@ -1161,8 +1292,9 @@ try {
   const noData = await open('stamina-no-data', width, height);
   await noData.getByRole('button', { name: 'Stamina', exact: true }).click();
   await noData.getByRole('complementary', { name: 'Build editor' }).waitFor();
+  await noData.getByRole('tab', { name: 'Skills', exact: true }).click();
   check(await noData.getByText('Local skill data unavailable.', { exact: false }).count() === 1, 'Missing-data notice appears once, quietly');
-  await noData.getByRole('button', { name: '+ Add skill', exact: true }).first().click();
+  await noData.getByRole('button', { name: 'Add any skill', exact: true }).first().click();
   await noData.getByRole('combobox', { name: 'Search skills', exact: true }).fill('Straightaways ◎');
   check(await noData.getByRole('listbox', { name: 'Matching skills' }).getByRole('option').count() === 1, 'Fallback engine catalog remains usable without region metadata');
   check(await noData.locator('.skill-options img').count() === 0, 'No icons requested without local data');
@@ -1233,7 +1365,7 @@ try {
   await compact.evaluate(async () => { const c = window.__SHOT_CONTROL__; await c.emit('feed-message', c.draftMessage(true)); });
   await compact.getByRole('group', { name: 'Course mode' }).getByRole('button', { name: 'Draft', exact: true }).click();
   await compact.getByRole('button', { name: /^Run \d+ races$/ }).click();
-  await compact.waitForFunction(() => document.querySelectorAll('.draft-races > div > button:enabled').length === 1);
+  await compact.waitForFunction(() => document.querySelectorAll('.draft-race-table .draft-race-link').length === 1);
   await nav(compact, 'Draft');
   await compact.getByRole('button', { name: 'Compact', exact: true }).click();
   await compact.getByRole('button', { name: 'Open stamina for draft races' }).waitFor();
@@ -1243,7 +1375,7 @@ try {
   await compact.evaluate(async () => { const c = window.__SHOT_CONTROL__; await c.emit('feed-message', c.draftMessage(false, 1002)); });
   await compact.getByText('7 of 7 races known', { exact: true }).waitFor();
   await compact.getByRole('button', { name: 'Run 7 races', exact: true }).click();
-  await compact.waitForFunction(() => document.querySelectorAll('.draft-races > div > button:enabled').length === 7);
+  await compact.waitForFunction(() => document.querySelectorAll('.draft-race-table .draft-race-link').length === 7);
   const runCalls = await compact.evaluate(() => window.__SHOT_CONTROL__.calls.filter(c => c.command === 'stamina_check_races').length);
   await nav(compact, 'Draft');
   await compact.getByRole('button', { name: 'Compact', exact: true }).click();

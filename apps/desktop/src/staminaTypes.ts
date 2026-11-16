@@ -28,13 +28,23 @@ export type StaminaField = 'pacemaker' | 'average_lobby' | 'mirror';
 export interface StaminaInput {
   request_id: string; target: 90 | 95 | 99; build: StaminaBuild; race: RaceSelection; field: StaminaField; seeds: number | null; assume_skills_activate: boolean; rushed: boolean; spot_struggle: boolean; dueling: boolean; lane_movement: boolean;
 }
-export interface StaminaEditorBuild extends StaminaBuild { umaCardId?: number }
-export interface StaminaEditorInput extends StaminaInput { build: StaminaEditorBuild; screenshotImport?: ScreenshotImport }
+export interface StaminaEditorBuild extends StaminaBuild { umaCardId?: number; usesDefaultStamina?: true }
+export type ImportedBuild = { build: StaminaEditorBuild; screenshotImport?: ScreenshotImport };
+export interface StaminaEditorInput extends StaminaInput {
+  build: StaminaEditorBuild;
+  screenshotImport?: ScreenshotImport;
+  importUndo?: ImportedBuild;
+}
+export const defaultStamina = 600;
 
-export function staminaEngineInput(input: StaminaEditorInput): StaminaInput {
-  const { umaCardId: _umaCardId, ...build } = input.build;
-  const { screenshotImport: _screenshotImport, ...engineInput } = input;
-  return { ...engineInput, build };
+export function staminaValue(build: StaminaEditorBuild, fallback = defaultStamina): number {
+  return build.usesDefaultStamina ? fallback : build.stats.stamina;
+}
+
+export function staminaEngineInput(input: StaminaEditorInput, fallback = defaultStamina): StaminaInput {
+  const { umaCardId: _umaCardId, usesDefaultStamina: _usesDefaultStamina, ...build } = input.build;
+  const { screenshotImport: _screenshotImport, importUndo: _importUndo, ...engineInput } = input;
+  return { ...engineInput, build: { ...build, stats: { ...build.stats, stamina: staminaValue(input.build, fallback) } } };
 }
 export interface StaminaRates {
   joint_percent: number;
@@ -57,7 +67,7 @@ export const weatherNames = ['Sunny', 'Cloudy', 'Rainy', 'Snowy'];
 export const seasonNames = ['Spring', 'Summer', 'Fall', 'Winter'];
 export const defaultStaminaInput: StaminaInput = {
   request_id: '', target: 90, race: { map_id: 'nakayama-2500-turf-inner', ground_condition: 1, weather: 1, season: 4 },
-  build: { running_style: 2, stats: { speed: 1200, stamina: 800, pow: 1000, guts: 600, wiz: 1000 },
+  build: { running_style: 2, stats: { speed: 1200, stamina: defaultStamina, pow: 1000, guts: 600, wiz: 1000 },
     motivation: 5, distance: [7, 7, 7, 7], style: [7, 7, 7, 7], ground: [7, 7], skills: [] },
   field: 'average_lobby', seeds: null, assume_skills_activate: true, rushed: true, spot_struggle: true, dueling: true, lane_movement: true,
 };
