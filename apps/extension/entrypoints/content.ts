@@ -486,7 +486,7 @@ function getDraftSnapshotSignature(snapshot: DraftSnapshot): string {
         .map((map) => `${map.order ?? ''}:${map.name}:${map.status ?? ''}`)
         .join(',');
       const umaSignature = team.umas
-        .map((uma) => `${uma.kind}:${uma.order ?? ''}:${uma.umaId ?? uma.name}`)
+        .map((uma) => `${uma.kind}:${uma.order ?? ''}:${uma.umaId ?? uma.name}:${uma.runningStyle ?? ''}`)
         .join(',');
 
       return `${team.id}:${team.name ?? ''}:maps[${mapSignature}]:umas[${umaSignature}]`;
@@ -498,7 +498,7 @@ function getDraftSnapshotSignature(snapshot: DraftSnapshot): string {
     ? ''
     : `${snapshot.tiebreakerMap.name}:${snapshot.tiebreakerMap.details ?? ''}`;
 
-  return `${snapshot.version ?? ''}:${JSON.stringify(snapshot.rules)}:${snapshot.matchCode ?? 'unknown'}:${snapshot.phase ?? ''}:${snapshot.currentTeam ?? ''}:${tiebreakerSignature}:${teamSignature}`;
+  return `${snapshot.version ?? ''}:${JSON.stringify(snapshot.rules)}:${JSON.stringify(snapshot.blessing ?? null)}:${JSON.stringify(snapshot.mapRules ?? null)}:${snapshot.matchCode ?? 'unknown'}:${snapshot.phase ?? ''}:${snapshot.currentTeam ?? ''}:${tiebreakerSignature}:${teamSignature}`;
 }
 
 function getCurrentMatchCode(): string | undefined {

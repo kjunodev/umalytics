@@ -28,6 +28,8 @@ const UI_SIZES = ['small', 'default', 'large'];
 // Minimum Umas scene height in layout px (--umas-scene-min-height in umas.css).
 const UMAS_SCENE_MIN_HEIGHT = 480;
 
+const BLESSING_SIZES = ['1000x800', '1280x720', '1625x1360', '2560x1300'];
+
 // Query string per scene/state — see PreviewApp.tsx's initialStateFromQuery.
 const SCENES = [
   { name: 'lobby', query: 'mode=live&scene=lobby' },
@@ -38,7 +40,10 @@ const SCENES = [
   { name: 'players', query: 'mode=profiles' },
   { name: 'history-umas', query: 'mode=history&scene=umas' },
   { name: 'history-lobby', query: 'mode=history&scene=lobby' },
-  { name: 'history-draft', query: 'mode=history&scene=draft&draft=complete' }
+  { name: 'history-draft', query: 'mode=history&scene=draft&draft=complete' },
+  // Season 3 blessing scenes cover the widths where the Races column is narrowest and widest.
+  ...['barb', 'arabian', 'turk'].map(draft => ({ name: `draft-${draft}`, query: `mode=live&scene=draft&draft=${draft}`, sizes: BLESSING_SIZES })),
+  { name: 'history-draft-turk', query: 'mode=history&scene=draft&draft=turk', sizes: BLESSING_SIZES }
 ];
 
 function argValue(name) {
@@ -158,7 +163,9 @@ async function main() {
     }
 
     const cases = [];
-    for (const uiSize of UI_SIZES) for (const scene of scenes) for (const size of sizes) cases.push({ uiSize, scene, size });
+    for (const uiSize of UI_SIZES) for (const scene of scenes) for (const size of sizes) {
+      if (!scene.sizes || scene.sizes.includes(size.name)) cases.push({ uiSize, scene, size });
+    }
 
     const total = cases.length;
     const workerCount = Math.min(concurrency, total);

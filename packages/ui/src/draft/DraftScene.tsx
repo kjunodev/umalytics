@@ -1,6 +1,8 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import './draft.css';
 import type {
+  DraftBlessing,
+  DraftMapRules,
   DraftSnapshot,
   DraftTeamSnapshot,
   DraftTiebreakerMap,
@@ -12,11 +14,21 @@ import type {
   PrematchRoster
 } from '@umalytics/shared';
 import { getUmaPortraitUrl, isHashedUmaAssetUrl } from '@umalytics/core/umas/umaPortraits';
+import {
+  describeBlessing,
+  formatMapLimits,
+  formatStyleComposition,
+  runningStyleComposition,
+  runningStyleLabel,
+  tiebreakerCandidates,
+  type TiebreakerCandidate
+} from '@umalytics/core/room/blessing';
 import { UmaImage } from '../common/UmaImage';
 import { formatDecimal, formatPercent } from '../common/format';
 import { TEAM_IDS, TEAM_SLOT_COUNT, getDraftRosterPlayersForTeam, getDraftSlots } from '../common/roster';
 import { findScopedUmaEntry, getUmaExperience } from '../umas/umaCatalog';
 import {
+  DRAFT_DETAIL_SEPARATOR,
   buildDraftRaceCards,
   formatDraftMapDetails,
   formatDraftStatusText,
@@ -95,6 +107,8 @@ export function DraftScene({
           races={races}
           tiebreakerMap={snapshot.tiebreakerMap}
           vetoedMaps={vetoedMaps}
+          blessing={snapshot.blessing}
+          mapRules={snapshot.mapRules}
         />
         <DraftTeamPanel
           team={snapshot.teams.team2}
@@ -128,9 +142,27 @@ export function DraftPhaseBar({
       <span className="draft-phase-dot" aria-hidden="true" />
       <strong className="draft-phase-title">{stages[stageIndex]?.label ?? 'Draft'}</strong>
       {statusText === undefined ? null : <span className="draft-phase-status">{statusText}</span>}
+      {snapshot.blessing === undefined ? null : <DraftBlessingChip blessing={snapshot.blessing} mapRules={snapshot.mapRules} />}
       <div className="draft-phase-bar-spacer" />
       <DraftStageTrack stages={stages} stageIndex={stageIndex} />
     </div>
+  );
+}
+
+/** The Season 3 goddess and its one-line effect, e.g. "Darley Arabian · Long limit 3". */
+export function DraftBlessingChip({ blessing, mapRules }: { blessing: DraftBlessing; mapRules?: DraftMapRules }) {
+  const { name, effect, label } = describeBlessing(blessing, mapRules);
+
+  return (
+    <span className="draft-blessing" data-goddess={blessing.goddess} title={`Three Goddesses' Blessing: ${label}`}>
+      <strong className="draft-blessing-name">{name}</strong>
+      {effect === undefined ? null : (
+        <>
+          <span aria-hidden="true">·</span>
+          <span className="draft-blessing-effect">{effect}</span>
+        </>
+      )}
+    </span>
   );
 }
 
@@ -202,6 +234,8 @@ export function DraftTeamPanel({
         <span className="draft-team-pick-count">{picks.length}/{DRAFT_PICK_SLOT_COUNT} picks</span>
       </header>
 
+      <DraftStyleMix picks={picks} />
+
       <ol className="draft-pick-grid">
         {getDraftSlots(picks, DRAFT_PICK_SLOT_COUNT).map((action, index) =>
           action === undefined ? (
@@ -240,6 +274,15 @@ export function DraftTeamPanel({
   );
 }
 
+/** A team's running-style composition, e.g. "Runaway · Front · 2 Pace · End". */
+export function DraftStyleMix({ picks }: { picks: DraftUmaAction[] }) {
+  const mix = runningStyleComposition(picks);
+
+  return mix.length === 0 ? null : (
+    <p className="draft-style-mix" title="Running styles of picked Umas">{formatStyleComposition(mix)}</p>
+  );
+}
+
 // The drafter's own image is authoritative; the computed portrait is the fallback.
 function getDraftActionImageUrl(action: DraftUmaAction): string | undefined {
   const portraitUrl = action.umaId === undefined ? undefined : getUmaPortraitUrl(action.umaId);
@@ -262,11 +305,12 @@ export function DraftPickTile({
 
   return (
     <li className={`draft-pick-tile ${isSelected ? 'selected' : ''}`}>
-      <button type="button" onClick={onSelect} aria-pressed={isSelected} title={action.name}>
+      <button type="button" onClick={onSelect} aria-pressed={isSelected} title={action.runningStyle === undefined ? action.name : `${action.name} · ${runningStyleLabel(action.runningStyle)}`}>
         <span className="draft-pick-portrait">
           <UmaImage imageUrl={imageUrl} name={action.name} />
         </span>
         <span className="draft-pick-name">{action.name}</span>
+        {action.runningStyle === undefined ? null : <span className="draft-pick-style">{runningStyleLabel(action.runningStyle)}</span>}
         <span className={`draft-pick-exp ${experienceCount > 0 ? 'some' : 'none'}`}>
           {experienceCount > 0 ? `${experienceCount} played` : 'New'}
         </span>
@@ -441,13 +485,20 @@ export function DraftRacesPanel({
   teams,
   races,
   tiebreakerMap,
-  vetoedMaps
+  vetoedMaps,
+  blessing,
+  mapRules
 }: {
   teams: DraftSnapshot['teams'];
   races: Array<DraftRaceCard | undefined>;
   tiebreakerMap: DraftTiebreakerMap | undefined;
   vetoedMaps: DraftVetoedMap[];
+  blessing?: DraftBlessing;
+  mapRules?: DraftMapRules;
 }) {
+  const limits = mapRules === undefined ? undefined : formatMapLimits(mapRules);
+  const candidates = blessing?.candidates === undefined ? [] : tiebreakerCandidates(blessing);
+
   return (
     <section className="draft-races-panel" aria-label="Races">
       <div className="draft-races-header">
@@ -461,6 +512,7 @@ export function DraftRacesPanel({
           </span>
         ))}
       </div>
+      {limits === undefined ? null : <p className="draft-map-limits" title="Map limits for this draft">{limits}</p>}
       <ol className="draft-race-list">
         {races.map((race, index) => (
           <DraftRaceCardItem
@@ -473,6 +525,14 @@ export function DraftRacesPanel({
         {tiebreakerMap === undefined ? null : (
           <DraftRaceCardItem race={{ n: 0, team: 'tiebreaker', tiebreaker: true, map: tiebreakerMap }} teamName={undefined} />
         )}
+        {candidates.length === 0 ? null : (
+          <>
+            <li className="draft-vetoed-heading">Tiebreaker candidates</li>
+            {candidates.map((candidate, index) => (
+              <DraftCandidateRow key={`candidate:${candidate.map.mapId ?? index}`} candidate={candidate} teams={teams} />
+            ))}
+          </>
+        )}
         {vetoedMaps.length === 0 ? null : (
           <>
             <li className="draft-vetoed-heading">Vetoed</li>
@@ -483,6 +543,34 @@ export function DraftRacesPanel({
         )}
       </ol>
     </section>
+  );
+}
+
+/** Byerley Turk: one of the three tiebreaker candidates, with the teams that sealed a ban on it. */
+export function DraftCandidateRow({ candidate, teams }: { candidate: TiebreakerCandidate; teams: DraftSnapshot['teams'] }) {
+  const map = candidate.map;
+  const distance = formatRaceDistance(map.distance);
+  const conditions = [map.surface, map.season, map.weather, map.ground].filter(Boolean).join(DRAFT_DETAIL_SEPARATOR);
+
+  return (
+    <li className={`draft-candidate-row ${candidate.selected ? 'selected' : ''} ${candidate.bannedBy.length > 0 ? 'banned' : ''}`}>
+      <span className="draft-candidate-name">
+        {formatRaceTrackName(map)}
+        {map.variant === undefined ? null : ` (${map.variant})`}
+        {distance === undefined ? null : ` ${distance}`}
+      </span>
+      {conditions === '' ? null : <small className="draft-candidate-conditions">{conditions}</small>}
+      {candidate.selected || candidate.bannedBy.length > 0 ? (
+        <span className="draft-candidate-tags">
+          {candidate.selected ? <span className="draft-candidate-tag selected">Tiebreaker</span> : null}
+          {candidate.bannedBy.map((teamId) => (
+            <span key={teamId} className={`draft-candidate-tag ban ${teamId}`}>
+              {candidate.automatic ? 'Auto-banned' : 'Banned'} · {formatTeamName(teams[teamId])}
+            </span>
+          ))}
+        </span>
+      ) : null}
+    </li>
   );
 }
 

@@ -24,6 +24,7 @@ const arenaOnly = process.env.DESKTOP_SHOTS_SCENES === 'arena';
 const statesOnly = process.env.DESKTOP_SHOTS_SCENES === 'states';
 const dataOnly = process.env.DESKTOP_SHOTS_SCENES === 'data';
 const usabilityOnly = process.env.DESKTOP_SHOTS_SCENES === 'usability';
+const blessingOnly = process.env.DESKTOP_SHOTS_SCENES === 'blessing';
 const localIcons = process.env.UMALYTICS_GAMEDATA_DIR ?? path.join(os.homedir(), 'Documents/Coding Projects/UmaLytics-GameData/gametora');
 const fixtureIcon = await fs.readFile(path.join(localIcons, 'icons/20051.webp')).catch(() => null);
 const portraitDir = process.env.DESKTOP_SHOTS_PORTRAITS;
@@ -39,7 +40,7 @@ try {
     } else await page.locator('.sidebar').getByRole('button', { name, exact: true }).click();
   }
   async function open(scene, width, height, prefs = {}) {
-    const page = await browser.newPage({ viewport: { width, height }, deviceScaleFactor: ['stamina-screenshot-import', 'stamina-finished-import', 'stamina-learn-import'].includes(scene) ? 1.25 : 1 });
+    const page = await browser.newPage({ viewport: { width, height }, deviceScaleFactor: ['stamina-screenshot-import', 'stamina-finished-import', 'stamina-learn-import', 'blessing'].includes(scene) ? 1.25 : 1 });
     page.setDefaultTimeout(20000);
     page.on('pageerror', error => failures.push(error.message));
     await page.route('https://**/*', async route => {
@@ -303,6 +304,7 @@ try {
   if (importOnly) { await screenshotImportShots(); await finishedImportShots(); await learnOnlyImportShots(); }
   else if (drawerOnly) await (await import('./shots-player-drawer.mjs')).runPlayerDrawerShots({ open, nav, shot, check });
   else if (updatesOnly) await (await import('./shots-updater.mjs')).runUpdateShots({ open, nav, shot, check });
+  else if (blessingOnly) await (await import('./shots-blessing.mjs')).runBlessingShots({ open, nav, shot, check });
   else {
   if (!arenaOnly && !statesOnly && !dataOnly && !usabilityOnly) { await screenshotImportShots(); await finishedImportShots(); await learnOnlyImportShots(); }
   if (!staminaOnly && !arenaOnly && !dataOnly && !usabilityOnly) {
@@ -1224,6 +1226,7 @@ try {
   if (!staminaOnly && !arenaOnly && !statesOnly && !dataOnly && !usabilityOnly) await (await import('./shots-player-drawer.mjs')).runPlayerDrawerShots({ open, nav, shot, check });
   if (!staminaOnly && !arenaOnly && !statesOnly && !dataOnly) await (await import('./shots-usability.mjs')).runUsabilityShots({ open, nav, shot, check });
   if (!staminaOnly && !arenaOnly && !statesOnly && !dataOnly && !usabilityOnly) await (await import('./shots-updater.mjs')).runUpdateShots({ open, nav, shot, check });
+  if (!staminaOnly && !arenaOnly && !statesOnly && !dataOnly && !usabilityOnly) await (await import('./shots-blessing.mjs')).runBlessingShots({ open, nav, shot, check });
   }
   check(failures.length === 0, failures.join('\n'));
   console.log(`${checks} checks passed; screenshots: ${out}`);

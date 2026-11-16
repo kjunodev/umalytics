@@ -18,7 +18,8 @@ const state = module('../apps/desktop/src/staminaState.ts', {
   './staminaTypes': types, './staminaScreenshot': module('../apps/desktop/src/staminaScreenshot.ts'),
 });
 const presets = module('../apps/desktop/src/staminaPresetState.ts', { './staminaTypes': types, './staminaState': state, '../src-tauri/data/role-kits.json': { default: bundled } });
-const draft = module('../apps/desktop/src/staminaDraft.ts', { './staminaTypes': types });
+const blessing = module('../packages/core/src/room/blessing.ts', { '../umas/umaPortraits': { normalizeUmaOutfitId: id => id } });
+const draft = module('../apps/desktop/src/staminaDraft.ts', { './staminaTypes': types, '@umalytics/core/room/blessing': blessing });
 const catalog = { courses: pool.maps.map(m => ({ ...m, track_name: m.track, surface: m.surface === 'Turf' ? 1 : 2 })),
   skills: [...new Set(Object.values(bundled).filter(Array.isArray).flat()), 202051, 210052, 201241].map(id => ({ id, rarity: 'white' })).concat([{ id: 1, rarity: 'unique' }]) };
 const plain = v => JSON.parse(JSON.stringify(v));
@@ -127,4 +128,31 @@ test('unknown course diagnostics preserve exact drafter details and include only
   assert(text.includes('choiceKey: Unavailable'));
   assert(!text.includes('Engine data version'));
   assert(!text.includes('excluded'));
+});
+
+test('Godolphin Barb runs drafted courses Sunny / Firm and leaves the season alone', () => {
+  const rainy = { ...map(), ground: 'Heavy', weather: 'Rainy', season: 'Summer' };
+  const tiebreaker = { ...map(pool.maps[1]), mapId: undefined, ground: 'Soft', weather: 'Snowy', season: 'Spring' };
+  const snap = snapshot([rainy, { ...map(pool.maps[2]), ground: '', weather: '', season: 'Fall' }]);
+  snap.tiebreakerMap = tiebreaker;
+  const without = draft.draftRaces(snap, catalog);
+  assert.deepEqual(plain(without[0].race), { map_id: rainy.mapId, ground_condition: 4, weather: 3, season: 2 });
+  assert.equal(without[1].race, undefined, 'without the blessing a missing condition is still not guessed');
+  snap.blessing = { goddess: 'godolphin-barb' };
+  const barb = draft.draftRaces(snap, catalog);
+  assert.deepEqual(plain(barb[0].race), { map_id: rainy.mapId, ground_condition: 1, weather: 1, season: 2 });
+  assert.deepEqual(plain(barb[1].race), { map_id: pool.maps[2].id, ground_condition: 1, weather: 1, season: 3 });
+  assert.deepEqual(plain(barb[2].race), { map_id: pool.maps[1].id, ground_condition: 1, weather: 1, season: 1 });
+  assert.notEqual(draft.draftFingerprint(snap, barb), draft.draftFingerprint({ ...snap, blessing: undefined }, without), 'the blessing changes the run');
+  assert.equal(rainy.ground, 'Heavy', 'the snapshot itself is never rewritten');
+});
+
+test('Barb conditions already present in the data are unchanged and other goddesses never touch conditions', () => {
+  const sunnyFirm = { ...map(), ground: 'Firm', weather: 'Sunny', season: 'Spring' };
+  const barb = snapshot([sunnyFirm]); barb.blessing = { goddess: 'godolphin-barb' };
+  assert.deepEqual(plain(draft.draftRaces(barb, catalog)[0].race), { map_id: sunnyFirm.mapId, ground_condition: 1, weather: 1, season: 1 });
+  for (const goddess of ['darley-arabian', 'byerley-turk', 'unknown-goddess']) {
+    const other = snapshot([{ ...map(), ground: 'Heavy', weather: 'Rainy', season: 'Winter' }]); other.blessing = { goddess };
+    assert.deepEqual(plain(draft.draftRaces(other, catalog)[0].race), { map_id: pool.maps[0].id, ground_condition: 4, weather: 3, season: 4 });
+  }
 });

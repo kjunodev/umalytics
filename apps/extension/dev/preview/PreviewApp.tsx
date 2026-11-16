@@ -9,13 +9,21 @@ import { PlayersView } from '@umalytics/ui/players/PlayersView';
 import { AppHeader, type AppMode } from '../../ui/shell/AppHeader';
 import { UmasScene } from '@umalytics/ui/umas/UmasScene';
 import {
+  PREVIEW_DRAFT_ARABIAN,
+  PREVIEW_DRAFT_BARB,
   PREVIEW_DRAFT_COMPLETE,
   PREVIEW_DRAFT_MID,
+  PREVIEW_DRAFT_TURK,
   PREVIEW_LOADING_DISCORD_IDS,
   PREVIEW_PROFILES,
   PREVIEW_ROSTER,
   PREVIEW_TEAM_ICONS
 } from './fixtures';
+
+type DraftVariant = 'mid' | 'complete' | 'barb' | 'arabian' | 'turk';
+const DRAFT_VARIANTS: DraftVariant[] = ['mid', 'complete', 'barb', 'arabian', 'turk'];
+const DRAFT_FIXTURES = { mid: PREVIEW_DRAFT_MID, complete: PREVIEW_DRAFT_COMPLETE, barb: PREVIEW_DRAFT_BARB, arabian: PREVIEW_DRAFT_ARABIAN, turk: PREVIEW_DRAFT_TURK };
+const DRAFT_LABELS: Record<DraftVariant, string> = { mid: 'Mid-draft', complete: 'Complete', barb: 'Barb', arabian: 'Arabian', turk: 'Turk' };
 
 // Reads ?mode=&scene=&draft=&player= from the URL so pnpm preview:shots can
 // deep-link straight to a scene/state instead of scripting header clicks.
@@ -29,7 +37,7 @@ function initialStateFromQuery() {
   return {
     mode: mode === 'history' || mode === 'profiles' ? (mode as AppMode) : 'live',
     scene: scene === 'draft' || scene === 'umas' ? (scene as AppScene) : 'lobby',
-    draftVariant: draft === 'complete' ? 'complete' as const : 'mid' as const,
+    draftVariant: DRAFT_VARIANTS.includes(draft as DraftVariant) ? draft as DraftVariant : 'mid',
     selectedPlayerKey: player ?? undefined
   };
 }
@@ -42,13 +50,13 @@ export default function PreviewApp() {
   const [mode, setMode] = useState<AppMode>(initial.mode);
   const [scene, setScene] = useState<AppScene>(initial.scene);
   const [statsScope, setStatsScope] = useState<PlayerStatsScope>('currentSeason');
-  const [draftVariant, setDraftVariant] = useState<'mid' | 'complete'>(initial.draftVariant);
+  const [draftVariant, setDraftVariant] = useState<DraftVariant>(initial.draftVariant);
   const [selectedPlayerKey, setSelectedPlayerKey] = useState<string | undefined>(initial.selectedPlayerKey);
   // The harness has no History input box; a clicked match code just switches
   // to History mode and shows that code in the header, like the real app.
   const [openedMatchCode, setOpenedMatchCode] = useState<string>();
   const openMatch = (code: string) => { setOpenedMatchCode(code); setSelectedPlayerKey(undefined); setMode('history'); };
-  const draftSnapshot = draftVariant === 'mid' ? PREVIEW_DRAFT_MID : PREVIEW_DRAFT_COMPLETE;
+  const draftSnapshot = DRAFT_FIXTURES[draftVariant];
 
   const teams = [PREVIEW_ROSTER.teams!.team1, PREVIEW_ROSTER.teams!.team2];
   const selectedContext = getSelectedPlayerContext(teams, selectedPlayerKey);
@@ -88,8 +96,9 @@ export default function PreviewApp() {
           positioned overlay did before. */}
       {showDraftVariantToggle ? (
         <div className="seg" style={{ marginBottom: 8, alignSelf: 'flex-end' }} role="group" aria-label="Preview draft fixture">
-          <button type="button" className={draftVariant === 'mid' ? 'on' : ''} onClick={() => setDraftVariant('mid')}>Mid-draft</button>
-          <button type="button" className={draftVariant === 'complete' ? 'on' : ''} onClick={() => setDraftVariant('complete')}>Complete</button>
+          {DRAFT_VARIANTS.map((variant) => (
+            <button key={variant} type="button" className={draftVariant === variant ? 'on' : ''} onClick={() => setDraftVariant(variant)}>{DRAFT_LABELS[variant]}</button>
+          ))}
         </div>
       ) : null}
 

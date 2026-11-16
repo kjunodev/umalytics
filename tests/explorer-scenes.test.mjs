@@ -134,7 +134,7 @@ test('the played/new chip renders as its own line under the pick name, not layer
   loadFunction(c, draftSyntax, 'DraftPickTile');
   const result = c.DraftPickTile({action:{umaId:'100601',name:'Oguri'},experienceCount:3,isSelected:false,onSelect(){}});
   const button = result.children.find((child) => child?.type === 'button');
-  const order = button.children.map((child) => child.props?.className);
+  const order = button.children.filter(Boolean).map((child) => child.props?.className);
   assert.deepEqual(order, ['draft-pick-portrait', 'draft-pick-name', 'draft-pick-exp some'],
     'portrait, then name, then the exp chip, in document order (no absolute overlay on the portrait)');
 

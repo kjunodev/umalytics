@@ -683,6 +683,7 @@
 .draft-mod[data-tone="surface-dirt"] { background: #3a2410; color: #e3b078; }
 .draft-mod[data-tone="season-spring"] { background: #3a1830; color: #ff9fd0; }
 .draft-mod[data-tone="season-autumn"],
+.draft-mod[data-tone="season-fall"],
 .draft-mod[data-tone="ground-soft"] { background: #3a2410; color: #f0b070; }
 .draft-mod[data-tone="season-winter"] { background: #16304a; color: #8fc8ff; }
 .draft-mod[data-tone="weather-sunny"] { background: #33280f; color: var(--accent-gold); }
@@ -697,6 +698,122 @@
   border-color: #4a3a18;
   color: var(--accent-gold);
   font-size: 12px;
+}
+
+/* Season 3: the goddess chip in the phase bar, the per-team style mix, the
+   style pill on a pick tile, the map-limits line and the Byerley Turk
+   tiebreaker candidates. */
+.draft-blessing {
+  align-items: center;
+  background: var(--tone-rank-bg);
+  border-radius: var(--radius-pill);
+  color: var(--tone-rank-fg);
+  display: inline-flex;
+  flex-wrap: wrap;
+  font-size: 12px;
+  gap: 5px;
+  line-height: 1.3;
+  padding: 3px 10px;
+}
+
+.draft-blessing-name {
+  font-weight: 700;
+}
+
+.draft-style-mix {
+  color: var(--tone-style-fg);
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.3;
+  margin: 0;
+}
+
+.draft-pick-style {
+  background: var(--tone-style-bg);
+  border-radius: 6px;
+  color: var(--tone-style-fg);
+  flex-shrink: 0;
+  font-size: var(--font-step-xs);
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  line-height: 14px;
+  padding: 0 5px;
+  text-transform: uppercase;
+}
+
+.draft-map-limits {
+  color: var(--text-secondary);
+  flex-shrink: 0;
+  font-size: 12px;
+  line-height: 1.35;
+  margin: 0;
+}
+
+.draft-candidate-row {
+  background: var(--bg-inset);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  gap: 3px;
+  min-width: 0;
+  padding: 6px 10px;
+}
+
+.draft-candidate-row.selected {
+  background: #1e1a10;
+  border-color: #4a3a18;
+}
+
+.draft-candidate-name {
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.draft-candidate-row.banned:not(.selected) .draft-candidate-name {
+  color: var(--text-secondary);
+  text-decoration: line-through;
+  text-decoration-color: var(--border-emphasis);
+}
+
+.draft-candidate-conditions {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.draft-candidate-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.draft-candidate-tag {
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 18px;
+  overflow-wrap: anywhere;
+  padding: 0 6px;
+}
+
+.draft-candidate-tag.selected {
+  background: var(--tone-rank-bg);
+  color: var(--accent-gold);
+}
+
+.draft-candidate-tag.ban.team1 {
+  background: var(--tone-skill-bg);
+  color: var(--accent-blue-soft);
+}
+
+.draft-candidate-tag.ban.team2 {
+  background: var(--status-loss-bg);
+  color: var(--accent-orange);
 }
 
 .draft-vetoed-heading {

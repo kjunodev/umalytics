@@ -2,6 +2,10 @@ import kits from '../src-tauri/data/role-kits.json' with { type: 'json' };
 import pool from '../src-tauri/data/drafter-map-pool-global.json' with { type: 'json' };
 import { replayEnvelopes } from './replay-fixture.mjs';
 import fixture from '../../../tests/fixtures/casual-room-replay.json' with { type: 'json' };
+import { season3Match } from '../../../tests/fixtures/season3-matches.mjs';
+
+// Completed Season 3 matches for the History blessing scenes.
+export const season3Codes = { BRB001: 'godolphin-barb', ARB001: 'darley-arabian', TRK001: 'byerley-turk' };
 
 // These synthetic records exist only in the local screenshot harness.
 export const players = Array.from({ length: 10 }, (_, i) => ({
@@ -137,6 +141,8 @@ export function apiResponse(url, scene) {
         podiumPlacements: 2, isMvp: i % 3 === 0, eloDelta: i % 2 === 0 ? 12 : -8, eloPlacement: false };
     }) };
   }
+  const season3Code = parsed.pathname.match(/^\/api\/matches\/([A-Z0-9]{6})$/)?.[1];
+  if (season3Code && season3Codes[season3Code]) return season3Match(season3Codes[season3Code], { code: season3Code });
   if (parsed.pathname === '/api/matches/ABC123') {
     const savedSide = (offset) => ({ ...side(offset, 5), bannedMaps: [],
       pickedMaps: [{ id: `fixture-course-${offset}`, name: `Replay track ${offset + 1}`, track: `Replay track ${offset + 1}`, distance: 2400, surface: 'Turf' }] });
