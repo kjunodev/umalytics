@@ -284,6 +284,43 @@ export const PREVIEW_DRAFT_COMPLETE: DraftSnapshot = {
   }
 };
 
+// Season 3 variants of the complete draft: the blessing, the map limits and a
+// running style on each pick (the sixth pick of a team is unassigned).
+const PREVIEW_STYLES = {
+  team1: ['front', 'pace', 'pace', 'late', 'end', undefined],
+  team2: ['runaway', 'front', 'pace', 'pace', 'end', undefined]
+} as const;
+
+function season3Draft(matchCode: string, blessing: DraftSnapshot['blessing'], mapRules: DraftSnapshot['mapRules']): DraftSnapshot {
+  const teams = Object.fromEntries((['team1', 'team2'] as const).map((id) => {
+    let pickIndex = 0;
+    const umas = PREVIEW_DRAFT_COMPLETE.teams[id].umas.map((action) => {
+      if (action.kind !== 'pick') return action;
+      const runningStyle = PREVIEW_STYLES[id][pickIndex++];
+      return runningStyle === undefined ? action : { ...action, runningStyle };
+    });
+    return [id, { ...PREVIEW_DRAFT_COMPLETE.teams[id], umas }];
+  })) as DraftSnapshot['teams'];
+  return { ...PREVIEW_DRAFT_COMPLETE, matchCode, teams, blessing, mapRules };
+}
+
+export const PREVIEW_DRAFT_BARB = season3Draft('PVWBRB', { goddess: 'godolphin-barb', status: 'resolved' }, { maxDirtPerTeam: 3, maxPerDistanceCategory: 2 });
+
+export const PREVIEW_DRAFT_ARABIAN = season3Draft('PVWARB', { goddess: 'darley-arabian', status: 'resolved', arabianCategory: 'long' },
+  { maxDirtPerTeam: 3, maxPerDistanceCategory: 2, distanceCategoryOverrides: { long: 3 } });
+
+const TURK_CANDIDATES = [
+  { mapId: 'kyoto-3200', name: 'Kyoto', track: 'Kyoto', distance: 3200, surface: 'Turf', season: 'Autumn', weather: 'Rainy', ground: 'Heavy' },
+  { mapId: 'niigata-1800', name: 'Niigata', track: 'Niigata', distance: 1800, surface: 'Dirt', season: 'Summer', weather: 'Sunny', ground: 'Good' },
+  { mapId: 'nakayama-1200', name: 'Nakayama', track: 'Nakayama', distance: 1200, surface: 'Turf', variant: 'Outer', season: 'Spring', weather: 'Rainy', ground: 'Soft' }
+];
+
+export const PREVIEW_DRAFT_TURK = season3Draft('PVWTRK', {
+  goddess: 'byerley-turk', status: 'resolved', candidates: TURK_CANDIDATES,
+  bans: { team1: { mapId: 'niigata-1800', automatic: false }, team2: { mapId: 'nakayama-1200', automatic: true } },
+  lockedTeams: ['team1', 'team2'], selectedMapId: 'kyoto-3200'
+}, { maxDirtPerTeam: 3, maxPerDistanceCategory: 2 });
+
 export const PREVIEW_LEADERBOARD: SeasonLeaderboard = {
   activeSeasonId: 'season-4',
   activeSeasonName: 'Season 4 (Preview Series)',

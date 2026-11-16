@@ -6,7 +6,7 @@ import type { EsportsTeamIconMap, PlayerProfileSummary, PlayerStatsScope } from 
 import { openDrafterUrl } from './externalLinks';
 import { parseHistoryInput } from '@umalytics/core/explorer/explorerData';
 import { Lobby } from './Live';
-import { Draft } from './Draft';
+import { BlessingChip, Draft } from './Draft';
 import { Umas } from './Umas';
 import { rememberMatch, restoreRecentMatches, type RecentMatch } from './recentMatches';
 
@@ -77,11 +77,11 @@ export function History({ requestedMatch, scope, onOpenMatch, teamIcons, onScope
       <section className="data-box"><h2>Review a completed draft</h2><form className="data-controls" onSubmit={e => { e.preventDefault(); void open(query); }}><input className="data-search" aria-label="Match code or URL" placeholder="TG7YT2 or https://drafter.uma.guide/matches/TG7YT2" value={query} onChange={e => setQuery(e.target.value)} maxLength={300}/><button disabled={loading}>{loading ? 'Loading…' : 'Load'}</button></form></section>
       <section className="data-box"><div className="data-heading"><h2>Recently opened</h2><span>Saved on this PC · {recent.length}/20</span><button disabled={!recent.length} onClick={() => { loaded.current = true; persist([]); }}>Clear recently opened</button></div><table className="quiet-table" aria-label="Recently opened matches"><thead><tr><th>Match</th><th className="table-text">Teams</th></tr></thead><tbody>{recent.map(m => <tr key={m.code} onClick={() => { void open(m.code); }}><th scope="row"><button className="text-link" disabled={loading} onClick={e => { e.stopPropagation(); void open(m.code); }}>{m.code}</button></th><td className="table-text">{m.label}</td></tr>)}</tbody></table>{!recent.length && <p className="muted">Open a match code here or from a player’s history to add it to this list.</p>}</section>
     </> : <>
-      <header className="data-box match-heading"><button disabled={loading} onClick={() => { request.current?.abort(); setLoading(false); setMatch(undefined); setError(''); }}>← Matches</button><strong className="match-code">{match.matchCode}</strong><div><b><span className="team-blue">{match.draft.teams.team1.name}</span> vs <span className="team-orange">{match.draft.teams.team2.name}</span></b><small>{match.completedAt ? new Date(match.completedAt).toLocaleString() : 'Date not provided'} · {match.status} · {match.roster.players.length} players</small></div><a href={`https://drafter.uma.guide/matches/${encodeURIComponent(match.matchCode)}`} onClick={e => { e.preventDefault(); void openDrafterUrl(e.currentTarget.href).catch(() => setError('Unable to open Uma Drafter in the system browser.')); }}>Open in Uma Drafter ↗</a></header>
+      <header className="data-box match-heading"><button disabled={loading} onClick={() => { request.current?.abort(); setLoading(false); setMatch(undefined); setError(''); }}>← Matches</button><strong className="match-code">{match.matchCode}</strong><div><b><span className="team-blue">{match.draft.teams.team1.name}</span> vs <span className="team-orange">{match.draft.teams.team2.name}</span></b><small>{match.completedAt ? new Date(match.completedAt).toLocaleString() : 'Date not provided'} · {match.status} · {match.roster.players.length} players</small></div>{match.draft.blessing && <BlessingChip blessing={match.draft.blessing} mapRules={match.draft.mapRules}/>}<a href={`https://drafter.uma.guide/matches/${encodeURIComponent(match.matchCode)}`} onClick={e => { e.preventDefault(); void openDrafterUrl(e.currentTarget.href).catch(() => setError('Unable to open Uma Drafter in the system browser.')); }}>Open in Uma Drafter ↗</a></header>
       {match.warnings.map(w => <p className="muted" key={w}>{w}</p>)}
       <div className="seg match-tabs" role="group" aria-label="Match view">{(['Lobby', 'Draft', 'Umas'] as const).map(tab => <button key={tab} aria-pressed={scene === tab} onClick={() => setScene(tab)}>{tab}</button>)}</div>
       {scene === 'Lobby' && <Lobby onScopeChange={onScopeChange} roster={match.roster} profiles={profiles} loading={profilesLoading} compact={false} scope={scope} emptyStatus="No historical roster" teamIcons={teamIcons} onOpenMatch={onOpenMatch} onRetry={() => setRetry(n => n + 1)}/>}
-      {scene === 'Draft' && <Draft draft={match.draft}/>}
+      {scene === 'Draft' && <Draft draft={match.draft} blessingChip={false}/>}
       {scene === 'Umas' && <Umas roster={match.roster} profiles={profiles} scope={scope}/>}
     </>}
   </section>;

@@ -1,4 +1,5 @@
 import type { DraftSnapshot, DraftMapSelection, DraftTiebreakerMap } from '@umalytics/shared';
+import { BARB_GROUND, BARB_WEATHER, isGodolphinBarb } from '@umalytics/core/room/blessing';
 import { groundNames, weatherNames, seasonNames, type Catalog, type Course, type RaceSelection, type StaminaResult } from './staminaTypes';
 
 export interface DraftRace { label: string; raw: string; race?: RaceSelection; course?: Course; reason?: string; choiceKey?: string }
@@ -29,11 +30,16 @@ function resolve(map: DraftMapSelection | DraftTiebreakerMap, catalog: Catalog, 
   return { label: `${course.track_name} ${course.distance} · ${course.surface === 1 ? 'Turf' : 'Dirt'}${course.variant ? ` · ${course.variant}` : ''}`, raw, course,
     race: { map_id: course.id, ground_condition, weather, season } };
 }
+// Godolphin Barb's blessing runs every course Sunny / Firm and leaves the season
+// alone. The drafter normally already reports those conditions; when a map's data
+// says anything else (or nothing), the stamina run still uses Sunny / Firm.
+const blessed = <T extends DraftMapSelection | DraftTiebreakerMap>(map: T, snapshot: DraftSnapshot): T =>
+  isGodolphinBarb(snapshot.blessing) && (map.ground !== BARB_GROUND || map.weather !== BARB_WEATHER) ? { ...map, ground: BARB_GROUND, weather: BARB_WEATHER } : map;
 export function draftRaces(snapshot: DraftSnapshot | undefined, catalog: Catalog, choices: CourseChoices = {}): DraftRace[] {
   if (!snapshot) return [];
   const maps = (['team1', 'team2'] as const).flatMap(team => snapshot.teams[team].maps.filter(m => m.status === 'selected')).sort((a, b) => (a.order ?? Number.MAX_SAFE_INTEGER) - (b.order ?? Number.MAX_SAFE_INTEGER));
   const roomChoices = snapshot.matchCode ? choices[snapshot.matchCode] ?? {} : {};
-  return [...maps.map(map => resolve(map, catalog, roomChoices)), ...(snapshot.tiebreakerMap ? [resolve(snapshot.tiebreakerMap, catalog, roomChoices)] : [])].slice(0, 7);
+  return [...maps.map(map => resolve(blessed(map, snapshot), catalog, roomChoices)), ...(snapshot.tiebreakerMap ? [resolve(blessed(snapshot.tiebreakerMap, snapshot), catalog, roomChoices)] : [])].slice(0, 7);
 }
 export function draftFingerprint(snapshot: DraftSnapshot | undefined, races: DraftRace[]): string {
   return JSON.stringify([snapshot?.matchCode ?? null, races.map(r => [r.race ?? null, r.course?.id ?? null, r.race ? null : r.raw, r.reason ?? null])]);

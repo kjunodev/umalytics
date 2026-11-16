@@ -1,6 +1,7 @@
 import type { DraftMapSelection, DraftSnapshot, DraftUmaAction, PrematchPlayer, PrematchRoster, TeamId } from '@umalytics/shared';
 import type { HistoricalMatch, PlayerSearchResult } from './explorerTypes';
 import { normalizeMatchCode } from '../room/matchDetection';
+import { applyRunningStyles, parseBlessing, parseMapRules, parseStyleAssignments } from '../room/blessing';
 import { getUmaDisplayName, getUmaPortraitUrl, normalizeUmaOutfitId, resolveDrafterImageUrl } from '../umas/umaPortraits';
 
 const record = (value: unknown): Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -138,6 +139,11 @@ export function parseHistoricalMatch(value: unknown, requestedCode: string): His
       }
     }
   }
+  // Season 3 fields are absent from older matches and simply stay undefined.
+  const blessing = parseBlessing(saved.blessing), limits = parseMapRules(saved.rules);
+  if (blessing) draft.blessing = blessing;
+  if (limits) draft.mapRules = limits;
+  applyRunningStyles(draft.teams, parseStyleAssignments(saved.participantUmaAssignments, report.participants));
   if (Object.keys(record(saved.wildcardMap)).length) {
     const wildcard = mapSelection(record(saved.wildcardMap), 'team1', 'selected');
     draft.tiebreakerMap = { name: wildcard.name, details: wildcard.details, track: wildcard.track,

@@ -3,6 +3,7 @@ import { normalizeMatchCode } from './matchDetection';
 import { normalizePrematchRosterFromPlayers } from './playerExtraction';
 import { isDiscordSnowflake, UNKNOWN_PLAYER_NAME } from './rosterIdentity';
 import { getUmaDisplayName, normalizeUmaOutfitId, resolveDrafterImageUrl } from '../umas/umaPortraits';
+import { applyRunningStyles, normalizeRunningStyle, parseBlessing, parseMapRules, parseStyleAssignments } from './blessing';
 
 type RoomRecord = Record<string, any>;
 const ROOM_EVENT_TYPES = new Set(['match.snapshot', 'room.presence.updated', 'participant.uma-assignments.snapshot', 'room.captain.changed']);
@@ -35,6 +36,7 @@ export function decodeRoomEvent(payload: unknown): RoomRecord | null {
       team1: cleanDraftTeam(state.team1), team2: cleanDraftTeam(state.team2),
       wildcardMap: cleanItem(state.wildcardMap), rules: cleanRules(state.rules),
       multiplayer: cleanMultiplayer(state.multiplayer),
+      ...seasonThreeFields(state),
       ...(Array.isArray(state.draftActionHistory) ? { draftActionHistory: cleanActionHistory(state.draftActionHistory) } : {})
     }};
   }
@@ -48,6 +50,14 @@ export function decodeRoomEvent(payload: unknown): RoomRecord | null {
     ...(Array.isArray(event.rankedQueueRoster) ? { rankedQueueRoster: cleanPlayers(event.rankedQueueRoster) } : {}) };
 }
 
+// Season 3: the blessing, map limits and running styles. Style rows keep only
+// { team, selectedUmaId, runningStyle }: no player identity crosses with them.
+function seasonThreeFields(state: RoomRecord): RoomRecord {
+  const blessing = parseBlessing(state.blessing), mapRules = parseMapRules(state.rules);
+  const styles = parseStyleAssignments(state.participantUmaAssignments);
+  return { ...(blessing ? { blessing } : {}), ...(mapRules ? { mapRules } : {}),
+    ...(styles.length ? { runningStyles: styles } : {}) };
+}
 function cleanPlayers(values: unknown[]): RoomRecord[] {
   return values.slice(0,32).filter(roomRecord).map(value => {
     const player: RoomRecord = {};
@@ -83,6 +93,8 @@ function cleanItem(value: unknown): RoomRecord | undefined {
   const item: RoomRecord = {};
   for (const key of ['id','name','title','track','surface','direction','variant']) if (typeof value[key] === 'string') item[key] = value[key].slice(0,160);
   if (typeof value.imageUrl === 'string' && value.imageUrl.length <= 160) item.imageUrl = value.imageUrl;
+  const runningStyle = normalizeRunningStyle(value.runningStyle);
+  if (runningStyle) item.runningStyle = runningStyle;
   if (typeof value.distance === 'number' && Number.isFinite(value.distance)) item.distance = value.distance;
   if (roomRecord(value.conditions)) item.conditions = Object.fromEntries(['season','weather','ground'].filter(key => typeof value.conditions[key] === 'string').map(key => [key,value.conditions[key].slice(0,40)]));
   return item;
@@ -245,12 +257,14 @@ function draftFromRoomState(state: RoomRecord, matchCode: string, version: numbe
     const umas = (['pickedUmas','preBannedUmas','bannedUmas'] as const).flatMap((key, kindIndex) => value[key].map((uma: RoomRecord,index: number) => ({
       team, kind: (['pick','ban','veto'] as const)[kindIndex]!, umaId: normalizeUmaOutfitId(String(uma.id ?? '')),
       name: getUmaDisplayName(String(uma.id ?? ''), uma.name), order: index + 1,
-      ...umaImageField(uma)
+      ...umaImageField(uma), ...(kindIndex === 0 && uma.runningStyle ? { runningStyle: uma.runningStyle } : {})
     })));
     teams[team] = { id: team, name: state.multiplayer[team + 'Name'] ?? (team === 'team1' ? 'Team 1' : 'Team 2'), maps, umas };
   }
+  if (Array.isArray(state.runningStyles)) applyRunningStyles(teams, state.runningStyles);
   return { matchCode, version, phase: state.phase, currentTeam: isRoomTeam(state.currentTeam) ? state.currentTeam : undefined,
     source: 'synced-draft-state', teams, updatedAt: Date.now(), rules: state.rules,
+    ...(state.blessing ? { blessing: state.blessing } : {}), ...(state.mapRules ? { mapRules: state.mapRules } : {}),
     ...(state.wildcardMap ? { tiebreakerMap: { name: state.wildcardMap.track ?? state.wildcardMap.name, details: mapDetails(state.wildcardMap), ...mapFields(state.wildcardMap) } } : {}) };
 }
 function umaImageField(uma: RoomRecord): { imageUrl?: string } {

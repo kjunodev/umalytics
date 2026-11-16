@@ -135,6 +135,20 @@
 .arena-race.pending { color: var(--tx3); border: 1px dashed var(--line); background: transparent; }
 .arena-race.pending > i { background: var(--line); }
 .vetoed-maps { margin: 12px 0 0; color: var(--tx3); font-size: 11px; overflow-wrap: anywhere; }
+.blessing-chip { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 0 4px; margin-left: auto; padding: 3px 10px; border-radius: var(--radius-pill); background: var(--tone-rank-bg); color: var(--tone-rank-fg); font: 400 12px/1.4 var(--font-body); font-style: normal; }
+.blessing-chip b { font-weight: 700; }
+.arena-draft .style-mix { flex-basis: 100%; font-size: 12px; font-weight: 600; color: var(--tone-style-fg); }
+.style-tag { flex-shrink: 0; padding: 1px 6px; border-radius: 6px; background: var(--tone-style-bg); color: var(--tone-style-fg); font-size: 10px; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; }
+.arena-races .map-limits { margin: 0 0 8px; color: var(--tx2); font-size: 12px; }
+.arena-candidates { display: flex; flex-direction: column; gap: 6px; margin-top: 12px; }
+.arena-candidate { display: flex; flex-direction: column; gap: 3px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--s2); }
+.arena-candidate.selected { border-color: var(--gold); }
+.arena-candidate strong { font-size: 13px; overflow-wrap: anywhere; }
+.arena-candidate.banned:not(.selected) strong { color: var(--tx2); text-decoration: line-through; text-decoration-color: var(--line); }
+.arena-candidate small { font-size: 11px; color: var(--tx3); }
+.candidate-tags { display: flex; flex-wrap: wrap; gap: 4px; }
+.candidate-tag { padding: 0 6px; border-radius: 6px; background: var(--s3); color: var(--team-accent); font-size: 11px; font-weight: 700; line-height: 18px; overflow-wrap: anywhere; }
+.candidate-tag.selected { background: var(--tone-rank-bg); color: var(--tone-rank-fg); }
 .arena-pick-order ol { display: flex; flex-wrap: wrap; gap: 5px; padding: 0; margin: 0; list-style: none; }
 .arena-pick-order li { display: flex; flex-direction: column; align-items: center; gap: 4px; color: var(--tx3); }
 .arena-pick-order .draft-portrait { width: 26px; height: 26px; border-bottom: 3px solid var(--team-accent); border-radius: 50% 50% 3px 3px; }

@@ -205,7 +205,7 @@ export interface DraftModChip {
 
 const MOD_TONES = {
   surface: ['turf', 'dirt'],
-  season: ['spring', 'summer', 'autumn', 'winter'],
+  season: ['spring', 'summer', 'autumn', 'fall', 'winter'],
   weather: ['sunny', 'cloudy', 'rainy', 'snowy'],
   ground: ['good', 'firm', 'soft', 'heavy']
 } as const;
