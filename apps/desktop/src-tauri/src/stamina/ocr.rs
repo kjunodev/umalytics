@@ -104,7 +104,7 @@ pub(super) fn import_skills(
                 .get(&meta.id)
                 .filter(|skill| matcher::has_race_effect(skill))?;
             let cost = costs.get(&skill.id).copied().filter(|cost| *cost > 0);
-            let tier = (meta.rarity != "unique" && skill.group_id > 0 && skill.group_rate > 0)
+            let tier = (meta.rarity != "unique" && skill.group_id > 0 && skill.group_rate != 0)
                 .then_some(Tier {
                     group: skill.group_id,
                     rank: skill.group_rate,
@@ -129,8 +129,8 @@ pub(super) fn scan_png(bytes: &[u8]) -> std::result::Result<Import, String> {
     scan_image(|| Image::from_png(bytes))
 }
 
-pub(super) fn scan_rgba(frame: super::capture::Frame) -> std::result::Result<Import, String> {
-    scan_image(|| Image::from_rgba(frame.width, frame.height, &frame.rgba))
+pub(super) fn scan_capture(frame: super::capture::Frame) -> std::result::Result<Import, String> {
+    scan_image(|| Image::from_bgra(frame.width, frame.height, &frame.bgra))
 }
 
 fn scan_image(load: impl FnOnce() -> Result<Image>) -> std::result::Result<Import, String> {
@@ -157,6 +157,8 @@ struct SkillFields {
     cost: Option<u16>,
     hint: Option<u8>,
     obtained: Option<bool>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    removal: bool,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     hint_unreadable: bool,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
@@ -310,23 +312,25 @@ fn scan_at_scale(
                     .push(learn_row(ocr, image, resized, matcher, row)?);
             }
         }
-        Screen::CareerSkills | Screen::DetailsSkills | Screen::FinishedDetails => {
+        Screen::CareerSkills
+        | Screen::DetailsSkills
+        | Screen::DetailsConditions
+        | Screen::FinishedDetails => {
             let mut unique_skill = None;
-            if layout.screen == Screen::FinishedDetails {
-                if let Some(header) = layout.header {
-                    let (id, attributes, raw) =
-                        parse::finished_details(ocr, image, &words, header, umas)?;
-                    result.attributes = Some(attributes);
-                    if let Some(uma) = umas.iter().find(|uma| id == Some(uma.card_id)) {
-                        unique_skill = Some(uma.unique_skill_id);
-                        result.card = Some(Card {
-                            id: uma.card_id,
-                            title: uma.title.clone(),
-                            name: uma.name.clone(),
-                        });
-                    }
-                    result.raw.extend(raw);
+            if let Some(header) = layout.header {
+                let (id, attributes, raw) = parse::details(
+                    ocr, image, &words, header, umas, layout.screen != Screen::FinishedDetails,
+                )?;
+                result.attributes = Some(attributes);
+                if let Some(uma) = umas.iter().find(|uma| id == Some(uma.card_id)) {
+                    unique_skill = Some(uma.unique_skill_id);
+                    result.card = Some(Card {
+                        id: uma.card_id,
+                        title: uma.title.clone(),
+                        name: uma.name.clone(),
+                    });
                 }
+                result.raw.extend(raw);
             }
             for row in layout.rows {
                 result.skills.push(owned_row(
@@ -392,11 +396,22 @@ fn owned_row(
     } else {
         read_name(ocr, image, resized, matcher, area, glyph_height, unique)?
     };
+    let debuff = pixels_in(image, region(row, 4, 19, 11, 82), layout::debuff_icon) > 0.15;
+    if debuff {
+        matched = matcher.identify(&raw_name, Some(false), Some(Mark::Cross), None);
+    } else if matched.is_none() && !unique {
+        matched = matcher.explicit_cross(&raw_name);
+    }
     let mut variant_choice = None;
     if matched.is_none() && details {
         let expanded = region(row, 17, 5, if has_level { 80 } else { 96 }, 92);
         let (raw, resolution, variants) =
             compact_name(ocr, image, resized, matcher, expanded, glyph_height, unique)?;
+        let resolution = if debuff {
+            matcher.identify(&raw, Some(false), Some(Mark::Cross), None)
+        } else {
+            resolution.or_else(|| matcher.explicit_cross(&raw))
+        };
         if resolution.is_some() || variants.is_some() || raw_name.is_empty() {
             raw_name = raw;
             matched = resolution;
@@ -654,6 +669,8 @@ fn learn_row(
     let unique = pixels_in(image, region(row, 92, 15, 96, 25), is_unique) > 0.5;
     let (mut raw_name, mut matched, mark) =
         read_name(ocr, image, resized, matcher, area, glyph_height, unique)?;
+    let removal = matcher.removal(&raw_name);
+    matched = removal.or(matched);
     let mut raw_fields = Vec::new();
     let mut variant_choice = None;
     if matched.is_none() {
@@ -682,7 +699,7 @@ fn learn_row(
         }
         raw_fields.push(description);
     }
-    let mut fields = SkillFields::default();
+    let mut fields = SkillFields { removal: removal.is_some(), ..SkillFields::default() };
     let badge = region(row, 75, 37, 94, 61);
     if pixels_in(image, badge, |[r, g, b]| {
         r >= 222 && g < 100 && (88..=175).contains(&b)

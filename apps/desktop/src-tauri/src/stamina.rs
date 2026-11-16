@@ -1354,7 +1354,7 @@ pub async fn capture_stamina_screenshot(
     }
     tauri::async_runtime::spawn_blocking(move || {
         let frame = capture::capture(from_button)?;
-        ocr::scan_rgba(frame).map_err(|_| "The captured game window could not be read.".into())
+        ocr::scan_capture(frame).map_err(|_| "The captured game window could not be read.".into())
     })
     .await
     .map_err(|_| capture::FAILED.to_string())?

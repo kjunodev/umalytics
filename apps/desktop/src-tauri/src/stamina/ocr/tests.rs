@@ -38,10 +38,8 @@ fn import_catalog_uses_shipped_prices_and_engine_tiers() {
         assert_eq!(first.group, second.group);
         assert_eq!((first.rank, second.rank), (1, 2));
     }
-    assert!(
-        skills[&200013].tier.is_none(),
-        "A negative skill is independent"
-    );
+    assert!(skills[&200033].tier.as_ref().unwrap().rank < 0);
+    assert_eq!(skills[&200033].tier.as_ref().unwrap().group, skills[&200032].tier.as_ref().unwrap().group);
     assert_eq!(skills[&201111].hint_from, Some(201112));
     assert_eq!(skills[&200181].hint_from, Some(200182));
 }
@@ -95,6 +93,7 @@ struct Expected {
     card: Option<Card>,
     skill_points: Option<u16>,
     client_top: Option<i32>,
+    row_bounds: Option<Vec<[i32; 4]>>,
     #[serde(default)]
     skills: Vec<ExpectedRow>,
 }
@@ -245,24 +244,69 @@ fn screenshot_accuracy() -> Result<()> {
     let folder = std::env::var_os("UMALYTICS_OCR_SAMPLES").ok_or("Set UMALYTICS_OCR_SAMPLES")?;
     let folder = Path::new(&folder);
     let mut passed = benchmark_set(folder)?;
+    if folder.join("learn-crops").is_dir() {
+        passed &= benchmark_learn_crops(&folder.join("learn-crops"))?;
+    }
     for name in [
         "career-2",
         "small-window",
         "retest-2026-11-12",
         "live-capture-2026-11-13",
+        "scan-2026-11-16",
     ] {
         let extra = folder.join(name);
         if extra.is_dir() {
             passed &= benchmark_set(&extra)?;
+            if extra.join("learn-crops").is_dir() {
+                passed &= benchmark_learn_crops(&extra.join("learn-crops"))?;
+            }
         }
     }
     assert!(passed, "Expected correct screen classifications, each set's row accuracy floor, and zero wrong matches");
     Ok(())
 }
 
+fn benchmark_learn_crops(folder: &Path) -> Result<bool> {
+    let json = fs::read_to_string(folder.join("expected.json"))?;
+    let expected: BTreeMap<String, Expected> = serde_json::from_str(json.trim_start_matches('\u{feff}'))?;
+    let images: std::collections::BTreeSet<_> = fs::read_dir(folder)?
+        .collect::<std::io::Result<Vec<_>>>()?
+        .into_iter()
+        .filter(|entry| entry.path().extension().is_some_and(|ext| ext.eq_ignore_ascii_case("png")))
+        .map(|entry| entry.file_name().to_string_lossy().into_owned())
+        .collect();
+    assert!(images.iter().eq(expected.keys()), "Label every Learn crop");
+    let engine = engine()?;
+    let mut skills = engine.catalog.skills.clone();
+    let metadata = Path::new(env!("CARGO_MANIFEST_DIR")).join("resources/skill-data");
+    assert!(skill_data::enrich_from(&mut skills, &metadata).0);
+    let matcher = Matcher::new(&skills, BUNDLED_SKILLS, &engine.data.skills)?;
+    let ocr = Ocr::new()?;
+    let mut count = 0;
+    let mut correct = 0;
+    for (name, sample) in expected {
+        let Some(bounds) = sample.row_bounds else { continue; };
+        assert_eq!(bounds.len(), sample.skills.len(), "{name}");
+        let image = Image::open(&folder.join(&name))?;
+        for ([left, top, right, bottom], expected) in bounds.into_iter().zip(sample.skills) {
+            count += 1;
+            let row = learn_row(&ocr, &image, None, &matcher, Rect::new(left, top, right, bottom))?;
+            if row.resolution.and_then(Resolution::matched).map(|matched| matched.id) == expected.id
+                && row.fields == expected.fields {
+                correct += 1;
+            } else {
+                println!("MISS {name} {:?}: id {:?}, name {:?}, fields {:?}, OCR {:?}", expected.name,
+                    row.resolution, row.raw_name, row.fields, row.raw_fields);
+            }
+        }
+    }
+    println!("Learn crops: {correct}/{count} rows matched with prices and hints");
+    Ok(count > 0 && correct == count)
+}
+
 fn benchmark_set(folder: &Path) -> Result<bool> {
     let live_capture = folder.ends_with("live-capture-2026-11-13");
-    let verify_fields = folder.ends_with("small-window") || live_capture;
+    let verify_fields = folder.ends_with("small-window") || live_capture || folder.ends_with("scan-2026-11-16");
     let retest = folder.ends_with("retest-2026-11-12");
     let scales: &[f32] = if verify_fields || retest {
         &[1.0]
@@ -358,7 +402,7 @@ fn benchmark_set(folder: &Path) -> Result<bool> {
             let start = Instant::now();
             let actual = scan(&ocr, &screenshot, &matcher, &engine.catalog.umas)?;
             if let Some(top) = expected.client_top {
-                // Also exercise the RGBA input and client-area framing used by live capture.
+                // Also exercise the BGRA input and client-area framing used by live capture.
                 let client = Rect::new(
                     0,
                     (top as f32 * scale).round() as i32,
@@ -366,16 +410,16 @@ fn benchmark_set(folder: &Path) -> Result<bool> {
                     screenshot.height,
                 );
                 let client = screenshot.crop(client, 1.0);
-                let rgba: Vec<u8> = (0..client.height)
+                let bgra: Vec<u8> = (0..client.height)
                     .flat_map(|y| {
                         let client = &client;
                         (0..client.width).flat_map(move |x| {
                             let [r, g, b] = client.at(x, y);
-                            [r, g, b, 255]
+                            [b, g, r, 255]
                         })
                     })
                     .collect();
-                let captured = Image::from_rgba(client.width, client.height, &rgba)?;
+                let captured = Image::from_bgra(client.width, client.height, &bgra)?;
                 let captured = scan(&ocr, &captured, &matcher, &engine.catalog.umas)?;
                 compare(
                     "live client area",

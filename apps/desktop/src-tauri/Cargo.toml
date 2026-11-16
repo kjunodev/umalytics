@@ -39,3 +39,13 @@ windows = { version = "0.62", features = [
 # Keep interactive simulations and native tests usable in development too.
 [profile.dev.package.uma_race_sim]
 opt-level = 3
+
+# Keep debug pixel copies and frame dumps usable at the capture interval.
+[profile.dev.package.umalytics-desktop]
+opt-level = 1
+
+[profile.dev.package.png]
+opt-level = 3
+
+[profile.dev.package.fdeflate]
+opt-level = 3

@@ -1,11 +1,11 @@
 import type { StaminaBuild } from './staminaTypes';
 
-export type Screen = 'attributes-numbers' | 'attributes-chart' | 'career-skills' | 'details-skills' | 'finished-details' | 'learn' | 'unsupported';
+export type Screen = 'attributes-numbers' | 'attributes-chart' | 'career-skills' | 'details-skills' | 'details-conditions' | 'finished-details' | 'learn' | 'unsupported';
 export interface ScreenshotRow {
   raw_name: string;
   resolution: { matched: { id: number; confidence: number } } | 'ignored_no_race_effect' | null;
   variant_choice?: { name: string; circle: number; double_circle: number; suggested?: number };
-  fields: { cost: number | null; hint: number | null; level: number | null; obtained: boolean | null; hint_unreadable?: boolean; hint_conflict?: boolean };
+  fields: { cost: number | null; hint: number | null; level: number | null; obtained: boolean | null; removal?: boolean; hint_unreadable?: boolean; hint_conflict?: boolean };
 }
 export interface Screenshot {
   screen: Screen;
@@ -61,6 +61,8 @@ export interface TierStep {
   total: number | null;
   scanned: number[];
   inferredFrom?: number;
+  removal?: boolean;
+  estimated?: boolean;
   priceIssue: 'Price mismatch' | 'Price unverified' | null;
 }
 export interface SkillChain {
@@ -103,25 +105,34 @@ export function tierChains(rows: Observation[], catalog: ImportCatalog): SkillCh
   };
   return [...groups].map(([key, ids]) => {
     ids.sort((a, b) => rank(a) - rank(b) || a - b);
-    const ownedId = [...ids].reverse().find(id => seen.get(id)?.owned);
+    const ownedId = [...ids].reverse().find(id => seen.get(id)?.owned || rank(id) < 0);
     const group = catalog[ids[0]!]?.tier?.group;
     const ownedRank = ownedId === undefined ? -1 : rank(ownedId);
     const owned = ownedId === undefined ? undefined : { id: ownedId, level: seen.get(ownedId)!.level };
+    const removalId = ownedId !== undefined && ownedRank < 0 ? ownedId : undefined;
+    const removalReads = removalId === undefined ? [] : seen.get(removalId)!.learn.filter(row => !row.owned);
+    const removalAvailable = removalReads.length > 0 || ids.some(id => rank(id) > 0 && seen.get(id)!.learn.some(row => !row.owned));
+    const removalPrices = [...new Set(removalReads.flatMap(row => row.price === null ? [] : [row.price]))];
+    const removalHint = removalId === undefined ? null : hintFor(removalId);
+    const calculatedRemoval = removalId === undefined ? 0 : price(removalId, removalHint);
+    const removalPrice = removalPrices.length === 1 ? removalPrices[0]! : removalPrices.length === 0 ? calculatedRemoval : null;
     const lastOfferedRank = Math.max(ownedRank, ...ids.filter(id => seen.get(id)!.learn.length).map(rank));
     for (const id of (group === undefined ? [] : catalogGroups.get(group) ?? [])) {
       const hintFrom = catalog[id]?.hint_from;
       const unlockedCircle = hintFrom !== undefined && !!seen.get(hintFrom)?.learn.length;
-      if (rank(id) > ownedRank && (rank(id) < lastOfferedRank || unlockedCircle) && !ids.some(existing => rank(existing) === rank(id))) ids.push(id);
+      const afterRemoval = removalId !== undefined && removalAvailable;
+      if (rank(id) > Math.max(0, ownedRank) && (rank(id) < lastOfferedRank || unlockedCircle || afterRemoval) &&
+        !ids.some(existing => rank(existing) === rank(id))) ids.push(id);
     }
     ids.sort((a, b) => rank(a) - rank(b) || a - b);
-    const prerequisitesFor = (id: number) => ids.filter(lower => rank(lower) > ownedRank && rank(lower) < rank(id));
+    const prerequisitesFor = (id: number) => ids.filter(lower => rank(lower) > ownedRank && rank(lower) >= 0 && rank(lower) < rank(id));
     const needsObservation = (id: number) => {
       const from = catalog[id]?.hint_from;
       return !seen.get(id)?.learn.length && (from === undefined || !seen.get(from)?.learn.length);
     };
     const candidates = new Map<number, { hint: number | null; from: number }[]>();
     for (const id of ids) {
-      if (rank(id) <= ownedRank) continue;
+      if (rank(id) <= ownedRank || removalId !== undefined) continue;
       const prerequisites = prerequisitesFor(id);
       const missing = prerequisites.filter(lower => !seen.has(lower));
       if (missing.length !== 1) continue;
@@ -159,7 +170,7 @@ export function tierChains(rows: Observation[], catalog: ImportCatalog): SkillCh
       const scanned = [...new Set(offers.flatMap(offer => offer.price === null ? [] : [offer.price]))].sort((a, b) => a - b);
       const prerequisites = prerequisitesFor(id);
       const prices = prerequisites.map(lower => price(lower, effectiveHint(lower)));
-      const prefix = prices.some(value => value === null) ? null : prices.reduce<number>((sum, value) => sum + (value ?? 0), 0);
+      const prefix = removalPrice === null || prices.some(value => value === null) ? null : prices.reduce<number>((sum, value) => sum + (value ?? 0), removalPrice);
       const withPrerequisite = (own: number | null) => own === null || prefix === null ? null : own + prefix;
       const hint = effectiveHint(id);
       const tierPrice = price(id, hint);
@@ -168,20 +179,30 @@ export function tierChains(rows: Observation[], catalog: ImportCatalog): SkillCh
         const calculated = withPrerequisite(price(id, offer.hintUnreadable ? hint : offer.hint));
         return offer.price !== null && calculated !== null && offer.price !== calculated;
       });
-      const isOwned = rank(id) <= ownedRank;
+      const isOwned = rank(id) <= ownedRank || rank(id) < 0;
       const unverified = (!isOwned && (total === null || needsHint(id) || prerequisites.some(needsHint)))
         || reads.some(row => row.hintUnreadable || row.hintConflict || (!row.owned && row.price === null));
-      if (isOwned && !seen.get(id)?.owned && !offers.length) return [];
-      return [{ id, rank: rank(id), owned: isOwned, selectable: !isOwned, hint: hint ?? null, tierPrice, total, scanned,
+      if (rank(id) < 0 && id !== removalId) return [];
+      if (isOwned && id !== removalId && !seen.get(id)?.owned && !offers.length) return [];
+      const step: TierStep = { id, rank: rank(id), owned: isOwned, selectable: !isOwned, hint: hint ?? null, tierPrice, total, scanned,
         inferredFrom: inferred.get(id)?.from,
-        priceIssue: mismatch ? 'Price mismatch' : unverified ? 'Price unverified' : null }];
+        estimated: !isOwned && removalId !== undefined,
+        priceIssue: mismatch ? 'Price mismatch' : unverified ? 'Price unverified' : null };
+      if (id !== removalId) return [step];
+      const penalty = { ...step, total: null, tierPrice: null, scanned: [], priceIssue: null };
+      if (!removalAvailable) return [penalty];
+      return [
+        penalty,
+        { ...step, rank: 0, owned: false, selectable: true, removal: true, total: removalPrice, tierPrice: removalPrice,
+          priceIssue: removalPrices.length !== 1 ? 'Price unverified' : calculatedRemoval !== null && calculatedRemoval !== removalPrice ? 'Price mismatch' : null },
+      ];
     });
     return { key, owned, steps };
   });
 }
 
 export function priceAfterTier(chain: SkillChain, step: TierStep, selectedId: number | undefined) {
-  const paid = chain.steps.find(tier => tier.id === selectedId);
+  const paid = chain.steps.find(tier => tier.selectable && tier.id === selectedId);
   if (!paid) return step.total;
   if (paid.rank >= step.rank) return step.tierPrice;
   const tiers = chain.steps.filter(tier => tier.rank > paid.rank && tier.rank <= step.rank && tier.selectable);
@@ -197,7 +218,7 @@ export function purchasePlan(chains: SkillChain[], selected: number[], points: n
     if (choice) {
       if (choice.total === null) hasUnknownPrice = true;
       else spent += choice.total;
-      skills.push({ id: choice.id, level: 1 });
+      if (!choice.removal) skills.push({ id: choice.id, level: 1 });
     } else if (chain.owned) skills.push(chain.owned);
   }
   skills.sort((a, b) => a.id - b.id);

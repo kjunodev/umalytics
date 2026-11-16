@@ -15,7 +15,7 @@ export function StaminaScreenshotSkills({ scan, chains, skills, running, onChang
   const plan = purchasePlan(chains, scan.selected, scan.points);
   const meta = new Map(skills.map(skill => [skill.id, skill]));
   const name = (id: number) => meta.get(id)?.name ?? `Skill ${id}`;
-  const identity = (id: number) => <span className="import-skill-name"><SkillIcon skill={meta.get(id)}/><span>{name(id)}</span>
+  const identity = (id: number, removal?: boolean) => <span className="import-skill-name"><SkillIcon skill={meta.get(id)}/><span>{removal ? 'Remove ' : ''}{name(id)}</span>
     {meta.get(id)?.hp_recovery && <small>Recovery</small>}</span>;
 
   return <section className="screenshot-skills" aria-label="Screenshot skills">
@@ -36,12 +36,13 @@ export function StaminaScreenshotSkills({ scan, chains, skills, running, onChang
           <div className="import-tier-rows">
             {chain.steps.map(step => {
               const price = priceAfterTier(chain, step, steps[selected]?.id);
-              return <div className="import-tier" key={step.id} data-selected={steps[selected]?.id === step.id}>
-              <span className="import-tier-identity">{identity(step.id)}
+              return <div className="import-tier" key={`${step.id}-${step.owned}`} data-selected={step.selectable && steps[selected]?.id === step.id}>
+              <span className="import-tier-identity">{identity(step.id, step.removal)}
                 {step.hint && <small className="import-hint">{step.hint === 5 ? 'Hint Max' : `Hint Lv ${step.hint}`} · {hintDiscount(step.hint)}% off</small>}
               </span>
               {step.owned ? <span className="import-owned">Owned</span> : <span className="import-price">{price === null ? '— SP' : `${format(price)} SP`}</span>}
               {step.inferredFrom !== undefined && <small className="muted import-price-issue">Price from {name(step.inferredFrom)}'s row</small>}
+              {step.estimated && <small className="import-warning import-price-issue">Estimated upgrade price after removing {name(chain.owned!.id)}</small>}
               {step.priceIssue && <small className="import-warning import-price-issue">{step.priceIssue}
                 {(step.owned || price !== step.total) && step.total !== null && ` · Calculated ${format(step.total)} SP at scan`}
                 {step.scanned.length ? ` · Scanned ${step.scanned.map(format).join(' / ')} SP` : ' · No scanned price'}

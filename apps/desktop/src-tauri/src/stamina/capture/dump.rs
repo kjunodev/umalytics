@@ -3,7 +3,10 @@ use std::{
     fs::{self, OpenOptions},
     io::{self, ErrorKind},
     path::{self, Component, Path, PathBuf},
-    sync::atomic::{AtomicU64, Ordering},
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        mpsc,
+    },
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -63,67 +66,86 @@ fn save_png(path: &Path, frame: &Frame) -> Result<(), Box<dyn std::error::Error>
     encoder.set_depth(png::BitDepth::Eight);
     encoder.set_compression(png::Compression::Fast);
     let mut png = encoder.write_header()?;
-    png.write_image_data(&frame.rgba)?;
+    let rgba: Vec<[u8; 4]> = frame
+        .bgra
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|&[b, g, r, a]| [r, g, b, a])
+        .collect();
+    png.write_image_data(rgba.as_flattened())?;
     png.finish()?;
     Ok(())
 }
 
 pub(super) struct SessionRecorder {
-    folder: Option<PathBuf>,
+    sender: mpsc::SyncSender<(String, Frame)>,
     start: std::time::Instant,
     next: u32,
+    dropped: usize,
 }
 
 impl SessionRecorder {
-    pub fn new() -> Self {
-        let folder = (std::env::var_os("UMALYTICS_CAPTURE_DUMP_RAW").as_deref()
-            == Some("1".as_ref()))
-        .then(|| std::env::var_os("UMALYTICS_CAPTURE_DUMP"))
-        .flatten()
-        .filter(|folder| !folder.is_empty())
-        .and_then(|folder| {
-            let result = (|| {
-                let folder = outside_git(Path::new(&folder))?;
-                let stamp = SystemTime::now()
-                    .duration_since(UNIX_EPOCH)
-                    .map_err(io::Error::other)?
-                    .as_nanos();
-                let session = folder.join(format!("scroll-{stamp}-{}", std::process::id()));
-                fs::create_dir_all(&session)?;
-                outside_git(&session)
-            })();
-            match result {
-                Ok(path) => Some(path),
-                Err(error) => {
-                    eprintln!("Could not open scrolling capture folder: {error}");
-                    None
+    pub fn new() -> Option<Self> {
+        if std::env::var_os("UMALYTICS_CAPTURE_DUMP_RAW").as_deref() != Some("1".as_ref()) {
+            return None;
+        }
+        let folder =
+            std::env::var_os("UMALYTICS_CAPTURE_DUMP").filter(|folder| !folder.is_empty())?;
+        let (sender, frames) = mpsc::sync_channel::<(String, Frame)>(8);
+        let worker = std::thread::Builder::new()
+            .name("capture-png".into())
+            .spawn(move || {
+                let result = (|| -> Result<(), Box<dyn std::error::Error>> {
+                    let folder = outside_git(Path::new(&folder))?;
+                    let stamp = SystemTime::now()
+                        .duration_since(UNIX_EPOCH)
+                        .map_err(io::Error::other)?
+                        .as_nanos();
+                    let session = folder.join(format!("scroll-{stamp}-{}", std::process::id()));
+                    fs::create_dir_all(&session)?;
+                    for (name, frame) in frames {
+                        let checked = outside_git(&session)?;
+                        save_png(&checked.join(name), &frame)?;
+                    }
+                    Ok(())
+                })();
+                if let Err(error) = result {
+                    eprintln!("Could not save scrolling frames: {error}");
                 }
-            }
-        });
-        Self {
-            folder,
+            });
+        if let Err(error) = worker {
+            eprintln!("Could not start scrolling recorder: {error}");
+            return None;
+        }
+        Some(Self {
+            sender,
             start: std::time::Instant::now(),
             next: 0,
-        }
+            dropped: 0,
+        })
     }
 
     pub fn record(&mut self, frame: &Frame) {
-        let Some(folder) = &self.folder else {
-            return;
-        };
         let millis = self.start.elapsed().as_millis();
         let name = format!("frame-{:04}-{millis:06}ms.png", self.next);
         self.next += 1;
-        if let Err(error) = outside_git(folder)
-            .map_err(Into::into)
-            .and_then(|folder| save_png(&folder.join(name), frame))
-        {
-            eprintln!("Could not save scrolling frame: {error}");
-            self.folder = None;
+        if self.sender.try_send((name, frame.clone())).is_err() {
+            self.dropped += 1;
         }
     }
 }
 
+impl Drop for SessionRecorder {
+    fn drop(&mut self) {
+        if self.dropped > 0 {
+            eprintln!(
+                "Scrolling recorder skipped {} of {} samples while saving PNGs.",
+                self.dropped, self.next
+            );
+        }
+    }
+}
 pub(super) fn record(frame: &Frame) {
     if let Some(folder) = std::env::var_os("UMALYTICS_CAPTURE_DUMP") {
         if !folder.is_empty() {
@@ -151,7 +173,7 @@ mod tests {
         let frame = Frame {
             width: 1,
             height: 1,
-            rgba: vec![10, 20, 30, 255],
+            bgra: vec![30, 20, 10, 255].into(),
         };
         save(&root, &frame).unwrap();
         let png = fs::read_dir(&root).unwrap().next().unwrap().unwrap().path();
@@ -161,7 +183,7 @@ mod tests {
             .unwrap();
         let mut bytes = [0; 4];
         reader.next_frame(&mut bytes).unwrap();
-        assert_eq!(bytes, frame.rgba.as_slice());
+        assert_eq!(bytes, [10, 20, 30, 255]);
         drop(reader);
         fs::remove_file(png).unwrap();
 

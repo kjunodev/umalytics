@@ -88,12 +88,12 @@ impl Image {
         })
     }
 
-    pub fn from_rgba(width: i32, height: i32, bytes: &[u8]) -> Result<Self> {
+    pub fn from_bgra(width: i32, height: i32, bytes: &[u8]) -> Result<Self> {
         debug_assert_eq!(bytes.len(), width as usize * height as usize * 4);
         let image = Self {
             width,
             height,
-            pixels: bytes.as_chunks::<4>().0.iter().map(|&[r, g, b, _]| [r, g, b]).collect(),
+            pixels: bytes.as_chunks::<4>().0.iter().map(|&[b, g, r, _]| [r, g, b]).collect(),
         };
         let max = OcrEngine::MaxImageDimension()? as i32;
         let longest = width.max(height);

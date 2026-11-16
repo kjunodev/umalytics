@@ -12,7 +12,7 @@ use std::{
     mem::size_of,
     ops::Range,
     slice,
-    sync::{mpsc, OnceLock},
+    sync::{mpsc, Arc, OnceLock},
     time::{Duration, Instant},
 };
 use windows::{
@@ -67,10 +67,11 @@ const GAME_TITLE: &str = "Umamusume";
 const GAME_EXE: &str = "UmamusumePrettyDerby.exe";
 const FORMAT: DirectXPixelFormat = DirectXPixelFormat::B8G8R8A8UIntNormalized;
 
+#[derive(Clone)]
 pub(super) struct Frame {
     pub width: i32,
     pub height: i32,
-    pub rgba: Vec<u8>,
+    pub bgra: Arc<Vec<u8>>,
 }
 
 fn is_game_window(title: &str, executable: &str) -> bool {
@@ -168,7 +169,7 @@ fn client_bounds(hwnd: HWND) -> windows::core::Result<(RECT, RECT)> {
     }
 }
 
-fn client_rgba<'a>(
+fn crop_client<'a>(
     size: SizeInt32,
     window: RECT,
     client: RECT,
@@ -188,17 +189,15 @@ fn client_rgba<'a>(
     if right <= left || bottom <= top {
         return None;
     }
-    let mut rgba = Vec::with_capacity((right - left) * (bottom - top) * 4);
+    let mut bgra = Vec::with_capacity((right - left) * (bottom - top) * 4);
     for y in top..bottom {
         let row = row_bytes(y, left * 4..right * 4)?;
-        for &[blue, green, red, alpha] in row.as_chunks::<4>().0 {
-            rgba.extend([red, green, blue, alpha]);
-        }
+        bgra.extend_from_slice(row);
     }
     Some(Frame {
         width: (right - left) as i32,
         height: (bottom - top) as i32,
-        rgba,
+        bgra: Arc::new(bgra),
     })
 }
 
@@ -239,21 +238,41 @@ fn borderless(may_prompt: bool) -> bool {
     }
 }
 
+#[derive(Default)]
+struct SampleTimings {
+    capture: Duration,
+    readback: Duration,
+    crop: Duration,
+}
+
 fn read_frame(
     frame: &Direct3D11CaptureFrame,
     device: &ID3D11Device,
     context: &ID3D11DeviceContext,
-    window: RECT,
-    client: RECT,
+    bounds: (RECT, RECT),
+    staging: &mut Option<ID3D11Texture2D>,
+    timings: &mut SampleTimings,
 ) -> Result<Frame, &'static str> {
     let size = frame.ContentSize().map_err(|_| FAILED)?;
     let access: IDirect3DDxgiInterfaceAccess = frame
         .Surface()
         .and_then(|surface| surface.cast())
         .map_err(|_| FAILED)?;
-    // The surface, texture and immediate context remain on this worker through the readback.
+    let texture = unsafe { access.GetInterface() }.map_err(|_| FAILED)?;
+    read_texture(&texture, device, context, size, bounds, staging, timings)
+}
+
+fn read_texture(
+    texture: &ID3D11Texture2D,
+    device: &ID3D11Device,
+    context: &ID3D11DeviceContext,
+    size: SizeInt32,
+    (window, client): (RECT, RECT),
+    staging: &mut Option<ID3D11Texture2D>,
+    timings: &mut SampleTimings,
+) -> Result<Frame, &'static str> {
+    let read_start = Instant::now();
     unsafe {
-        let texture: ID3D11Texture2D = access.GetInterface().map_err(|_| FAILED)?;
         let mut desc = D3D11_TEXTURE2D_DESC::default();
         texture.GetDesc(&mut desc);
         if size.Width <= 0
@@ -267,20 +286,23 @@ fn read_frame(
         desc.BindFlags = 0;
         desc.CPUAccessFlags = D3D11_CPU_ACCESS_READ.0 as u32;
         desc.MiscFlags = 0;
-        let mut staging = None;
-        device
-            .CreateTexture2D(&desc, None, Some(&mut staging))
-            .map_err(|_| FAILED)?;
-        let staging = staging.ok_or(FAILED)?;
-        context.CopyResource(&staging, &texture);
+        if staging.is_none() {
+            device
+                .CreateTexture2D(&desc, None, Some(staging))
+                .map_err(|_| FAILED)?;
+        }
+        let staging = staging.as_ref().ok_or(FAILED)?;
+        context.CopyResource(staging, texture);
         let mut mapped = D3D11_MAPPED_SUBRESOURCE::default();
         context
-            .Map(&staging, 0, D3D11_MAP_READ, 0, Some(&mut mapped))
+            .Map(staging, 0, D3D11_MAP_READ, 0, Some(&mut mapped))
             .map_err(|_| FAILED)?;
+        timings.readback = read_start.elapsed();
+        let crop_start = Instant::now();
         let pitch = mapped.RowPitch as usize;
         let data = mapped.pData.cast::<u8>();
         let result = if !data.is_null() && pitch >= size.Width as usize * 4 {
-            client_rgba(size, window, client, |y, columns| {
+            crop_client(size, window, client, |y, columns| {
                 // Each span stays inside initialized content and is consumed before Unmap.
                 Some(slice::from_raw_parts(
                     data.add(y * pitch + columns.start),
@@ -291,7 +313,8 @@ fn read_frame(
         } else {
             Err(FAILED)
         };
-        context.Unmap(&staging, 0);
+        context.Unmap(staging, 0);
+        timings.crop = crop_start.elapsed();
         result
     }
 }
@@ -305,12 +328,17 @@ struct WindowCapture {
     winrt: IDirect3DDevice,
     size: SizeInt32,
     ready: mpsc::Receiver<()>,
+    staging: Option<ID3D11Texture2D>,
     _apartment: Apartment,
 }
 
 impl WindowCapture {
     fn open(may_prompt: bool) -> Result<Self, &'static str> {
         let hwnd = game_window().ok_or("Umamusume is not running.")?;
+        Self::open_window(hwnd, may_prompt)
+    }
+
+    fn open_window(hwnd: HWND, may_prompt: bool) -> Result<Self, &'static str> {
         if unsafe { IsIconic(hwnd) }.as_bool() {
             return Err(MINIMIZED);
         }
@@ -336,6 +364,7 @@ impl WindowCapture {
             winrt,
             size,
             ready,
+            staging: None,
             _apartment: apartment,
         };
         let session = capture
@@ -375,7 +404,12 @@ impl WindowCapture {
         Ok(())
     }
 
-    fn sample(&mut self, timeout: Duration) -> Result<Option<Frame>, &'static str> {
+    fn sample(
+        &mut self,
+        timeout: Duration,
+        timings: &mut SampleTimings,
+    ) -> Result<Option<Frame>, &'static str> {
+        let start = Instant::now();
         self.check_window()?;
         let ready = self.ready.recv_timeout(timeout);
         self.check_window()?;
@@ -397,12 +431,21 @@ impl WindowCapture {
                 .Recreate(&self.winrt, FORMAT, 1, size)
                 .map_err(|_| FAILED)?;
             self.size = size;
+            self.staging = None;
             return Ok(None);
         }
         let bounds = client_bounds(self.hwnd);
         self.check_window()?;
-        let (window, client) = bounds.map_err(|_| FAILED)?;
-        let result = read_frame(&frame, &self.device, &self.context, window, client);
+        let bounds = bounds.map_err(|_| FAILED)?;
+        timings.capture = start.elapsed();
+        let result = read_frame(
+            &frame,
+            &self.device,
+            &self.context,
+            bounds,
+            &mut self.staging,
+            timings,
+        );
         self.check_window()?;
         result.map(Some)
     }
@@ -421,7 +464,7 @@ pub(super) fn capture(may_prompt: bool) -> Result<Frame, &'static str> {
     let mut capture = WindowCapture::open(may_prompt)?;
     let deadline = Instant::now() + Duration::from_secs(2);
     while let Some(remaining) = deadline.checked_duration_since(Instant::now()) {
-        if let Some(frame) = capture.sample(remaining)? {
+        if let Some(frame) = capture.sample(remaining, &mut SampleTimings::default())? {
             drop(capture);
             #[cfg(debug_assertions)]
             dump::record(&frame);
@@ -442,7 +485,7 @@ mod tests {
         window: RECT,
         client: RECT,
     ) -> Option<Frame> {
-        client_rgba(size, window, client, |y, columns| {
+        crop_client(size, window, client, |y, columns| {
             bgra.get(y * pitch + columns.start..y * pitch + columns.end)
         })
     }
@@ -461,7 +504,7 @@ mod tests {
     }
 
     #[test]
-    fn converts_bgra_to_rgba_preserving_alpha() {
+    fn captures_bgra_without_reordering_channels_during_crop() {
         let rect = RECT {
             left: 0,
             top: 0,
@@ -473,7 +516,7 @@ mod tests {
             Height: 1,
         };
         let frame = convert(&[3, 2, 1, 4, 7, 6, 5, 8], 8, size, rect, rect).unwrap();
-        assert_eq!(frame.rgba, [1, 2, 3, 4, 5, 6, 7, 8]);
+        assert_eq!(frame.bgra.as_slice(), [3, 2, 1, 4, 7, 6, 5, 8]);
     }
 
     #[test]
@@ -500,8 +543,8 @@ mod tests {
         let frame = convert(&bgra, 20, size, window, client).unwrap();
         assert_eq!((frame.width, frame.height), (2, 2));
         assert_eq!(
-            frame.rgba,
-            [3, 2, 1, 255, 6, 5, 4, 255, 9, 8, 7, 255, 12, 11, 10, 255]
+            frame.bgra.as_slice(),
+            [1, 2, 3, 255, 4, 5, 6, 255, 7, 8, 9, 255, 10, 11, 12, 255]
         );
         assert!(convert(&bgra[..50], 20, size, window, client).is_none());
         let outside = RECT {

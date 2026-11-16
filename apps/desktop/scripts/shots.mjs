@@ -408,6 +408,35 @@ try {
     await finishedImportShots();
     await learnOnlyImportShots();
     await captureShots();
+    await fullStatsShots();
+  }
+
+  async function fullStatsShots() {
+    const page = await open('stamina-full-stats', 1120, 980, { compactThreshold: 440 });
+    await nav(page, 'Stamina');
+    await page.getByRole('button', { name: 'Import from screenshots' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Import from screenshots' });
+    await sendImages(dialog, 'paste', 1);
+    await dialog.getByText('Uma Details · Conditions', { exact: true }).waitFor();
+    check(await dialog.getByRole('spinbutton', { name: 'Speed' }).inputValue() === '1193', 'Full Stats Conditions supplies current stats');
+    await sendImages(dialog, 'paste', 2);
+    await dialog.getByRole('list', { name: 'Scanned screenshots' }).getByText('Learn', { exact: true }).waitFor();
+    check(await dialog.getByLabel('Unique skill level').inputValue() === '5', 'Full Stats Skills supplies the unique level');
+    await dialog.getByRole('button', { name: 'Remove screenshot 1' }).click();
+    const apply = dialog.getByRole('button', { name: 'Apply to build' });
+    check(await apply.isEnabled(), 'Full Stats Skills and Learn can apply together');
+    await shot(page, 'stamina-full-stats-review');
+    await apply.click();
+    const scanned = page.getByRole('region', { name: 'Screenshot skills' });
+    await scanned.getByText('Remove Tokyo Racecourse ×', { exact: true }).waitFor();
+    check(await scanned.getByText('Estimated upgrade price after removing Tokyo Racecourse ×', { exact: true }).isVisible(), 'Positive upgrade from a debuff is marked estimated');
+    await shot(page, 'stamina-remove-negative-skill');
+    const purchase = scanned.getByRole('button', { name: 'Increase tier for Tokyo Racecourse ×' });
+    await purchase.click();
+    await scanned.getByText('150 SP left', { exact: true }).waitFor();
+    await purchase.click();
+    await scanned.getByText('60 SP left', { exact: true }).waitFor();
+    await page.close();
   }
   if (importOnly) await importShots();
   else if (drawerOnly) await (await import('./shots-player-drawer.mjs')).runPlayerDrawerShots({ open, nav, shot, check });

@@ -11,6 +11,7 @@ const screens: Record<Screen, string> = {
   'attributes-chart': 'Career Attributes · Chart view',
   'career-skills': 'Career Skills',
   'details-skills': 'Uma Details · Skills',
+  'details-conditions': 'Uma Details · Conditions',
   'finished-details': 'Finished Uma Details · Skills',
   learn: 'Learn',
   unsupported: 'Unsupported screenshot',
@@ -201,13 +202,15 @@ export function StaminaScreenshotImport({ catalog, recent, onRecent, onClose, on
     }
   };
   const finished = sources.some(source => source.scan?.screen === 'finished-details');
-  const mixed = finished && sources.some(source => source.scan && ['attributes-numbers', 'career-skills', 'details-skills', 'learn'].includes(source.scan.screen));
-  const numbers = [...sources].reverse().find(source => source.scan?.screen === (finished ? 'finished-details' : 'attributes-numbers'))?.scan;
+  const mixed = finished && sources.some(source => source.scan && ['attributes-numbers', 'career-skills', 'details-skills', 'details-conditions', 'learn'].includes(source.scan.screen));
+  const numbers = [...sources].reverse().find(({ scan }) => scan?.attributes &&
+    (finished ? scan.screen === 'finished-details' : ['attributes-numbers', 'details-skills', 'details-conditions'].includes(scan.screen)))?.scan;
+  const detailsSkills = sources.some(source => source.scan?.screen === 'details-skills' && source.scan.skills.length > 0);
   const careerSkills = sources.some(source => source.scan?.screen === 'career-skills' && source.scan.skills.length > 0);
   const learn = sources.some(source => source.scan?.screen === 'learn');
   const points = [...new Set(sources.flatMap(({ scan }) => scan?.skill_points == null ? [] : [scan.skill_points]))];
   const cards = new Set(sources.flatMap(({ scan }) =>
-    scan?.card && ['attributes-numbers', 'career-skills', 'finished-details'].includes(scan.screen) ? [scan.card.id] : []));
+    scan?.card && ['attributes-numbers', 'career-skills', 'details-skills', 'details-conditions', 'finished-details'].includes(scan.screen) ? [scan.card.id] : []));
   const cardId = chosen ?? numbers?.card?.id ?? (cards.size === 1 ? [...cards][0] : undefined);
   const uma = catalog.umas.find(card => card.card_id === cardId);
   const rows = sources.flatMap(({ id, scan }) => scan?.skills.map((row, index) => ({
@@ -312,9 +315,9 @@ export function StaminaScreenshotImport({ catalog, recent, onRecent, onClose, on
         {finished ? <ul className="import-checklist" aria-label="Screens needed">
           <li data-ready>Finished Uma Details · Scroll the Skills tab to capture all rows</li>
         </ul> : <><ul className="import-checklist" aria-label="Screens needed">
-          <li data-ready={!!numbers}>Complete Career Attributes · Number view</li>
-          <li data-ready={learn}>Learn · Capture overlapping screenshots</li>
-          <li className="import-recommended" data-ready={careerSkills}>Complete Career Skills · Recommended to include every owned skill</li>
+          <li data-ready={detailsSkills}>Learn → Full Stats → Skills tab · Capture stats and owned skills</li>
+          <li data-ready={learn}>Learn · Scan the skill list or capture overlapping screenshots</li>
+          <li className="import-recommended" data-ready={!!numbers && careerSkills}>Complete Career Attributes and Career Skills are alternatives to Full Stats.</li>
         </ul><p className="muted">For a finished Uma, capture the Skills tab of its Details popup.</p></>}
         {pending > 0 && <p role="status">Reading {pending} {pending === 1 ? 'image' : 'images'}…</p>}
         {!!sources.length && <ul className="import-sources" aria-label="Scanned screenshots">{sources.map(({ id, scan, error }) =>
