@@ -40,7 +40,7 @@ try {
     } else await page.locator('.sidebar').getByRole('button', { name, exact: true }).click();
   }
   async function open(scene, width, height, prefs = {}) {
-    const page = await browser.newPage({ viewport: { width, height }, deviceScaleFactor: ['stamina-screenshot-import', 'stamina-finished-import', 'stamina-learn-import', 'blessing'].includes(scene) ? 1.25 : 1 });
+    const page = await browser.newPage({ viewport: { width, height }, deviceScaleFactor: ['stamina-screenshot-import', 'stamina-finished-import', 'stamina-learn-import', 'blessing', 'stamina-capture'].includes(scene) ? 1.25 : 1 });
     page.setDefaultTimeout(20000);
     page.on('pageerror', error => failures.push(error.message));
     await page.route('https://**/*', async route => {
@@ -301,12 +301,149 @@ try {
     await page.getByRole('region', { name: 'Screenshot skills' }).getByText('200 SP left', { exact: true }).waitFor();
     await page.close();
   }
-  if (importOnly) { await screenshotImportShots(); await finishedImportShots(); await learnOnlyImportShots(); }
+  async function captureShots() {
+    const page = await open('stamina-capture', 1120, 980, { compactThreshold: 440 });
+    await nav(page, 'Stamina');
+    const openImport = page.getByRole('button', { name: 'Import from screenshots' });
+    const dialog = page.getByRole('dialog', { name: 'Import from screenshots' });
+    const capture = dialog.getByRole('button', { name: 'Capture game window' });
+    const count = () => page.evaluate(() => window.__SHOT_CONTROL__.calls.filter(call => call.command === 'capture_stamina_screenshot').length);
+    const hotkey = () => page.evaluate(() => window.__SHOT_CONTROL__.emit('stamina-capture-hotkey'));
+    const close = async () => {
+      await dialog.getByRole('button', { name: 'Close import' }).click();
+      await dialog.waitFor({ state: 'hidden' });
+      await page.waitForFunction(() => window.__SHOT_CONTROL__.captureHotkey === false);
+    };
+    await openImport.click();
+    await dialog.getByText('works while the game has focus.').waitFor();
+    check(await page.evaluate(() => window.__SHOT_CONTROL__.captureHotkey), 'Opening import registers the global shortcut');
+    check(await capture.isEnabled() && await dialog.getByRole('button', { name: 'Choose images' }).isVisible(), 'Capture and image picker are both available');
+    await shot(page, 'stamina-capture-button');
+
+    const errors = [
+      'Restore the minimized Umamusume window before capturing.',
+      'Umamusume is not running.',
+      'Game window capture is unsupported on this Windows build.',
+      'The game window could not be captured.',
+    ];
+    for (const [index, error] of errors.entries()) {
+      await page.evaluate(text => { window.__SHOT_CONTROL__.captureError = text; }, error);
+      await capture.click();
+      await dialog.getByRole('alert').getByText(error, { exact: true }).waitFor();
+      check(await capture.isEnabled(), 'A capture error leaves the button available for retry');
+      if (index === 0) await shot(page, 'stamina-capture-minimized');
+    }
+    await page.evaluate(() => {
+      const control = window.__SHOT_CONTROL__;
+      delete control.captureError;
+      control.waitForCapture = new Promise(resolve => { control.finishCapture = resolve; });
+    });
+    await capture.click();
+    check(await dialog.getByRole('button', { name: 'Capturing…' }).isDisabled(), 'Capture button is disabled while a frame is being read');
+    await hotkey();
+    check(await count() === errors.length + 1, 'Hotkey does not start a second capture while one is pending');
+    await page.evaluate(() => window.__SHOT_CONTROL__.finishCapture());
+    const tiles = dialog.getByRole('list', { name: 'Scanned screenshots' }).getByRole('listitem');
+    await tiles.getByText('Learn', { exact: true }).waitFor();
+    await dialog.getByRole('status').getByText('Game screenshot added', { exact: true }).waitFor();
+    check(await tiles.getByText('7 skill rows').isVisible(), 'Capture creates an ordinary classified screenshot tile');
+    check(await dialog.getByRole('alert').count() === 0, 'A successful retry clears the capture error');
+    await shot(page, 'stamina-capture-tile');
+
+    await hotkey();
+    await page.waitForFunction(() => document.querySelectorAll('.import-sources li').length === 2);
+    check(await page.evaluate(() => window.__SHOT_CONTROL__.calls.filter(call => call.command === 'capture_stamina_screenshot').at(-1).args.fromButton === false), 'Global shortcut calls the background capture path');
+    await close();
+    const closedCount = await count();
+    await hotkey();
+    check(await count() === closedCount, 'Closing import unregisters the shortcut and removes the event listener');
+
+    await page.evaluate(() => { window.__SHOT_CONTROL__.shortcutTaken = true; });
+    await openImport.click();
+    await dialog.getByRole('status').getByText('Ctrl+Shift+U is already in use.', { exact: true }).waitFor();
+    check(await capture.isEnabled(), 'Shortcut conflict leaves the capture button enabled');
+    await capture.click();
+    await tiles.getByText('Learn', { exact: true }).waitFor();
+    check(await tiles.count() === 1, 'Capture button works when the shortcut is taken');
+    await close();
+    await page.evaluate(() => { window.__SHOT_CONTROL__.shortcutTaken = false; });
+    await openImport.click();
+    await dialog.getByText('works while the game has focus.').waitFor();
+    const start = dialog.getByRole('button', { name: 'Start scanning' });
+    const stop = dialog.getByRole('button', { name: 'Stop', exact: true });
+    const startScan = async () => {
+      await start.click();
+      await page.waitForFunction(() => !!window.__SHOT_CONTROL__.scrolling);
+    };
+    await startScan();
+    await dialog.getByText('Learn · 0 skills so far', { exact: true }).waitFor();
+    await page.evaluate(() => {
+      window.__SHOT_CONTROL__.scrolling.scan(0);
+      window.__SHOT_CONTROL__.scrolling.scan(4);
+    });
+    await dialog.getByText('Learn · 7 skills so far', { exact: true }).waitFor();
+    check(await tiles.count() === 2, 'Settled views reach review and overlapping skills are counted once');
+    await shot(page, 'stamina-scrolling-on');
+    await hotkey();
+    await page.waitForFunction(() => document.querySelectorAll('.import-sources li').length === 3);
+    check(await stop.isVisible(), 'The capture shortcut works during a scrolling scan');
+    await dialog.getByText('Game screenshot added', { exact: true }).waitFor({ state: 'hidden' });
+    await stop.click();
+    await page.waitForFunction(() => !window.__SHOT_CONTROL__.scrolling);
+    check(await start.isVisible() && await tiles.count() === 3, 'Stop keeps the scanned tiles for review');
+    await shot(page, 'stamina-scrolling-off');
+    await startScan();
+    await page.evaluate(() => window.__SHOT_CONTROL__.scrolling.finish());
+    await start.waitFor();
+    check(await dialog.getByText('skills so far').count() === 0, 'Session completion returns to the idle state');
+    await startScan();
+    await close();
+    await page.waitForFunction(() => !window.__SHOT_CONTROL__.scrolling);
+    check(await page.evaluate(() => window.__SHOT_CONTROL__.calls.filter(call => call.command === 'stop_stamina_scrolling_scan').length === 2), 'Closing import stops the current scrolling session');
+    await page.close();
+  }
+
+  async function importShots() {
+    await screenshotImportShots();
+    await finishedImportShots();
+    await learnOnlyImportShots();
+    await captureShots();
+    await fullStatsShots();
+  }
+
+  async function fullStatsShots() {
+    const page = await open('stamina-full-stats', 1120, 980, { compactThreshold: 440 });
+    await nav(page, 'Stamina');
+    await page.getByRole('button', { name: 'Import from screenshots' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Import from screenshots' });
+    await sendImages(dialog, 'paste', 1);
+    await dialog.getByText('Uma Details · Conditions', { exact: true }).waitFor();
+    check(await dialog.getByRole('spinbutton', { name: 'Speed' }).inputValue() === '1193', 'Full Stats Conditions supplies current stats');
+    await sendImages(dialog, 'paste', 2);
+    await dialog.getByRole('list', { name: 'Scanned screenshots' }).getByText('Learn', { exact: true }).waitFor();
+    check(await dialog.getByLabel('Unique skill level').inputValue() === '5', 'Full Stats Skills supplies the unique level');
+    await dialog.getByRole('button', { name: 'Remove screenshot 1' }).click();
+    const apply = dialog.getByRole('button', { name: 'Apply to build' });
+    check(await apply.isEnabled(), 'Full Stats Skills and Learn can apply together');
+    await shot(page, 'stamina-full-stats-review');
+    await apply.click();
+    const scanned = page.getByRole('region', { name: 'Screenshot skills' });
+    await scanned.getByText('Remove Tokyo Racecourse ×', { exact: true }).waitFor();
+    check(await scanned.getByText('Estimated upgrade price after removing Tokyo Racecourse ×', { exact: true }).isVisible(), 'Positive upgrade from a debuff is marked estimated');
+    await shot(page, 'stamina-remove-negative-skill');
+    const purchase = scanned.getByRole('button', { name: 'Increase tier for Tokyo Racecourse ×' });
+    await purchase.click();
+    await scanned.getByText('150 SP left', { exact: true }).waitFor();
+    await purchase.click();
+    await scanned.getByText('60 SP left', { exact: true }).waitFor();
+    await page.close();
+  }
+  if (importOnly) await importShots();
   else if (drawerOnly) await (await import('./shots-player-drawer.mjs')).runPlayerDrawerShots({ open, nav, shot, check });
   else if (updatesOnly) await (await import('./shots-updater.mjs')).runUpdateShots({ open, nav, shot, check });
   else if (blessingOnly) await (await import('./shots-blessing.mjs')).runBlessingShots({ open, nav, shot, check });
   else {
-  if (!arenaOnly && !statesOnly && !dataOnly && !usabilityOnly) { await screenshotImportShots(); await finishedImportShots(); await learnOnlyImportShots(); }
+  if (!arenaOnly && !statesOnly && !dataOnly && !usabilityOnly) await importShots();
   if (!staminaOnly && !arenaOnly && !dataOnly && !usabilityOnly) {
     const page = await open('lobby', 1280, 800);
     await page.waitForFunction(() => document.querySelectorAll('.arena-card[data-state=loaded]').length === 10);

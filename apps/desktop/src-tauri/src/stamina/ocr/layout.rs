@@ -9,6 +9,7 @@ pub(super) enum Screen {
     AttributesChart,
     CareerSkills,
     DetailsSkills,
+    DetailsConditions,
     FinishedDetails,
     Learn,
     Unsupported,
@@ -72,23 +73,31 @@ fn green([r, g, b]: Rgb) -> bool {
 // The Career Profile banner scales with the game UI, even when the OS title bar
 // and capture margins do not. Its rounded, wide green band is visible behind popups.
 pub(super) fn profile_banner(image: &Image) -> Option<Rect> {
+    find_profile_banner(image.width, image.height, |x, y| image.at(x, y))
+}
+
+pub(in crate::stamina) fn find_profile_banner(
+    width: i32,
+    height: i32,
+    at: impl Fn(i32, i32) -> Rgb,
+) -> Option<Rect> {
     let is_banner = |[r, g, b]: Rgb| g >= 146 && g.saturating_sub(r) >= 23 && b < 135;
-    let (band, y) = (0..image.height / 6)
+    let (band, y) = (0..height / 6)
         .flat_map(|y| {
             // White lettering can interrupt the green span inside the banner.
             join_gaps(
-                runs(image.width / 3..image.width, |x| is_banner(image.at(x, y))),
-                image.width / 34,
+                runs(width / 3..width, |x| is_banner(at(x, y))),
+                width / 34,
             )
             .into_iter()
             .map(move |band| (band, y))
         })
-        .filter(|(band, _)| length(band) >= image.width / 5 && length(band) <= image.width / 2)
+        .filter(|(band, _)| length(band) >= width / 5 && length(band) <= width / 2)
         .max_by_key(|(band, _)| length(band))?;
     let width = length(&band);
     let probe = band.start + width / 7;
     let vertical = runs(y - width / 7..y + width / 7, |y| {
-        is_banner(image.at(probe, y))
+        is_banner(at(probe, y))
     })
     .into_iter()
     .find(|span| span.contains(&y))?;
@@ -224,10 +233,15 @@ fn row_color(color @ [r, g, b]: Rgb) -> bool {
         || is_event(color)
 }
 
-fn skill_icon([r, g, b]: Rgb) -> bool {
+pub(super) fn debuff_icon([r, g, b]: Rgb) -> bool {
+    b >= 225 && b.saturating_sub(r) >= 35 && r.saturating_sub(g) >= 35
+}
+
+fn skill_icon(pixel @ [r, g, b]: Rgb) -> bool {
     (r > 205 && g >= 108 && b < 152)
         || (g > 135 && g.saturating_sub(r) >= 25 && b < 130)
         || (b >= 175 && g >= 112 && r < 122)
+        || debuff_icon(pixel)
         || (r > 175 && r.saturating_sub(g) > 70 && r.saturating_sub(b) > 50)
 }
 
@@ -528,22 +542,43 @@ fn popup_skills(image: &Image, header: Rect, close: Option<Rect>) -> Option<Layo
             rows: chips(image, panel, 2, true),
         });
     }
-    if let Some((tabs, true)) = tab(
+    if let Some((tabs, active)) = tab(
         image,
         header.x(),
         header.bottom + w * 74 / 100..header.bottom + w * 82 / 100,
         w / 35,
         w * 43 / 100,
     ) {
-        let panel = Rect::new(tabs.left, tabs.bottom, tabs.right, bottom);
-        return Some(Layout {
-            screen: Screen::DetailsSkills,
-            panel,
-            header: None,
-            rows: chips(image, panel, 2, false),
-        });
+        return Some(career_details(image, header, tabs, bottom, active));
     }
     None
+}
+
+fn career_details(image: &Image, header: Rect, tabs: Rect, bottom: i32, skills: bool) -> Layout {
+    let panel = Rect::new(tabs.left, tabs.bottom, tabs.right, bottom);
+    Layout {
+        screen: if skills { Screen::DetailsSkills } else { Screen::DetailsConditions },
+        panel,
+        header: Some(header),
+        rows: if skills { chips(image, panel, 2, true) } else { Vec::new() },
+    }
+}
+
+fn career_header(image: &Image, tabs: Rect) -> Option<Rect> {
+    let w = tabs.width();
+    let x = tabs.x();
+    let (span, y) = (tabs.top - w * 9 / 10..tabs.top - w * 3 / 4)
+        .flat_map(|y| runs(x - w * 3 / 5..x + w * 3 / 5, |x| green(image.at(x, y)))
+            .into_iter()
+            .map(move |span| (span, y)))
+        .filter(|(span, _)| span.contains(&x) && (w * 96 / 100..=w * 11 / 10).contains(&length(span)))
+        .max_by_key(|(span, _)| length(span))?;
+    let probe = span.start + w / 12;
+    let band = runs(y - w / 8..y + w / 8, |y| green(image.at(probe, y)))
+        .into_iter()
+        .find(|band| band.contains(&y))?;
+    (w / 18..w / 8).contains(&length(&band))
+        .then(|| Rect::new(span.start, band.start, span.end, band.end))
 }
 
 fn is_chart(image: &Image, panel: Rect) -> bool {
@@ -585,25 +620,17 @@ pub(super) fn detect(image: &Image, words: &[Word], profile: Option<Rect>) -> La
         }
         if let Some(growth) = label(words, "Growth").find(|r| r.y() < close.y()) {
             let h = growth.height();
-            if let Some((tabs, true)) = tab(
+            if let Some((tabs, active)) = tab(
                 image,
                 close.x(),
                 growth.bottom + h..growth.bottom + 7 * h,
                 h,
                 h * 14,
             ) {
-                let panel = Rect::new(
-                    tabs.left,
-                    tabs.bottom,
-                    tabs.right,
-                    close.y() - tabs.width() / 10,
-                );
-                return Layout {
-                    screen: Screen::DetailsSkills,
-                    panel,
-                    header: None,
-                    rows: chips(image, panel, 2, false),
-                };
+                if let Some(header) = profile.and_then(|profile| popup_header(image, profile))
+                    .or_else(|| career_header(image, tabs)) {
+                    return career_details(image, header, tabs, close.y() - tabs.width() / 10, active);
+                }
             }
         }
     }

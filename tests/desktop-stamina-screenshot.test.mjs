@@ -18,6 +18,9 @@ const catalog = {
   201112: tier(100, 20111, 1),
   201113: tier(150, 20111, 3),
   201282: tier(180, 20128, 1),
+  200033: tier(50, 20003, -1),
+  200032: tier(90, 20003, 1),
+  200031: tier(110, 20003, 2, 200032),
 };
 const offer = (id, price, hint) => ({ id, price, hint, owned: false, level: null, learn: true });
 const owned = (id, level = null, hint = null) => ({ ...offer(id, null, hint), owned: true, level, learn: hint !== null });
@@ -26,6 +29,29 @@ const escapeArtist = offer(200541, 252, 3);
 const mediumCorners = offer(201112, 70, 3);
 const refractionArc = offer(201113, 282, 1);
 const costs = chain => chain.steps.filter(step => step.selectable).map(step => [step.id, step.total, step.priceIssue]);
+
+test('Tokyo Racecourse × is owned until its removal is selected, including older Learn imports', () => {
+  const removal = offer(200033, 50, null);
+  const [chain] = tierChains([owned(200033), removal], catalog);
+  assert.deepEqual(purchasePlan([chain], [], 200), { left: 200, overBy: 0, skills: [{ id: 200033, level: 1 }] });
+  assert.deepEqual(purchasePlan([chain], [200033], 200), { left: 150, overBy: 0, skills: [] });
+  assert.deepEqual(purchasePlan(tierChains([removal], catalog), [], 200).skills, [{ id: 200033, level: 1 }]);
+  assert.deepEqual(chain.steps.filter(step => step.selectable).map(step => [step.id, step.total, !!step.estimated]),
+    [[200033, 50, false], [200032, 140, true], [200031, 250, true]]);
+  assert.deepEqual(costs(tierChains([owned(200033)], catalog)[0]), []);
+});
+
+test('Tokyo Racecourse ○ replaces the debuff and accounts for the removal once', () => {
+  const [chain] = tierChains([owned(200033), offer(200033, 50, null), offer(200032, 140, null)], catalog);
+  const circle = chain.steps.find(step => step.id === 200032);
+  assert.equal(circle.total, 140);
+  assert.equal(circle.estimated, true);
+  assert.equal(priceAfterTier(chain, circle, 200033), 90);
+  assert.deepEqual(purchasePlan([chain], selectTier([200033], chain, 200032), 200),
+    { left: 60, overBy: 0, skills: [{ id: 200032, level: 1 }] });
+  assert.deepEqual(purchasePlan(tierChains([owned(200032), offer(200033, 50, null)], catalog), [], 200).skills,
+    [{ id: 200032, level: 1 }]);
+});
 
 test('uses all five hint discounts, including Max, and floors each tier', () => {
   assert.deepEqual([null, 1, 2, 3, 4, 5].map(hintDiscount), [0, 10, 20, 30, 35, 40]);
@@ -85,12 +111,41 @@ test('deduplicates overlapping Learn and owned rows while retaining scanned pric
   }
 });
 
-test('Taking the Lead flags 180 versus 228 until the missing Early Lead hint is captured', () => {
+test('Taking the Lead infers the missing Early Lead discount', () => {
   const takingTheLead = offer(200531, 180, 1);
   assert.deepEqual(costs(tierChains([takingTheLead], catalog)[0]),
-    [[200532, 120, 'Price unverified'], [200531, 228, 'Price mismatch']]);
+    [[200532, 72, null], [200531, 180, null]]);
   assert.deepEqual(costs(tierChains([takingTheLead, offer(200532, 72, 5)], catalog)[0]),
     [[200532, 72, null], [200531, 180, null]]);
+});
+
+test('Escape Artist at 234 SP and hint 3 implies Fast-Paced at 108 SP and Max', () => {
+  const gold = offer(200541, 234, 3);
+  const [chain] = tierChains([gold], catalog);
+  assert.deepEqual(costs(chain), [[200542, 108, null], [200541, 234, null]]);
+  assert.equal(chain.steps[0].hint, 5);
+  assert.equal(chain.steps[0].inferredFrom, 200541);
+  assert.equal(priceAfterTier(chain, chain.steps[1], 200542), 126);
+  assert.equal(purchasePlan([chain], [200541], 234).left, 0);
+  assert.equal(tierChains([gold, offer(200542, 108, 5)], catalog)[0].steps[0].inferredFrom, undefined);
+});
+
+test('keeps price flags when the remainder is invalid, conflicting, or two prerequisites are missing', () => {
+  for (const offers of [[offer(200541, 235, 3)], [offer(200541, 234, 3), offer(200541, 252, 3)]]) {
+    assert.deepEqual(costs(tierChains(offers, catalog)[0]),
+      [[200542, 180, 'Price unverified'], [200541, 306, 'Price mismatch']]);
+  }
+  const [chain] = tierChains([refractionArc], catalog);
+  assert.equal(chain.steps[0].inferredFrom, undefined);
+  assert.equal(chain.steps[1].inferredFrom, undefined);
+  assert.equal(chain.steps[2].priceIssue, 'Price mismatch');
+});
+
+test('a scanned double-circle price can establish the missing single-circle discount', () => {
+  const [chain] = tierChains([offer(200181, 131, 3)], catalog);
+  assert.deepEqual(costs(chain), [[200182, 54, null], [200181, 131, null]]);
+  assert.equal(chain.steps[0].hint, 5);
+  assert.equal(chain.steps[0].inferredFrom, 200181);
 });
 
 test('recovers a Max hint from an overlapping screenshot and flags an unreadable price', () => {

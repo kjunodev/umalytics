@@ -234,19 +234,20 @@ pub(super) fn attributes(
     Ok((result, raw))
 }
 
-pub(super) fn finished_details(
+pub(super) fn details(
     ocr: &Ocr,
     image: &Image,
     words: &[Word],
     header: Rect,
     umas: &[Uma],
+    career: bool,
 ) -> Result<(Option<i32>, Attributes, Vec<String>)> {
     let w = header.width();
     let area = Rect::new(
         header.left + w * 52 / 100,
-        header.bottom + w / 55,
+        header.bottom + if career { w * 6 / 100 } else { w / 55 },
         header.right - w / 18,
-        header.bottom + w * 13 / 100,
+        header.bottom + w * if career { 16 } else { 13 } / 100,
     );
     let raw_card = read(ocr, image, area, w / 38, brown_ink)?;
     let mut card = match_card(umas, &raw_card);
@@ -296,7 +297,7 @@ pub(super) fn finished_details(
                 left + w * 73 / 1000,
                 band.end + w / 110,
                 left + w * 18 / 100,
-                band.end + w * 68 / 1000,
+                band.end + w * if career { 43 } else { 68 } / 1000,
             );
             let mut tokens: Vec<_> = words
                 .iter()

@@ -59,6 +59,8 @@ export const screenshotCatalog = {
     201111: { cost: 110, tier: { group: 20111, rank: 2 }, hint_from: 201112 },
     201112: { cost: 100, tier: { group: 20111, rank: 1 } },
     201113: { cost: 150, tier: { group: 20111, rank: 3 } },
+    200033: { cost: 50, tier: { group: 20003, rank: -1 } },
+    200032: { cost: 90, tier: { group: 20003, rank: 1 } },
   },
   skills: [
     ...catalog.skills.filter(skill => ![200181, 200182, 200501, 200502, 910311, 200542, 201111, 201112, 201113].includes(skill.id)),
@@ -72,6 +74,8 @@ export const screenshotCatalog = {
     { id: 201111, name: 'Medium Corners ◎', rarity: 'white', hp_recovery: false, icon_path: 'fixture-heal.webp' },
     { id: 201112, name: 'Medium Corners ○', rarity: 'white', hp_recovery: false, icon_path: 'fixture-heal.webp' },
     { id: 201113, name: 'Refraction Arc', rarity: 'gold', hp_recovery: false, icon_path: 'fixture-heal.webp' },
+    { id: 200033, name: 'Tokyo Racecourse ×', rarity: 'white', hp_recovery: false, icon_path: 'fixture-heal.webp' },
+    { id: 200032, name: 'Tokyo Racecourse ○', rarity: 'white', hp_recovery: false, icon_path: 'fixture-heal.webp' },
   ],
 };
 
@@ -107,6 +111,14 @@ const finished = {
   card: { id: 106802, name: 'Kitasan Black', title: "[Crane's Ambition]" },
   attributes: { stats: [1193, 669, 814, 652, 681], track: 'AE', distance: 'EBAA', style: 'ABCG' },
 };
+export const fullStatsScans = [
+  scan('details-conditions', finished),
+  scan('details-skills', { ...finished, skills: [read('Bring on the Banquet!', 110681, { level: 5 }), read('Tokyo Racecourse ×', 200033)] }),
+  scan('learn', { skill_points: 200, skills: [
+    read('Remove Tokyo Racecourse ×', 200033, { removal: true, cost: 50, obtained: false }),
+    read('Tokyo Racecourse ○', 200032, { cost: 140, obtained: false }),
+  ] }),
+];
 export const finishedScans = [
   scan('finished-details', { ...finished, skills: [read('Bring on the Banquet!', 110681, { level: 5 }), read('Fast-Paced', 200542)] }),
   scan('finished-details', { ...finished, small_game_panel: true, skills: [read('Fast-Paced', 200542),

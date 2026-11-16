@@ -274,6 +274,25 @@ impl<'a> Matcher<'a> {
 }
 
 impl Matcher<'_> {
+    pub fn removal(&self, raw: &str) -> Option<Resolution> {
+        let (verb, name) = raw.split_once(char::is_whitespace)?;
+        if !verb.eq_ignore_ascii_case("Remove") {
+            return None;
+        }
+        self.identify(name, Some(false), Some(Mark::Cross), None)
+    }
+
+    pub fn explicit_cross(&self, raw: &str) -> Option<Resolution> {
+        let (_, mark) = split_mark(raw);
+        if mark == Some(Mark::Cross)
+            || raw.split_whitespace().last().is_some_and(|word| word.eq_ignore_ascii_case("x"))
+        {
+            self.identify(raw, Some(false), Some(Mark::Cross), None)
+        } else {
+            None
+        }
+    }
+
     pub fn circle_variants(&self, raw: &str, suggested: Option<Mark>) -> Option<VariantChoice> {
         let Some(Resolution::Matched(circle)) =
             self.identify(raw, Some(false), Some(Mark::Circle), None)
