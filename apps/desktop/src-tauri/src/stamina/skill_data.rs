@@ -1,10 +1,52 @@
 use super::Skill;
+use serde::Serialize;
 use serde_json::Value;
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{BTreeMap, HashMap, HashSet},
     ffi::{OsStr, OsString},
     path::{Path, PathBuf},
 };
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub(super) struct HpEffect {
+    value: i32,
+    conditional: bool,
+    other_runner: bool,
+}
+
+fn hp_effects(rows: &[Value]) -> BTreeMap<i32, Vec<HpEffect>> {
+    let mut skills = BTreeMap::new();
+    for row in rows {
+        let locale = &row["loc"]["en"];
+        for (entry, locale) in [(row, locale), (&row["gene_version"], &locale["gene_version"])] {
+            let Some(id) = entry["id"].as_i64().and_then(|id| i32::try_from(id).ok()) else { continue };
+            let Some(groups) = locale["condition_groups"].as_array().or_else(|| entry["condition_groups"].as_array()) else { continue };
+            let mut effects = Vec::new();
+            for group in groups {
+                let conditional = entry["activation"].as_i64() == Some(1)
+                    || ["condition", "precondition"].iter().any(|key| group[key].as_str().is_some_and(|text| !text.trim().is_empty()));
+                for effect in group["effects"].as_array().into_iter().flatten().filter(|effect| effect["type"].as_i64() == Some(9)) {
+                    if let Some(value) = effect["value"].as_i64().and_then(|value| i32::try_from(value).ok()).filter(|value| *value != 0) {
+                        let hp = HpEffect { value, conditional, other_runner: effect["target"].as_i64().is_some_and(|target| target > 2) };
+                        if !effects.contains(&hp) {
+                            effects.push(hp);
+                        }
+                    }
+                }
+            }
+            if !effects.is_empty() {
+                skills.insert(id, effects);
+            }
+        }
+    }
+    skills
+}
+
+pub(super) fn bundled_hp_effects() -> BTreeMap<i32, Vec<HpEffect>> {
+    let rows: Vec<Value> = serde_json::from_str(include_str!("../../resources/skill-data/skills.json"))
+        .expect("bundled skill data must be valid JSON");
+    hp_effects(&rows)
+}
 
 pub(super) fn rarity(value: i32) -> &'static str {
     match value {
@@ -146,6 +188,16 @@ pub(super) fn enrich_from(skills: &mut [Skill], dir: &Path) -> (bool, String, us
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn bundled_hp_effects_keep_positive_drains_and_inherited_values() {
+        let effects = bundled_hp_effects();
+        assert_eq!(effects[&200352][0], HpEffect { value: 150, conditional: true, other_runner: false });
+        assert_eq!(effects[&202151][0].value, -200);
+        assert_eq!(effects[&900451][0].value, 350);
+        assert_eq!(effects[&100451][0].value, 750);
+        assert!(effects[&201221].iter().any(|effect| effect.value < 0 && effect.other_runner));
+    }
 
     #[test]
     fn bundled_fresh_parlor_has_an_icon() {

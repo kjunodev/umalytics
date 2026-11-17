@@ -2,7 +2,7 @@ import { draftSnapshotFixture } from '../../../tests/fixtures/stamina-draft.mjs'
 import { releaseOrder } from '../../../packages/core/src/umas/umaReleaseOrder';
 import { mockIPC, mockWindows, mockConvertFileSrc } from '@tauri-apps/api/mocks';
 import { emit } from '@tauri-apps/api/event';
-import { apiResponse, catalog, finishedScans, fullStatsScans, learnOnlyScans, messages, screenshotCatalog, screenshotScans, staminaResult } from './shots-fixture.mjs';
+import { apiResponse, catalog, finishedScans, fullStatsScans, learnOnlyScans, messages, screenshotCatalog, screenshotScans, shopScans, staminaResult } from './shots-fixture.mjs';
 
 const scene = window.__SHOT_SCENE__ ?? 'lobby';
 const requests = new Map();
@@ -22,7 +22,7 @@ window.__SHOT_CONTROL__ = { calls, emit, draftMessage, messages, slow: false, fe
 mockWindows('main');
 mockConvertFileSrc('windows');
 mockIPC(async (command, args) => {
-  calls.push({ command, args: command === 'scan_stamina_while_scrolling' ? { id: args.id } : structuredClone(args) });
+  calls.push({ command, args: command === 'scan_stamina_while_scrolling' ? { id: args.id, finishedUma: args.finishedUma } : structuredClone(args) });
   if (command === 'plugin:app|version') return '0.1.0';
   if (command === 'plugin:updater|check') return scene === 'updates' ? { rid: 900, currentVersion: '0.1.0', version: '0.2.0', body: 'Fixture release notes: bundled data and signed updates.', rawJson: {} } : null;
   if (command === 'plugin:updater|download') {
@@ -64,7 +64,7 @@ mockIPC(async (command, args) => {
         ...catalog.umas[0], card_id: Number(card.outfitId), name: card.name, title: `[${card.variant}]`,
       }))] };
     }
-    if (['stamina-screenshot-import', 'stamina-finished-import', 'stamina-learn-import', 'stamina-capture', 'stamina-full-stats'].includes(scene)) {
+    if (['stamina-screenshot-import', 'stamina-finished-import', 'stamina-learn-import', 'stamina-capture', 'stamina-full-stats', 'stamina-import-shop'].includes(scene)) {
       return { ...screenshotCatalog, screenshot_import_enabled: !localStorage.getItem('shots:hide-screenshot-import') };
     }
     return scene === 'stamina-no-data' ? { ...catalog, local_skill_data: false, local_skill_count: 0, local_icon_count: 0, skills: catalog.skills.map(s => ({ ...s, icon_path: null })) } : catalog;
@@ -72,7 +72,7 @@ mockIPC(async (command, args) => {
   if (command === 'scan_stamina_screenshot') {
     if (!(args instanceof ArrayBuffer) || args.byteLength === 0) throw Error('Expected screenshot bytes');
     const scans = scene === 'stamina-finished-import' ? finishedScans : scene === 'stamina-learn-import' ? learnOnlyScans
-      : scene === 'stamina-full-stats' ? fullStatsScans : screenshotScans;
+      : ['stamina-full-stats', 'stamina-import-shop'].includes(scene) ? fullStatsScans : screenshotScans;
     return scans[calls.filter(call => call.command === command).length - 1];
   }
   if (command === 'set_stamina_capture_hotkey') {
@@ -85,7 +85,7 @@ mockIPC(async (command, args) => {
     const { captureError, waitForCapture } = window.__SHOT_CONTROL__;
     if (waitForCapture) await waitForCapture;
     if (captureError) throw captureError;
-    return screenshotScans[0];
+    return scene === 'stamina-import-shop' ? fullStatsScans[1] : screenshotScans[0];
   }
   if (command === 'scan_stamina_while_scrolling') {
     const control = window.__SHOT_CONTROL__;
@@ -93,7 +93,8 @@ mockIPC(async (command, args) => {
     const update = message => window.__TAURI_INTERNALS__.runCallback(args.updates.id, { index: index++, message });
     control.scrolling = {
       id: args.id,
-      scan: fixtureIndex => update({ type: 'screenshot', value: screenshotScans[fixtureIndex] }),
+      queue: count => update({ type: 'queued', value: count }),
+      scan: view => update({ type: 'screenshot', value: typeof view === 'number' ? screenshotScans[view] : view === 'finished' ? finishedScans[0] : shopScans[view] }),
       finish: (error = null) => {
         update({ type: 'finished', value: error });
         window.__TAURI_INTERNALS__.runCallback(args.updates.id, { index, end: true });
@@ -104,7 +105,7 @@ mockIPC(async (command, args) => {
   }
   if (command === 'stop_stamina_scrolling_scan') {
     const scan = window.__SHOT_CONTROL__.scrolling;
-    if (scan?.id === args.id) scan.finish();
+    if (scan?.id === args.id && !(args.drain && window.__SHOT_CONTROL__.holdDrain)) scan.finish();
     return;
   }
   if (command === 'stamina_check') {

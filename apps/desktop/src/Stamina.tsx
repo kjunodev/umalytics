@@ -10,7 +10,9 @@ import { StaminaResults } from './StaminaResults';
 import { StaminaUmaPicker } from './StaminaUmaPicker';
 import { StaminaScreenshotImport } from './StaminaScreenshotImport';
 import { StaminaBuildSkills } from './StaminaBuildSkills';
-import { importedBuildSkills, tierChains, type ScreenshotImport } from './staminaScreenshot';
+import { StaminaSkillShop } from './StaminaSkillShop';
+import { SkillPicker } from './SkillPicker';
+import { importedBuildSkills, purchasePlan, scanSkillIds, tierChains, type ScreenshotImport } from './staminaScreenshot';
 import { applyScreenshotBuild, buildTabLabels, editorStats, loadStaminaMemory, recentUmaLimit, saveStaminaMemory, selectUma, staminaStatLabels, undoScreenshotBuild, type BuildTab, type StaminaView } from './staminaState';
 import { RaceSettings } from './RaceSettings';
 import { defaultStaminaInput, defaultStamina, groundNames, weatherNames, seasonNames, staminaEngineInput, type Catalog, type StaminaEditorBuild, type StaminaEditorInput, type StaminaInput, type StaminaProgress, type StaminaResult, type StaminaRaceResult, roleNames, strategy, withStrategy } from './staminaTypes';
@@ -45,6 +47,11 @@ export function Stamina({ draft, openDraft = 0, view, onViewChange, onDraftRunCh
   const screenshotSkills = catalog?.screenshot_import_enabled ? catalog.screenshot_skills : undefined;
   const screenshotImport = screenshotSkills ? input.screenshotImport : undefined;
   const importedChains = useMemo(() => screenshotImport && screenshotSkills ? tierChains(screenshotImport.observations, screenshotSkills) : [], [screenshotImport, screenshotSkills]);
+  const plan = useMemo(() => purchasePlan(importedChains, screenshotImport?.selected ?? [], screenshotImport?.points ?? null), [importedChains, screenshotImport]);
+  const shopScan = screenshotImport && screenshotImport.points !== null && importedChains.some(chain => chain.steps.some(step => step.selectable))
+    ? screenshotImport : undefined;
+  const scannedIds = useMemo(() => scanSkillIds(importedChains, screenshotSkills ?? {}), [importedChains, screenshotSkills]);
+  const searchCatalog = useMemo(() => catalog && ({ ...catalog, skills: catalog.skills.filter(skill => !scannedIds.has(skill.id)) }), [catalog, scannedIds]);
   const [buildTab, setBuildTab] = useState<BuildTab>('build');
   const [buildCustomized, setBuildCustomized] = useState(false);
   const [presets, setPresets] = useState<PresetMemory>();
@@ -68,6 +75,7 @@ export function Stamina({ draft, openDraft = 0, view, onViewChange, onDraftRunCh
   const [result, setResult] = useState<StaminaResult>();
   const active = useRef<string | null>(null), toolbar = useRef<HTMLDivElement>(null);
   const popupTrigger = useRef<HTMLButtonElement | null>(null), drawer = useRef<HTMLElement>(null);
+  const shop = useRef<HTMLElement>(null);
   const [copyStatus, setCopyStatus] = useState('');
   const [dataError, setDataError] = useState<{ details: string }>();
   const [dataCopyStatus, setDataCopyStatus] = useState('');
@@ -175,6 +183,13 @@ export function Stamina({ draft, openDraft = 0, view, onViewChange, onDraftRunCh
     return meta?.rarity === 'unique' || (meta && skill.id === selectedUma?.unique_skill_id) ? [{ skill, meta }] : [];
   });
   const ordinary = input.build.skills.filter(skill => !uniques.some(unique => unique.skill.id === skill.id));
+  const manual = ordinary.filter(skill => !scannedIds.has(skill.id));
+  const onManual = (skills: StaminaEditorBuild['skills']) => screenshotImport
+    ? changeImport({ ...screenshotImport, manualSkills: skills.map(skill => skill.id) })
+    : patchBuild({ skills: [...skills, ...uniques.map(unique => unique.skill)] });
+  const manualPicker = searchCatalog && <SkillPicker catalog={searchCatalog} showSelected={false} addLabel="Add any skill" skills={manual}
+    recent={recent} onRecent={setRecent} limit={100 - uniques.length - (ordinary.length - manual.length)} onChange={onManual}/>;
+  const openShop = () => { shop.current?.scrollIntoView({ block: 'nearest' }); shop.current?.focus({ preventScroll: true }); };
   const engineInput = staminaEngineInput({ ...input, request_id: '' }, fallbackStamina);
   const lastInput = mode === 'draft' ? draftRun?.input : result?.input;
   const staleInputs = lastInput && canonicalJson(engineInput) !== canonicalJson({ ...lastInput, request_id: '' });
@@ -189,6 +204,8 @@ export function Stamina({ draft, openDraft = 0, view, onViewChange, onDraftRunCh
   const worst = short.reduce<StaminaResult | undefined>((current, race) =>
     !current || (race.thresholds.joint ?? Infinity) > (current.thresholds.joint ?? Infinity) ? race : current, undefined);
   const assessment = view === 'assessment';
+  const runDisabled = !ready || (mode === 'draft' ? !draft || !races.some(r => r.race) : !selectedCourse || !!selectedCourse.unavailable_reason);
+  const runLabel = mode === 'draft' ? `Run ${races.filter(r => r.race).length} races` : 'Run check';
   const changePresets = (next: PresetMemory) => { setPresets(next); if (presetWritable) void savePresets(next).then(() => setPresetError('')).catch(() => setPresetError('Presets could not be saved. Your edits are still available until reload.')); };
   if (dataError) return <section className="panel stamina-data-error" role="alert">
     <h2>UmaLytics could not load its race data.</h2>
@@ -206,7 +223,7 @@ export function Stamina({ draft, openDraft = 0, view, onViewChange, onDraftRunCh
       {mode === 'any' ? <><div className="toolbar-race">{trigger('race', 'Race', compactRace)}</div>
       <div className="condition-chips">{trigger('ground', 'Ground condition', groundNames[input.race.ground_condition - 1])}{trigger('weather', 'Weather', weatherNames[input.race.weather - 1])}{trigger('season', 'Season', seasonNames[input.race.season - 1])}</div></> : <div className="draft-toolbar-label"><span>{races.length} of 7 races known</span><small>{draft ? `Room ${draft.matchCode ?? "—"} · ${draft.phase === "complete" ? "draft complete" : "draft in progress"}` : "No live draft available"}</small></div>}
       <span className="toolbar-target">Target <b>{input.target}%</b></span>
-      {running ? <button className="cancel-run" type="button" disabled={cancelling} onClick={() => { void cancel(); }}>{cancelling ? 'Cancelling…' : 'Cancel'}</button> : <button className="run" type="button" disabled={!ready || (mode === 'draft' ? !draft || !races.some(r => r.race) : !selectedCourse || !!selectedCourse.unavailable_reason)} onClick={() => { void run(); }}>{mode === 'draft' ? `Run ${races.filter(r => r.race).length} races` : 'Run check'}</button>}
+      {running ? <button className="cancel-run" type="button" disabled={cancelling} onClick={() => { void cancel(); }}>{cancelling ? 'Cancelling…' : 'Cancel'}</button> : <button className="run" type="button" disabled={runDisabled} onClick={() => { void run(); }}>{runLabel}</button>}
       {popover && <div className={`stamina-popover panel popover-${popover}`} role="dialog" aria-label={popover === 'draft-course' ? 'Choose the course' : popover === 'race' ? 'Choose race' : `Choose ${popover}`} id="stamina-popover">
         <div className="popover-heading"><h2>{popover === 'draft-course' ? 'Choose the course' : popover === 'race' ? 'Race' : `Choose ${popover}`}</h2><button type="button" aria-label="Close picker" onClick={() => { setPopover(undefined); popupTrigger.current?.focus(); }}>×</button></div>
         {popover === 'draft-course' ? <>
@@ -228,6 +245,7 @@ export function Stamina({ draft, openDraft = 0, view, onViewChange, onDraftRunCh
     {running && <div className="simulation-progress" role="status" aria-live="polite"><span>{mode === 'draft' && progress?.race_total ? `Race ${progress.race_index! + 1} of ${progress.race_total} · ` : ''}{stageLabel}</span><progress aria-label="Simulation progress" aria-valuetext={stageLabel} max={100} value={progress?.percent ?? 0}/><b className="progress-percent">{Math.floor(progress?.percent ?? 0)}%</b></div>}
     {error && <div role="alert" className={`stamina-notice ${/cancelled/i.test(error) ? "cancelled" : "engine-error"}`}><b>{/cancelled/i.test(error) ? "Check cancelled" : "Engine error"}</b><p>{error}</p>{mode === "draft" && finished.length > 0 && <p>Finished races are kept below.</p>}</div>}{saveError && <p role="status" className="muted">{saveError}</p>}
     <div className={`stamina-workspace${catalog ? ' has-build' : ''}`}>
+    <div className={`stamina-main${shopScan ? ' has-shop' : ''}`}>
     <section className={`stamina-results${running && mode === 'any' && result ? ' previous-result' : ''}`} aria-label="Result">
       {mode === 'draft' ? !draft && !draftRun ? <div className="panel result-empty"><h2>No draft available</h2><p>Share a live room from Uma Drafter to check its races, or choose Any course.</p></div> : <>
         {draftRun && fingerprint !== draftRun.fingerprint && <p className="stale-notice" role="status">Draft changed since this run</p>}
@@ -282,6 +300,11 @@ export function Stamina({ draft, openDraft = 0, view, onViewChange, onDraftRunCh
       {staleInputs && <p className="stale-notice" role="status">Inputs changed since this run. Run the check again to update.</p>}
       <footer>Simulated with uma-race-simulator (MIT). Game data © Cygames.</footer>
     </section>
+    {catalog && shopScan && <StaminaSkillShop catalog={catalog} scan={shopScan} chains={importedChains} plan={plan}
+      skillCount={input.build.skills.length} running={running} runDisabled={runDisabled || running} runLabel={runLabel} onRun={() => { void run(); }}
+      onChange={selected => changeImport({ ...shopScan, selected })} onRemove={() => patch({ screenshotImport: undefined })}
+      manualPicker={running ? null : manualPicker} shopRef={shop}/>}
+    </div>
     {catalog && <aside ref={drawer} className="build-drawer panel" data-tab={buildTab} aria-label="Build editor">
       {screenshotSkills && <div className="build-import-actions">
           <button type="button" className="import-trigger" disabled={running} onClick={() => setImportOpen(true)}>Import from screenshots</button>
@@ -300,10 +323,9 @@ export function Stamina({ draft, openDraft = 0, view, onViewChange, onDraftRunCh
                 value={engineInput.build.stats[stat]} onChange={value => patchBuild({ stats: { ...input.build.stats, [stat]: value }, ...(stat === 'stamina' ? { usesDefaultStamina: undefined } : {}) })}/></label>)}</div>
             <div className="field"><span>Aptitudes</span>{(['distance', 'style', 'ground'] as const).map(group => <div className={`aptitude-grid aptitude-${group}`} key={group}>{({ distance: ['Sprint', 'Mile', 'Medium', 'Long'], style: styles, ground: ['Turf', 'Dirt'] })[group].map((name, i) => aptitude(group, i, `${name} aptitude`))}</div>)}</div>
           </fieldset>
-          <StaminaBuildSkills catalog={catalog} scan={screenshotImport} chains={importedChains} skills={ordinary} uniques={uniques} running={running} notice={notice}
-            recent={recent} onRecent={setRecent} onScan={changeImport} onRemoveScan={() => patch({ screenshotImport: undefined })}
-            onManual={skills => screenshotImport ? changeImport({ ...screenshotImport, manualSkills: skills.map(skill => skill.id) }) : patchBuild({ skills: [...skills, ...uniques.map(unique => unique.skill)] })}
-            onLevel={changeUniqueLevel}/>
+          <StaminaBuildSkills catalog={catalog} scan={screenshotImport} chains={importedChains} manual={manual} uniques={uniques} plan={plan}
+            running={running} notice={notice} manualPicker={manualPicker} onOpenShop={shopScan ? openShop : undefined}
+            onRemoveScan={() => patch({ screenshotImport: undefined })} onManual={onManual} onLevel={changeUniqueLevel}/>
         </> : <fieldset disabled={running} className="build-controls">{buildTab === 'race' ? <RaceSettings input={input} onChange={patch} onMood={motivation => patchBuild({ motivation })}/>
         : <>
           {presetError && <p role="status">{presetError}</p>}

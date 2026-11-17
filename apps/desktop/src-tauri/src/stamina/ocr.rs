@@ -8,7 +8,7 @@ mod tests;
 use super::{engine, Skill, Uma};
 use image::{Image, Ocr, Rect, Result};
 pub(super) use image::Apartment;
-pub(super) use layout::find_profile_banner;
+pub(super) use layout::{find_finished_skill_list, find_profile_banner};
 use layout::{
     blue_channel_ink, brown_ink, faint_brown_ink, is_event, is_unique, white_ink, Screen,
 };

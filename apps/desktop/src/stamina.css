@@ -29,7 +29,9 @@
 .draft-toolbar-label small { font-size: 11.5px; color: var(--tx3); }
 .stamina-workspace { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); gap: 12px; align-items: start; min-width: 0; min-height: 0; flex: 1; }
 .stamina-workspace.has-build { grid-template-columns: minmax(0, 1fr) clamp(320px, 46%, 440px); }
+.stamina-main { min-width: 0; min-height: 0; height: 100%; display: flex; flex-direction: column; gap: 10px; }
 .stamina-layout .stamina-results { gap: 10px; container: stamina-results / inline-size; height: 100%; overflow-y: auto; scrollbar-gutter: stable; }
+.stamina-layout .has-shop .stamina-results { height: auto; max-height: 43%; flex: none; }
 .stamina-results > * { flex-shrink: 0; }
 .stamina-layout .build-drawer { position: relative; align-self: stretch; min-width: 0; min-height: 0; border: 1px solid var(--line); padding: 0; gap: 0; background: var(--s1); overflow: hidden; }
 .stamina-layout .drawer-heading { padding: 12px 14px 10px; }
@@ -46,12 +48,42 @@
 .skills-scroll { flex: 1; min-height: 0; padding: 10px 12px 12px; overflow-y: auto; overscroll-behavior-y: contain; }
 .skills-group { display: grid; gap: 4px; min-width: 0; font-size: 13px; }
 .skills-group h3 { font: 600 12px/1.4 var(--font-body); color: var(--tx2); }
-.skills-group header { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
-.skills-group header button { padding: 3px 8px; font-size: 11.5px; }
 .build-skill-row { min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 0; border-top: 1px solid var(--line); }
 .stamina-layout .build-skill-row .skill-level { flex-direction: row; align-items: center; gap: 4px; white-space: nowrap; }
 .stamina-layout .build-skill-row .skill-level select { width: 42px; min-height: 26px; }
 .stamina-layout .remove-manual-skill { min-height: 26px; width: 26px; flex: none; padding: 0; font-size: 14px; }
+.stamina-layout .open-skill-shop { align-self: start; padding: 0 9px; color: var(--acc); font-size: 12px; }
+.stamina-layout .skill-shop { flex: 1; min-height: 0; padding: 0; gap: 0; overflow: hidden; }
+.skill-shop:focus-visible { outline: 2px solid var(--acc); outline-offset: -2px; }
+.shop-header { flex: none; display: grid; gap: 6px; border-bottom: 1px solid var(--line); padding: 9px 10px; }
+.shop-title, .shop-buying, .shop-budget, .shop-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 5px 8px; }
+.shop-title, .shop-filters { justify-content: space-between; }
+.stamina-layout .shop-header button { min-height: 26px; padding: 0 8px; font-size: 11px; }
+.shop-budget, .shop-buying { color: var(--tx2); font-size: 12px; }
+.shop-budget strong, .shop-buying strong { font: 600 12px var(--font-mono); }
+.shop-filters input { flex: 1 1 100px; min-height: 30px; padding: 0 6px; font-size: 12px; }
+.shop-filters .seg { flex: none; }
+.shop-scroll { min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 0 8px 8px; }
+.shop-col-hint { width: 12%; }
+.shop-col-price { width: 15%; }
+.shop-col-recovery { width: 17%; }
+.shop-col-tier { width: 17%; }
+.stamina-layout .skill-shop :is(th, td) { font-size: 11px; padding: 4px 3px; }
+.stamina-layout .skill-shop thead { position: sticky; top: 0; z-index: var(--layer-control); background: var(--s1); }
+.stamina-layout .skill-shop thead th { font-size: 10px; letter-spacing: 0; }
+.stamina-layout .skill-shop thead button { background: transparent; color: inherit; border: 0; display: block; min-height: 24px; padding: 0; font: inherit; text-align: left; }
+.stamina-layout .skill-shop tbody th { font-weight: 600; }
+.stamina-layout .skill-shop tbody th > small { display: block; font-size: 9.5px; font-weight: 400; }
+.skill-shop tr[data-bought=true] { background: var(--tone-skill-bg); }
+.skill-shop .shop-price, .hp-amounts { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.hp-amounts { display: inline-flex; flex-wrap: wrap; gap: 2px 5px; }
+.hp-amounts > span { white-space: nowrap; }
+.build-skill-row .hp-amounts { font-size: 11px; color: var(--tx2); }
+.shop-tags { display: flex; flex-wrap: wrap; gap: 2px 5px; color: var(--tx2); }
+.stamina-layout .shop-tags small { font-size: 9.5px; }
+.stamina-layout .skill-shop .import-stepper { gap: 2px; }
+.stamina-layout .skill-shop .import-stepper button { width: 22px; min-height: 22px; }
+.stamina-layout .shop-empty, .shop-manual { padding: 6px 0; }
 .stamina-layout .build-body .seg button { font-size: 11.5px; padding: 0 3px; min-height: 28px; }
 .stamina-layout .build-body label { gap: 3px; font-size: 11px; }
 .stamina-layout .build-body :is(input, select) { width: 100%; min-height: 32px; padding: 0 6px; }
@@ -223,10 +255,12 @@
   .draft-race-table .ledger-margin { width: 60px; }
 }
 @container desktop-content (max-width: 690px) {
-  .stamina-content > .desktop-tool:not([hidden]), .stamina-layout, .stamina-layout .stamina-results { height: auto; }
+  .stamina-content > .desktop-tool:not([hidden]), .stamina-layout, .stamina-layout .stamina-main, .stamina-layout .stamina-results { height: auto; }
   .stamina-workspace { grid-template-rows: none; }
   .stamina-workspace.has-build { grid-template-columns: minmax(0, 1fr); }
   .stamina-layout .stamina-results { overflow: visible; scrollbar-gutter: auto; }
+  .stamina-layout .has-shop .stamina-results { max-height: none; }
+  .stamina-layout .skill-shop { flex: none; height: min(540px, 62dvh); }
   .stamina-layout .build-drawer { height: calc(100dvh - 104px); min-height: 420px; }
 }
 .stamina-layout .build-drawer { z-index: var(--layer-panel); }
@@ -259,9 +293,16 @@
 .screenshot-dialog > form { display: flex; flex-direction: column; min-height: 0; }
 .stamina-layout .screenshot-dialog .drawer-heading { border-bottom: 1px solid var(--line); }
 .stamina-layout .screenshot-dialog .drawer-heading h2 { font-size: 18px; }
-.screenshot-dialog .drawer-footer button { flex: none; }
 .import-dialog-body { font-size: 13px; overscroll-behavior: contain; }
-.import-drop { display: grid; justify-items: center; gap: 6px; text-align: center; padding: 16px; background: var(--s2); border: 1px dashed var(--acc); border-radius: var(--radius-md); }
+.import-guide { display: grid; gap: 8px; }
+.import-guide-switch { justify-self: start; }
+.stamina-layout .import-guide-switch button { padding: 0 8px; min-height: 26px; font-size: 12px; }
+.import-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.import-steps li { display: flex; align-items: flex-start; gap: 7px; padding: 5px 7px; color: var(--tx2); border: 1px solid transparent; border-radius: 6px; line-height: 1.4; }
+.import-steps li[aria-current=step] { background: var(--tone-skill-bg); border-color: var(--line); color: var(--tx); }
+.import-step-number { flex: none; display: grid; place-items: center; border-radius: 50%; width: 18px; height: 18px; font-size: 11px; background: var(--s3); }
+.import-steps li[data-ready=true] .import-step-number { color: var(--good); }
+.import-drop { display: grid; justify-items: center; gap: 4px; text-align: center; padding: 9px; background: var(--s2); border: 1px dashed var(--acc); border-radius: var(--radius-md); }
 .import-drop strong { font-size: 16px; }
 .import-drop p { color: var(--tx2); }
 .import-drop button { margin-top: 4px; padding: 0 10px; }
@@ -271,12 +312,7 @@
 .import-scanning { display: grid; gap: 2px; }
 .import-drop .import-scanning strong { color: var(--good); font-size: 13px; }
 .import-toast { position: absolute; inset: auto 16px 64px auto; pointer-events: none; padding: 6px 10px; color: var(--tx); background: var(--s2); border: 1px solid var(--line); border-radius: var(--radius-md); box-shadow: 0 2px 10px #0005; }
-.import-checklist, .import-sources, .import-ignored { list-style: none; margin: 0; padding: 0; }
-.import-checklist { display: grid; gap: 6px; color: var(--tx2); }
-.import-checklist li { display: flex; align-items: baseline; gap: 8px; }
-.import-checklist li::before { content: '○'; color: var(--tx3); }
-.import-checklist li.import-recommended::before { content: '–'; }
-.import-checklist li[data-ready=true]::before { content: '✓'; color: var(--good); }
+.import-sources, .import-ignored { list-style: none; margin: 0; padding: 0; }
 .import-sources { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr)); gap: 6px; }
 .import-sources li { display: flex; align-items: center; justify-content: space-between; gap: 6px; border: 1px solid var(--line); border-radius: var(--radius-md); padding: 6px 8px; }
 .import-sources li > div { display: grid; gap: 2px; overflow-wrap: anywhere; }
@@ -297,25 +333,20 @@
 .import-variants button[aria-pressed=true] { border-color: var(--acc); }
 .import-variants small { margin-left: 6px; color: var(--tx2); }
 .import-ignored { display: grid; gap: 4px; color: var(--tx2); overflow-wrap: anywhere; }
-.stamina-layout .import-apply { padding: 0 12px; border: 0; background: var(--acc); color: var(--acc-ink); }
-.stamina-layout .import-apply:disabled { border: 1px solid var(--line); background: var(--s2); color: var(--tx3); }
+.import-footer { flex: none; display: grid; gap: 5px; padding: 9px 14px; background: var(--s1); border-top: 1px solid var(--line); }
+.import-footer p { font-size: 12px; }
+.stamina-layout .import-apply { width: 100%; min-height: 36px; padding: 0 12px; border: 0; background: var(--acc); color: var(--acc-ink); }
+.stamina-layout .import-apply:hover { background: var(--text-link-hover); }
 .scan-actions { display: grid; gap: 4px; justify-items: start; }
 .scan-actions .remove-scan { padding: 4px 9px; font-size: 12px; }
-.import-budget { flex: none; display: flex; gap: 4px 10px; align-items: baseline; flex-wrap: wrap; padding: 9px 12px; border-bottom: 1px solid var(--line); background: var(--s2); }
-.import-budget strong, .import-price { font: 500 12px var(--font-mono); white-space: nowrap; }
-.import-budget:not(.import-warning) small, .import-hint { font-size: 11px; color: var(--tx2); }
+.import-price { font: 500 12px var(--font-mono); white-space: nowrap; }
+.import-hint { font-size: 11px; color: var(--tx2); }
 .import-tier-identity { display: grid; gap: 2px; min-width: 0; }
 .import-warning { color: var(--gold); }
-.import-skill-list { display: grid; min-width: 0; }
-.import-chain { display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; border-top: 1px solid var(--line); padding: 6px 0; }
-.import-chain:last-child { border-bottom: 1px solid var(--line); }
-.import-tier { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0 8px; align-items: center; padding: 4px 6px; border-radius: var(--radius-md); min-width: 0; }
 .import-skill-name { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; min-width: 0; overflow-wrap: anywhere; }
 .import-skill-name small { color: var(--good); font-size: 11px; }
 .import-skill-name .skill-icon { flex: none; }
-.import-price-issue { grid-column: 1 / -1; overflow-wrap: anywhere; }
 .import-stepper { display: flex; align-items: center; justify-self: end; gap: 4px; }
-.import-stepper span { min-width: 31px; text-align: center; font-size: 11px; color: var(--tx2); }
 .stamina-layout .import-stepper button { width: 28px; min-height: 28px; padding: 0; font-size: 15px; }
 @container desktop-content (max-width: 660px) {
   .import-review { grid-template-columns: minmax(0, 1fr); }

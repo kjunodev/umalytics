@@ -399,6 +399,14 @@ fn benchmark_set(folder: &Path) -> Result<bool> {
             } else {
                 screenshot.resize(scale)
             };
+            if screen == Screen::FinishedDetails {
+                let bounds = find_finished_skill_list(
+                    screenshot.width / 4,
+                    screenshot.height / 4,
+                    |x, y| screenshot.at(x * 4, y * 4),
+                );
+                assert!(bounds.is_some(), "{name} at {scale}x must support scrolling capture");
+            }
             let start = Instant::now();
             let actual = scan(&ocr, &screenshot, &matcher, &engine.catalog.umas)?;
             if let Some(top) = expected.client_top {

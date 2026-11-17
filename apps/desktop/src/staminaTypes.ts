@@ -6,6 +6,7 @@ export interface Course {
   race_id: number; grade: number; time: number; month: number; instance_reason: string; unavailable_reason: string | null;
 }
 export interface CatalogSkill { id: number; name: string; hp_recovery: boolean; rarity: 'white' | 'gold' | 'unique'; icon_path: string | null }
+export interface HpEffect { value: number; conditional: boolean; other_runner: boolean }
 export interface CatalogUma {
   card_id: number;
   name: string;
@@ -13,7 +14,7 @@ export interface CatalogUma {
   unique_skill_id: number;
   aptitudes: Pick<StaminaBuild, 'distance' | 'style' | 'ground'>;
 }
-export interface Catalog { courses: Course[]; skills: CatalogSkill[]; umas: CatalogUma[]; local_skill_data: boolean; local_skill_path?: string; local_skill_count?: number; local_icon_count?: number; engine_data_version?: string; screenshot_import_enabled: boolean; screenshot_skills?: ImportCatalog }
+export interface Catalog { courses: Course[]; skills: CatalogSkill[]; umas: CatalogUma[]; hp_effects?: Record<number, HpEffect[]>; local_skill_data: boolean; local_skill_path?: string; local_skill_count?: number; local_icon_count?: number; engine_data_version?: string; screenshot_import_enabled: boolean; screenshot_skills?: ImportCatalog }
 export interface StaminaBuild {
   running_style: number;
   stats: { speed: number; stamina: number; pow: number; guts: number; wiz: number };

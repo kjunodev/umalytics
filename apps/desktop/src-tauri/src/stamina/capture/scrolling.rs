@@ -3,7 +3,7 @@ use crate::stamina::ocr::{self, Import};
 use serde::Serialize;
 use std::{
     sync::{
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicU8, Ordering},
         mpsc, Arc, Mutex,
     },
     thread,
@@ -16,16 +16,19 @@ const STILL_TIME: Duration = Duration::from_millis(500);
 const SESSION_LIMIT: Duration = Duration::from_secs(180);
 const SAMPLE_WIDTH: usize = 96;
 const SAMPLE_HEIGHT: usize = 72;
+const RUNNING: u8 = 0;
+const DRAINING: u8 = 1;
+const CANCELLED: u8 = 2;
 
 #[derive(Default)]
-pub(crate) struct ScrollingScans(Mutex<Option<(u32, Arc<AtomicBool>)>>);
+pub(crate) struct ScrollingScans(Mutex<Option<(u32, Arc<AtomicU8>)>>);
 
 impl ScrollingScans {
-    pub fn start(&self, id: u32) -> Arc<AtomicBool> {
+    pub fn start(&self, id: u32) -> Arc<AtomicU8> {
         let mut active = self.0.lock().unwrap();
-        let token = Arc::new(AtomicBool::new(false));
+        let token = Arc::new(AtomicU8::new(RUNNING));
         if let Some((_, previous)) = active.replace((id, token.clone())) {
-            previous.store(true, Ordering::Relaxed);
+            previous.store(CANCELLED, Ordering::Relaxed);
         }
         token
     }
@@ -37,12 +40,18 @@ impl ScrollingScans {
             .is_some_and(|(current, _)| id.is_none_or(|id| id == *current))
         {
             if let Some((_, token)) = active.take() {
-                token.store(true, Ordering::Relaxed);
+                token.store(CANCELLED, Ordering::Relaxed);
             }
         }
     }
 
-    pub fn finish(&self, token: &Arc<AtomicBool>) {
+    pub fn drain(&self, id: u32) {
+        if let Some((_, token)) = self.0.lock().unwrap().as_ref().filter(|(active, _)| *active == id) {
+            token.fetch_max(DRAINING, Ordering::Relaxed);
+        }
+    }
+
+    pub fn finish(&self, token: &Arc<AtomicU8>) {
         let mut active = self.0.lock().unwrap();
         if active
             .as_ref()
@@ -56,6 +65,7 @@ impl ScrollingScans {
 #[derive(Serialize)]
 #[serde(tag = "type", content = "value", rename_all = "kebab-case")]
 pub(crate) enum ScanUpdate {
+    Queued(u32),
     Screenshot(Box<Import>),
     Finished(Option<&'static str>),
 }
@@ -67,7 +77,12 @@ struct ListPixels {
 }
 
 impl ListPixels {
+    #[cfg(test)]
     fn from_frame(frame: &Frame) -> Option<Self> {
+        Self::sample(frame, false)
+    }
+
+    fn sample(frame: &Frame, finished_uma: bool) -> Option<Self> {
         let at = |x: i32, y: i32| {
             let x = x.clamp(0, frame.width - 1);
             let y = y.clamp(0, frame.height - 1);
@@ -78,22 +93,29 @@ impl ListPixels {
                 frame.bgra[offset],
             ]
         };
-        // The banner only locates the list. A quarter-size probe is enough for its edges.
+        // A quarter-size probe locates the edges of the skill list.
         const SCALE: i32 = 4;
-        let banner =
-            ocr::find_profile_banner(frame.width / SCALE, frame.height / SCALE, |x, y| {
-                at(x * SCALE, y * SCALE)
-            })?;
-        let width = banner.width() * SCALE;
-        let banner_left = banner.left * SCALE;
-        let banner_top = banner.top * SCALE;
-        // The Learn list is below the SP bar and above Confirm, left of Career Profile.
-        // Exclude the animated character, the scrollbar and the button below the list.
-        let left = banner_left - width * 118 / 100;
-        let top = banner_top + width * 60 / 100;
-        let right = banner_left - width * 35 / 100;
-        let bottom = banner_top + width * 133 / 100;
-        if left < 0 || top < 0 || right > frame.width || bottom > frame.height {
+        let probe = |x, y| at(x * SCALE, y * SCALE);
+        let width = frame.width / SCALE;
+        let height = frame.height / SCALE;
+        let [left, top, right, bottom] = if finished_uma {
+            let bounds = ocr::find_finished_skill_list(width, height, probe)?;
+            [bounds.left, bounds.top, bounds.right, bounds.bottom].map(|value| value * SCALE)
+        } else {
+            let banner = ocr::find_profile_banner(width, height, probe)?;
+            let width = banner.width() * SCALE;
+            let left = banner.left * SCALE;
+            let top = banner.top * SCALE;
+            // The Learn list is below the SP bar and above Confirm, left of Career Profile.
+            // Exclude the animated character, the scrollbar and the button below the list.
+            [
+                left - width * 118 / 100,
+                top + width * 60 / 100,
+                left - width * 35 / 100,
+                top + width * 133 / 100,
+            ]
+        };
+        if left < 0 || top < 0 || right > frame.width || bottom > frame.height || left >= right || top >= bottom {
             return None;
         }
         let mut pixels = Vec::with_capacity(SAMPLE_WIDTH * SAMPLE_HEIGHT);
@@ -202,10 +224,11 @@ impl Timings {
 }
 
 pub(in crate::stamina) fn scan_while_scrolling(
-    token: &AtomicBool,
+    token: &AtomicU8,
+    finished_uma: bool,
     updates: &Channel<ScanUpdate>,
 ) -> Result<(), &'static str> {
-    if token.load(Ordering::Relaxed) {
+    if token.load(Ordering::Relaxed) != RUNNING {
         return Ok(());
     }
     let started = Instant::now();
@@ -221,7 +244,7 @@ pub(in crate::stamina) fn scan_while_scrolling(
             let mut elapsed = Duration::ZERO;
             let mut scans = 0;
             while let Ok(frame) = frames.recv() {
-                if token.load(Ordering::Relaxed) || Instant::now() >= deadline {
+                if token.load(Ordering::Relaxed) == CANCELLED {
                     break;
                 }
                 let start = Instant::now();
@@ -229,7 +252,7 @@ pub(in crate::stamina) fn scan_while_scrolling(
                     .map_err(|_| "The captured game window could not be read.")?;
                 elapsed += start.elapsed();
                 scans += 1;
-                if token.load(Ordering::Relaxed) || Instant::now() >= deadline {
+                if token.load(Ordering::Relaxed) == CANCELLED {
                     break;
                 }
                 if updates
@@ -242,22 +265,23 @@ pub(in crate::stamina) fn scan_while_scrolling(
             Ok::<_, &'static str>((elapsed, scans))
         });
         let mut timings = Timings::default();
+        let mut queued = 0;
         let result = (|| {
             let mut stillness = Stillness::default();
             let mut pending = None;
             let mut saw_frame = false;
-            while !token.load(Ordering::Relaxed) && !ocr.is_finished() && Instant::now() < deadline
+            while token.load(Ordering::Relaxed) == RUNNING && !ocr.is_finished() && Instant::now() < deadline
             {
                 let start = Instant::now();
                 let mut stage = SampleTimings::default();
                 let frame = capture.sample(INTERVAL, &mut stage)?;
                 let sampled = Instant::now();
-                if token.load(Ordering::Relaxed) || sampled >= deadline {
+                if token.load(Ordering::Relaxed) != RUNNING || sampled >= deadline {
                     break;
                 }
                 if let Some(frame) = frame {
                     saw_frame = true;
-                    let pixels = ListPixels::from_frame(&frame);
+                    let pixels = ListPixels::sample(&frame, finished_uma);
                     #[cfg(debug_assertions)]
                     if let Some(recorder) = &mut recorder {
                         recorder.record(&frame);
@@ -276,7 +300,13 @@ pub(in crate::stamina) fn scan_while_scrolling(
                 // WGC may stop emitting when the window stops changing.
                 if let Some(frame) = pending.take_if(|_| stillness.ready(sampled)) {
                     match send.try_send(frame) {
-                        Ok(()) => stillness.mark_scanned(),
+                        Ok(()) => {
+                            stillness.mark_scanned();
+                            queued += 1;
+                            if updates.send(ScanUpdate::Queued(queued)).is_err() {
+                                break;
+                            }
+                        }
                         Err(mpsc::TrySendError::Full(frame)) => pending = Some(frame),
                         Err(mpsc::TrySendError::Disconnected(_)) => break,
                     }
@@ -527,12 +557,14 @@ mod tests {
         let scans = ScrollingScans::default();
         let first = scans.start(1);
         let second = scans.start(2);
-        assert!(first.load(Ordering::Relaxed));
+        assert_eq!(first.load(Ordering::Relaxed), CANCELLED);
         scans.stop(Some(1));
         scans.finish(&first);
-        assert!(!second.load(Ordering::Relaxed));
+        assert_eq!(second.load(Ordering::Relaxed), RUNNING);
+        scans.drain(2);
+        assert_eq!(second.load(Ordering::Relaxed), DRAINING);
         scans.stop(None);
-        assert!(second.load(Ordering::Relaxed));
+        assert_eq!(second.load(Ordering::Relaxed), CANCELLED);
     }
 
     #[test]

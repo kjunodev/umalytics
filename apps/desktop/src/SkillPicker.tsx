@@ -1,12 +1,27 @@
 import { useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { convertFileSrc } from '@tauri-apps/api/core';
+import { hpEffectTitle, hpPercent } from './staminaShop';
 import { fuzzyScore } from './staminaState';
-import type { Catalog, CatalogSkill, StaminaBuild } from './staminaTypes';
+import type { Catalog, CatalogSkill, HpEffect, StaminaBuild } from './staminaTypes';
 
 export function SkillIcon({ skill }: { skill: CatalogSkill | undefined }) {
   const [failed, setFailed] = useState(false);
   return skill?.icon_path && !failed ? <img className="skill-icon" alt="" loading="lazy" decoding="async" src={convertFileSrc(skill.icon_path)} onError={() => setFailed(true)}/> : <span className="skill-icon skill-icon-fallback" aria-hidden="true">◇</span>;
 }
+
+export function HpAmounts({ effects }: { effects: HpEffect[] }) {
+  return <span className="hp-amounts">{effects.map((effect, index) =>
+    <span key={index} title={hpEffectTitle(effect)} aria-label={hpEffectTitle(effect)}>{hpPercent(effect.value)}</span>)}</span>;
+}
+
+function SkillHpNote({ catalog, id }: { catalog: Catalog; id: number }) {
+  const effects = catalog.hp_effects?.[id];
+  return effects?.length ? <>
+    {effects.some(effect => effect.value < 0) && <small className="import-warning">Drain</small>}
+    <HpAmounts effects={effects}/>
+  </> : null;
+}
+
 export function SkillPicker({ catalog, skills, onChange, recent, onRecent, limit, resolving = false, showSelected = true, addLabel }: {
   catalog: Catalog; skills: StaminaBuild['skills']; onChange: (skills: StaminaBuild['skills']) => void;
   recent: number[]; onRecent: (recent: number[]) => void; limit: number; resolving?: boolean; showSelected?: boolean; addLabel?: string;
@@ -29,6 +44,7 @@ export function SkillPicker({ catalog, skills, onChange, recent, onRecent, limit
     <div className="skill-chips">{showSelected && skills.map(skill => {
       const meta = catalog.skills.find(s => s.id === skill.id);
       return <span className={`skill-chip rarity-${meta?.rarity ?? 'white'}`} key={skill.id}><SkillIcon skill={meta}/><span>{meta?.name ?? `Skill ${skill.id}`}</span>
+        <SkillHpNote catalog={catalog} id={skill.id}/>
         <button type="button" aria-label={`Remove skill ${skill.id}`} onClick={() => onChange(skills.filter(s => s.id !== skill.id))}>×</button></span>;
     })}
     {!adding ? <button ref={addButton} type="button" className="add-skill" disabled={skills.length >= limit} onClick={() => setAdding(true)}>{addLabel ?? (resolving ? 'Match skill' : '+ Add skill')}</button> : <div className="skill-typeahead" ref={typeahead}>
@@ -37,7 +53,10 @@ export function SkillPicker({ catalog, skills, onChange, recent, onRecent, limit
         if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); const next = (selected + (e.key === 'ArrowDown' ? 1 : -1) + matches.length) % Math.max(1, matches.length); setActive(next); document.getElementById(`${listId}-${next}`)?.scrollIntoView({ block: 'nearest' }); }
         if (e.key === 'Enter') { e.preventDefault(); if (matches[selected]) add(matches[selected].skill); }
       }}/>
-      <div className="skill-options" id={listId} role="listbox" aria-label="Matching skills">{matches.map(({ skill }, i) => <button type="button" role="option" id={`${listId}-${i}`} aria-selected={selected === i} className={`rarity-${skill.rarity}`} key={skill.id} onClick={() => add(skill)}><SkillIcon skill={skill}/><span>{skill.name}</span>{recent.includes(skill.id) && <small>Recent</small>}</button>)}{!matches.length && <p role="status">No matching skills.</p>}</div>
+      <div className="skill-options" id={listId} role="listbox" aria-label="Matching skills">{matches.map(({ skill }, i) => <button type="button" role="option" id={`${listId}-${i}`} aria-label={skill.name} aria-describedby={catalog.hp_effects?.[skill.id]?.length ? `${listId}-hp-${i}` : undefined} aria-selected={selected === i} className={`rarity-${skill.rarity}`} key={skill.id} onClick={() => add(skill)}>
+        <SkillIcon skill={skill}/><span>{skill.name}</span>{recent.includes(skill.id) && <small>Recent</small>}
+        {catalog.hp_effects?.[skill.id]?.length ? <span id={`${listId}-hp-${i}`}><SkillHpNote catalog={catalog} id={skill.id}/></span> : null}
+      </button>)}{!matches.length && <p role="status">No matching skills.</p>}</div>
     </div>}
     </div>
   </div>;

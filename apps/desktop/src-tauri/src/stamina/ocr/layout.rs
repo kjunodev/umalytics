@@ -106,6 +106,43 @@ pub(in crate::stamina) fn find_profile_banner(
         .then(|| Rect::new(band.start, vertical.start, band.end, vertical.end))
 }
 
+// Probe the finished Details header and its left-hand Skills tab at capture
+// resolution. OCR still classifies the frame before any rows enter review.
+pub(in crate::stamina) fn find_finished_skill_list(
+    width: i32,
+    height: i32,
+    at: impl Fn(i32, i32) -> Rgb,
+) -> Option<Rect> {
+    (0..height / 5)
+        .flat_map(|y| {
+            join_gaps(runs(0..width, |x| green(at(x, y))), width / 35)
+                .into_iter()
+                .map(move |band| (band, y))
+        })
+        .filter_map(|(band, y)| {
+            let w = length(&band);
+            if !(width / 6..width * 9 / 10).contains(&w) {
+                return None;
+            }
+            let x = band.start + w / 12;
+            let tab = runs(
+                y + w * 60 / 100..(y + w * 83 / 100).min(height),
+                |y| green(at(x, y)) && !green(at(band.start + w * 42 / 100, y)),
+            )
+            .into_iter()
+            .find(|tab| (w * 3 / 100..=w * 9 / 100).contains(&length(tab)))?;
+            let list = Rect::new(
+                band.start + w / 25,
+                tab.end + w / 36,
+                band.end - w / 25,
+                (tab.end + w * 76 / 100).min(height),
+            );
+            (list.height() >= w / 2).then_some((w, list))
+        })
+        .max_by_key(|(width, _)| *width)
+        .map(|(_, list)| list)
+}
+
 fn button_green([r, g, b]: Rgb) -> bool {
     r >= 30 && g >= 68 && g.saturating_sub(r) >= 10 && b < 65
 }
