@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { SkillIcon, SkillPicker } from './SkillPicker';
-import { hintDiscount, priceAfterTier, purchaseList, purchasePlan, scanSkillIds, selectTier, type ScreenshotImport, type SkillChain, type TierStep } from './staminaScreenshot';
+import { availablePurchaseTiers, hintDiscount, priceAfterTier, purchaseList, purchasePlan, scanSkillIds, selectTier, type ScreenshotImport, type SkillChain, type TierStep } from './staminaScreenshot';
 import type { Catalog, CatalogSkill, StaminaBuild } from './staminaTypes';
 
 const format = (value: number) => value.toLocaleString('en-US');
@@ -8,7 +8,7 @@ const priceText = (value: number | null) => value === null ? 'Price unknown' : `
 type BuildSkills = StaminaBuild['skills'];
 const hint = (step?: TierStep) => step?.hint ? <small className="import-hint">{step.hint === 5 ? 'Hint Max' : `Hint Lv ${step.hint}`} · {hintDiscount(step.hint)}% off</small> : null;
 
-export function StaminaBuildSkills({ catalog, scan, chains, skills, uniques, recent, running, onRecent, onScan, onRemoveScan, onManual, onLevel }: {
+export function StaminaBuildSkills({ catalog, scan, chains, skills, uniques, recent, running, notice, onRecent, onScan, onRemoveScan, onManual, onLevel }: {
   catalog: Catalog;
   scan?: ScreenshotImport;
   chains: SkillChain[];
@@ -16,6 +16,7 @@ export function StaminaBuildSkills({ catalog, scan, chains, skills, uniques, rec
   uniques: { skill: BuildSkills[number]; meta: CatalogSkill }[];
   recent: number[];
   running: boolean;
+  notice: boolean;
   onRecent: (ids: number[]) => void;
   onScan: (scan: ScreenshotImport) => void;
   onRemoveScan: () => void;
@@ -35,6 +36,37 @@ export function StaminaBuildSkills({ catalog, scan, chains, skills, uniques, rec
     if (!chain.owned || uniques.some(({ skill }) => skill.id === chain.owned?.id)) return [];
     return [{ skill: chain.owned, step: chain.steps.find(step => step.id === chain.owned?.id && step.owned), removal: chain.steps.find(step => step.removal) }];
   });
+  const offers = chains.flatMap(chain => {
+    const steps = chain.steps.filter(step => step.selectable);
+    if (!steps.length) return [];
+    const purchase = plan.purchases.find(step => steps.includes(step));
+    return [{ chain, steps, purchase, available: availablePurchaseTiers(chain, purchase) }];
+  });
+  const stepper = ({ chain, steps, purchase }: typeof offers[number]) => {
+    const selected = purchase ? steps.indexOf(purchase) : -1;
+    const base = name(chain.owned?.id ?? steps[0]!.id);
+    const changeTier = (id?: number) => {
+      setCopyStatus('');
+      if (scan) onScan({ ...scan, selected: selectTier(scan.selected, chain, id) });
+    };
+    return <div className="import-stepper" role="group" aria-label={`Purchase tier for ${base}`}>
+      <button type="button" aria-label={`Decrease tier for ${base}`} disabled={selected < 0} onClick={() => changeTier(steps[selected - 1]?.id)}>−</button>
+      <span>{selected < 0 ? 'None' : `${selected + 1} / ${steps.length}`}</span>
+      <button type="button" aria-label={`Increase tier for ${base}`}
+        disabled={selected === steps.length - 1 || ((!chain.owned || purchase?.removal) && skills.length + uniques.length >= 100)}
+        onClick={() => changeTier(steps[selected + 1]?.id)}>+</button>
+    </div>;
+  };
+  const tierRow = (chain: SkillChain, step: TierStep, price: number | null) => <div className="import-tier" key={step.id}>
+    <span className="import-tier-identity">{identity(step.id, step.removal)}{hint(step)}</span>
+    <span className="import-price">{priceText(price)}</span>
+    {step.inferredFrom !== undefined && <small className="muted import-price-issue">Price from {name(step.inferredFrom)}'s row</small>}
+    {step.estimated && <small className="import-warning import-price-issue">Estimated upgrade price after removing {name(chain.owned!.id)}</small>}
+    {step.priceIssue && <small className="import-warning import-price-issue">{step.priceIssue}
+      {price !== step.total && step.total !== null && ` · Calculated ${format(step.total)} SP at scan`}
+      {step.scanned.length ? ` · Scanned ${step.scanned.map(format).join(' / ')} SP` : ' · No scanned price'}
+    </small>}
+  </div>;
   const purchases = plan.purchases.length;
   const copy = async () => {
     try {
@@ -49,7 +81,8 @@ export function StaminaBuildSkills({ catalog, scan, chains, skills, uniques, rec
       {plan.overBy > 0 && <small>{format(plan.overBy)} SP over budget</small>}
       {plan.left === null && <small>A selected price could not be calculated.</small>}
     </div>}
-    <div className="skills-scroll"><fieldset disabled={running} className="build-controls">
+    <div className="skills-scroll" aria-label="Skills"><fieldset disabled={running} className="build-controls">
+      {notice && <small className="muted" role="status">Local skill data unavailable. Using engine names without icons.</small>}
       <section className="skills-group" aria-label="Owned">
         <h3>Owned</h3>
         {uniques.map(({ skill, meta }) => <div className="build-skill-row" key={skill.id}>{identity(skill.id)}
@@ -68,43 +101,18 @@ export function StaminaBuildSkills({ catalog, scan, chains, skills, uniques, rec
         <section className="skills-group" aria-label="Buying">
           <header><div><h3>Buying</h3><small>{purchases} {purchases === 1 ? 'skill' : 'skills'} · {priceText(plan.spent)}</small></div>
             <button type="button" disabled={!purchases} onClick={() => { void copy(); }}>Copy list</button></header>
-          {plan.purchases.map(step => <div className="build-skill-row" key={step.id}>{identity(step.id, step.removal)}<span className="import-price">{priceText(step.total)}</span></div>)}
+          <div className="import-skill-list">{offers.map(offer => offer.purchase && <div className="import-chain" key={offer.chain.key}>
+            {tierRow(offer.chain, offer.purchase, offer.purchase.total)}
+            {!offer.available.length && stepper(offer)}
+          </div>)}</div>
           {copyStatus && <small role="status">{copyStatus}</small>}
         </section>
         <section className="skills-group" aria-label="Available">
           <h3>Available</h3>
-          <div className="import-skill-list">{chains.map(chain => {
-            const steps = chain.steps.filter(step => step.selectable);
-            if (!steps.length) return null;
-            const selected = steps.map(step => scan.selected.includes(step.id)).lastIndexOf(true);
-            const base = name(chain.owned?.id ?? steps[0]!.id);
-            const changeTier = (id: number | undefined) => {
-              setCopyStatus('');
-              onScan({ ...scan, selected: selectTier(scan.selected, chain, id) });
-            };
-            return <div className="import-chain" key={chain.key}>
-              <div>{steps.map(step => {
-                const price = priceAfterTier(chain, step, steps[selected]?.id);
-                return <div className="import-tier" key={step.id} data-selected={steps[selected]?.id === step.id}>
-                  <span className="import-tier-identity">{identity(step.id, step.removal)}{hint(step)}</span>
-                  <span className="import-price">{priceText(price)}</span>
-                  {step.inferredFrom !== undefined && <small className="muted import-price-issue">Price from {name(step.inferredFrom)}'s row</small>}
-                  {step.estimated && <small className="import-warning import-price-issue">Estimated upgrade price after removing {name(chain.owned!.id)}</small>}
-                  {step.priceIssue && <small className="import-warning import-price-issue">{step.priceIssue}
-                    {price !== step.total && step.total !== null && ` · Calculated ${format(step.total)} SP at scan`}
-                    {step.scanned.length ? ` · Scanned ${step.scanned.map(format).join(' / ')} SP` : ' · No scanned price'}
-                  </small>}
-                </div>;
-              })}</div>
-              <div className="import-stepper" role="group" aria-label={`Purchase tier for ${base}`}>
-                <button type="button" aria-label={`Decrease tier for ${base}`} disabled={selected < 0} onClick={() => changeTier(steps[selected - 1]?.id)}>−</button>
-                <span>{selected < 0 ? 'None' : `${selected + 1} / ${steps.length}`}</span>
-                <button type="button" aria-label={`Increase tier for ${base}`}
-                  disabled={selected === steps.length - 1 || ((!chain.owned || steps[selected]?.removal) && skills.length + uniques.length >= 100)}
-                  onClick={() => changeTier(steps[selected + 1]?.id)}>+</button>
-              </div>
-            </div>;
-          })}</div>
+          <div className="import-skill-list">{offers.map(offer => offer.available.length > 0 && <div className="import-chain" key={offer.chain.key}>
+            <div>{offer.available.map(step => tierRow(offer.chain, step, priceAfterTier(offer.chain, step, offer.purchase?.id)))}</div>
+            {stepper(offer)}
+          </div>)}</div>
         </section>
       </>}
       <SkillPicker catalog={searchCatalog} showSelected={false} addLabel="Add any skill" skills={manual} recent={recent} onRecent={onRecent}

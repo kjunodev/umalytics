@@ -32,9 +32,29 @@ test('obsolete collapse state is dropped and match-scoped course choices survive
 });
 
 test('legacy tabs migrate even when screenshot access is disabled', () => {
-  for (const [saved, tab] of Object.entries({ build: 'attributes', 'race-settings': 'race', 'scanned-skills': 'skills', presets: 'presets', invalid: 'attributes' })) {
+  for (const [saved, tab] of Object.entries({ build: 'build', attributes: 'build', skills: 'build', 'race-settings': 'race', 'scanned-skills': 'build', presets: 'presets', invalid: 'build' })) {
     assert.equal(restoreStaminaMemory({ buildTab: saved }, catalog).buildTab, tab);
   }
+});
+
+test('build header has no stat summary and only offers Undo import when a snapshot exists', () => {
+  const source = fs.readFileSync(new URL('../apps/desktop/src/Stamina.tsx', import.meta.url), 'utf8');
+  const start = source.indexOf('<aside ref={drawer}');
+  const end = source.indexOf('role="tabpanel"', start);
+  assert(start >= 0 && end > start);
+  const header = source.slice(start, end);
+  assert.match(header, /Import from screenshots/);
+  assert.match(header, /\{input\.importUndo && <button[^\n]+>Undo import<\/button>/);
+  assert.doesNotMatch(header, /stats|staminaStatLabels|summary/i);
+  assert(!editorStats('requirement').includes('stamina'));
+});
+
+test('recent Uma cards survive a reload in selection order and drop invalid and duplicate cards', async () => {
+  const umas = Array.from({ length: 7 }, (_, i) => ({ card_id: i + 1 }));
+  const source = { ...catalog, umas };
+  const memory = restoreStaminaMemory({ recentUmas: [3, 2, 3, 99, 6, '7', 5, 1, 4] }, source);
+  await saveStaminaMemory(memory);
+  assert.deepEqual(plain((await loadStaminaMemory(source)).recentUmas), [3, 2, 6, 5, 1]);
 });
 
 test('switching views changes the editor fields and persists the view', async () => {
@@ -58,7 +78,7 @@ test('stamina memory restores race, conditions, every build field and advanced o
   input.build.skills = [{ id: 1, level: 6 }, { id: 2, level: 1 }];
   for (const key of ['assume_skills_activate', 'rushed', 'lane_movement']) input[key] = false;
   input.dueling = true; input.spot_struggle = true; input.seeds = 512;
-  assert.deepEqual(plain(restoreStaminaMemory({ input, recent: [2, 1], buildTab: 'race-settings', showAll: true }, catalog)), { input, recent: [2, 1], view: 'requirement', buildTab: 'race', buildCustomized: true });
+  assert.deepEqual(plain(restoreStaminaMemory({ input, recent: [2, 1], buildTab: 'race-settings', showAll: true }, catalog)), { input, recent: [2, 1], recentUmas: [], view: 'requirement', buildTab: 'race', buildCustomized: true });
 });
 
 test('stamina memory rejects corrupt values, stale skill IDs and duplicate skills', () => {
@@ -96,7 +116,7 @@ test('hidden screenshot drafts are ignored and survive saves in either race mode
   stored = { input: { screenshotImport: scan }, draftInput: { screenshotImport: scan }, buildTab: 'scanned-skills' };
   const hidden = { ...catalog, screenshot_import_enabled: false, screenshot_skills: { 2: { cost: 180, tier: null } } };
   const memory = await loadStaminaMemory(hidden);
-  assert.equal(memory.buildTab, 'skills');
+  assert.equal(memory.buildTab, 'build');
   assert.equal(memory.input.screenshotImport, undefined);
   assert.equal(memory.draftInput.screenshotImport, undefined);
   assert.equal(memory.input.build.skills.length, 0);

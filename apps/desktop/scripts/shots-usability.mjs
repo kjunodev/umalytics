@@ -3,7 +3,8 @@ export async function runUsabilityShots({ open, nav, shot, check }) {
     const page = await open('usability', width, height);
     await page.waitForFunction(() => document.querySelectorAll('.arena-card[data-state="loaded"]').length === 10);
     await page.waitForFunction(() => [...document.querySelectorAll('.arena-card .team-icon img')].length === 10 && [...document.querySelectorAll('.arena-card .team-icon img')].every(img => img.naturalWidth > 0));
-    check((await page.locator('.sidebar .nav-item').allTextContents()).map(s => s.trim()).every((s, i) => s === ['LiveLive', 'StaminaStamina', 'PlayersPlayers', 'HistoryHistory', 'SettingsSettings'][i]), 'Rail has one Live item and the four other pages');
+    const rail = await page.locator('.sidebar .nav-item').evaluateAll(items => items.map(item => item.getAttribute('aria-label')));
+    check(rail.join(',') === 'Live,Stamina,Players,History,Support,Settings', 'Rail keeps Support directly above Settings');
     await page.locator('.arena-card .team-icon').first().hover();
     check(await page.locator('.arena-card .team-icon-tooltip').first().evaluate(el => { const r = el.getBoundingClientRect(), b = el.closest('.arena-card').getBoundingClientRect(); return r.left >= b.left && r.right <= b.right && r.top >= b.top && r.bottom <= b.bottom; }), 'Team tooltip stays inside its card');
     await shot(page, `usability-live-lobby-${width}x${height}`);
@@ -67,7 +68,7 @@ export async function runUsabilityShots({ open, nav, shot, check }) {
     await shot(page, `usability-stamina-toolbar-${width}x${height}`);
     await page.getByRole('button', { name: 'Edit default build', exact: true }).click();
     const panel = page.getByRole('complementary', { name: 'Build editor', exact: true });
-    check(await panel.getByRole('tab').count() === 4, 'Build panel has four tabs');
+    check(await panel.getByRole('tab').count() === 3, 'Build panel has three tabs');
     await shot(page, `usability-stamina-build-${width}x${height}`);
     await panel.getByRole('tab', { name: 'Presets', exact: true }).click();
     await shot(page, `usability-stamina-presets-${width}x${height}`);

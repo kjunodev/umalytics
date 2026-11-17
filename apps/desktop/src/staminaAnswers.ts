@@ -1,8 +1,21 @@
 import { passes } from './staminaDraft';
-import type { Course, StaminaResult } from './staminaTypes';
+import type { Course, StaminaPoint, StaminaResult } from './staminaTypes';
 
 export const formatStamina = (value: number) => Math.round(value).toLocaleString('en-US');
 export const raceName = (course: Course) => `${course.track_name} ${course.distance}`;
+
+export function staminaTableRows(curve: StaminaPoint[], current: StaminaPoint): (StaminaPoint | null)[] {
+  const points = [...curve].sort((a, b) => a.stamina - b.stamina);
+  if (!points.length) return [current];
+  const allRates = (point: StaminaPoint, rate: number) =>
+    point.full_spurt_percent === rate && point.survival_percent === rate && point.joint_percent === rate;
+  const start = Math.max(0, points.map(point => allRates(point, 0)).lastIndexOf(true));
+  const end = points.findIndex(point => allRates(point, 100));
+  const range = end >= 0 && end < start ? points : points.slice(start, end < 0 ? undefined : end + 1);
+  if (current.stamina < range[0]!.stamina) return [current, null, ...range];
+  if (current.stamina > range[range.length - 1]!.stamina) return [...range, null, current];
+  return [...range.filter(point => point.stamina !== current.stamina), current].sort((a, b) => a.stamina - b.stamina);
+}
 
 export function staminaMargin(result: StaminaResult): number | null {
   const need = result.thresholds.joint;

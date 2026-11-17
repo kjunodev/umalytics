@@ -31,21 +31,19 @@
 .stamina-workspace.has-build { grid-template-columns: minmax(0, 1fr) clamp(320px, 46%, 440px); }
 .stamina-layout .stamina-results { gap: 10px; container: stamina-results / inline-size; height: 100%; overflow-y: auto; scrollbar-gutter: stable; }
 .stamina-results > * { flex-shrink: 0; }
-.stamina-layout .build-drawer { position: relative; inset: auto; width: auto; max-height: 100%; display: flex; flex-direction: column; min-width: 0; border: 1px solid var(--line); padding: 0; gap: 0; animation: none; background: var(--s1); overflow: hidden; }
+.stamina-layout .build-drawer { position: relative; align-self: stretch; min-width: 0; min-height: 0; border: 1px solid var(--line); padding: 0; gap: 0; background: var(--s1); overflow: hidden; }
 .stamina-layout .drawer-heading { padding: 12px 14px 10px; }
 .stamina-layout .drawer-heading h2 { font: 600 16px/1.3 var(--font-body); }
-.build-heading { display: grid; gap: 8px; padding: 12px 12px 6px; flex: none; }
-.stamina-layout .build-heading h2 { font: 600 13px/1.4 var(--font-body); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.build-import-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.build-import-actions { display: flex; flex: none; gap: 6px; flex-wrap: wrap; padding: 10px 12px 3px; }
 .stamina-layout .build-import-actions button { min-height: 28px; padding: 3px 8px; font-size: 11.5px; }
 .build-controls { border: 0; padding: 0; margin: 0; min-width: 0; display: flex; flex-direction: column; gap: 9px; }
 .stamina-layout .drawer-tabs { display: flex; margin: 0 10px; padding: 0; border-bottom: 1px solid var(--line); flex-shrink: 0; }
 .stamina-layout .drawer-tabs button { flex: 1; border: 0; border-radius: 0; background: transparent; color: var(--tx3); border-bottom: 2px solid transparent; margin-bottom: -1px; min-height: 34px; padding: 4px 6px; font-size: 12px; }
 .stamina-layout .drawer-tabs button[aria-selected=true] { color: var(--tx); border-bottom-color: var(--acc); }
 .stamina-layout .build-body { padding: 10px 12px 12px; overflow-y: auto; overscroll-behavior-y: contain; }
-.stamina-layout .build-drawer[data-tab=skills] .build-body { padding: 0; overflow: hidden; gap: 0; }
-.skills-notice { padding: 8px 12px; }
-.skills-scroll { min-height: 0; padding: 10px 12px 12px; overflow-y: auto; overscroll-behavior-y: contain; }
+.stamina-layout .build-drawer[data-tab=build] .build-body { padding: 0; overflow: hidden; gap: 0; }
+.build-controls.build-attributes { flex: none; padding: 10px 12px; border-bottom: 1px solid var(--line); }
+.skills-scroll { flex: 1; min-height: 0; padding: 10px 12px 12px; overflow-y: auto; overscroll-behavior-y: contain; }
 .skills-group { display: grid; gap: 4px; min-width: 0; font-size: 13px; }
 .skills-group h3 { font: 600 12px/1.4 var(--font-body); color: var(--tx2); }
 .skills-group header { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
@@ -70,15 +68,27 @@
 .stamina-layout .build-body .aptitude-grid select { appearance: none; width: 18px; min-height: 26px; padding: 0; border: 0; background: transparent; color: var(--acc); text-align: center; }
 .stamina-layout .build-body .field > span { color: var(--tx3); font-size: 10px; text-transform: uppercase; font-weight: 600; letter-spacing: .08em; }
 .stamina-uma-actions { display: grid; grid-template-columns: minmax(0, 1fr) 76px; align-items: stretch; gap: 6px; }
-.stamina-layout .stamina-uma-trigger, .stamina-layout .stamina-uma-options button { display: flex; align-items: center; gap: 7px; text-align: left; white-space: normal; }
-.stamina-layout .stamina-uma-trigger { min-width: 0; padding: 5px 7px; font-size: 12px; }
+.stamina-layout .stamina-uma-trigger { display: flex; align-items: center; gap: 7px; text-align: left; white-space: normal; min-width: 0; padding: 5px 7px; font-size: 12px; }
 .stamina-uma-name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .stamina-uma-chevron { flex: none; color: var(--tx3); }
 .stamina-layout .stamina-uma-aptitudes { padding: 4px 6px; font-size: 11px; white-space: normal; }
 .stamina-uma-portrait { display: grid; place-items: center; flex: none; width: 30px; height: 30px; overflow: hidden; border-radius: 5px; background: var(--s2); color: var(--tx2); }
-.stamina-layout .stamina-uma-options button > .stamina-uma-portrait { flex: none; }
 .stamina-uma-portrait img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: top; }
-.stamina-uma-typeahead { min-width: 0; }
+.stamina-layout .stamina-uma-dialog { width: min(748px, calc(100vw - 28px)); max-height: min(700px, calc(100dvh - 32px)); padding: 0; gap: 0; overflow: hidden; background: var(--s1); color: var(--tx); }
+.stamina-uma-dialog:not([open]) { display: none; }
+.stamina-uma-dialog::backdrop { background: rgb(0 0 0 / .65); }
+.stamina-uma-search { flex: none; display: flex; gap: 8px; padding: 10px 14px; }
+.stamina-uma-search button { flex: none; padding: 0 10px; }
+.stamina-uma-recent { flex: none; padding: 0 14px 10px; border-bottom: 1px solid var(--line); }
+.stamina-layout .stamina-uma-recent h3 { font: 600 12px/1.4 var(--font-body); margin-bottom: 5px; }
+.stamina-uma-recent > div { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 5px; }
+.stamina-uma-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(145px, 1fr)); grid-auto-rows: max-content; align-content: start; gap: 6px; min-height: 0; padding: 10px 14px 14px; overflow-y: auto; overscroll-behavior: contain; }
+.stamina-layout :is(.stamina-uma-grid, .stamina-uma-recent) button { display: flex; align-items: center; gap: 7px; padding: 6px; min-width: 0; height: auto; text-align: left; }
+.stamina-layout .stamina-uma-recent button { gap: 4px; padding: 5px 3px; flex-direction: column; text-align: center; }
+.stamina-uma-grid .stamina-uma-portrait { width: 44px; height: 50px; }
+.stamina-uma-card-text { display: grid; gap: 2px; min-width: 0; line-height: 1.24; overflow-wrap: anywhere; }
+.stamina-uma-card-text strong { font-size: 12px; }
+.stamina-uma-card-text small { color: var(--tx2); }
 .stamina-layout .skill-chips { gap: 5px; }
 .stamina-layout .skill-chip { gap: 5px; padding: 2px 3px; min-height: 28px; border-radius: 7px; font-size: 12px; color: var(--tx); }
 .stamina-layout .skill-chip.rarity-gold { border-color: color-mix(in srgb, var(--gold) 35%, var(--line)); background: color-mix(in srgb, var(--gold) 5%, var(--s1)); }
@@ -156,15 +166,17 @@
 .stamina-layout .current-line { stroke: var(--tx2); stroke-dasharray: 2 3; stroke-width: 1; }
 .stamina-layout .current-dot { fill: var(--acc); stroke: var(--bg); stroke-width: 2; }
 .stamina-layout .target-line { stroke: var(--tx2); }
-.stamina-layout :is(.result-table, .run-details) { padding: 0 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--s1); }
-.stamina-layout :is(.result-table, .run-details) summary { min-height: 40px; font-size: 12px; font-weight: 600; }
+.stamina-layout .run-details { padding: 0 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--s1); }
+.stamina-layout .run-details summary { min-height: 40px; font-size: 12px; font-weight: 600; }
 .run-details-content { display: grid; gap: 8px; padding-bottom: 12px; }
+.run-detail-views { justify-self: start; }
+.stamina-layout .run-detail-views button { min-height: 28px; padding: 0 10px; }
 .stamina-layout .run-details p { color: var(--tx2); font-size: 12px; }
-.stamina-layout .result-table table { margin-bottom: 12px; }
 .stamina-layout .result-table :is(td, tbody th) { font: 400 11.5px var(--font-mono); padding: 8px 4px; text-align: right; }
 .stamina-layout .result-table thead th { padding: 8px 4px; font-size: 9px; text-align: right; letter-spacing: .04em; }
 .stamina-layout .result-table th:first-child { text-align: left; }
-.stamina-layout .current-row { color: var(--acc); background: transparent; }
+.stamina-layout .current-row { color: var(--acc); background: var(--tone-skill-bg); }
+.stamina-layout .result-table .stamina-table-gap td { padding: 2px; text-align: center; color: var(--tx3); }
 .stamina-layout .draft-summary h2 { font-size: 20px; line-height: 1.2; }
 .stamina-layout .draft-summary p { font-size: 12px; color: var(--tx3); }
 .stamina-layout .draft-race-table { padding: 4px 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--s1); }
@@ -215,10 +227,7 @@
   .stamina-workspace { grid-template-rows: none; }
   .stamina-workspace.has-build { grid-template-columns: minmax(0, 1fr); }
   .stamina-layout .stamina-results { overflow: visible; scrollbar-gutter: auto; }
-  .stamina-layout .build-drawer { max-height: min(540px, 58dvh); }
-}
-@container desktop-content (max-width: 360px) {
-  .stamina-layout .build-heading h2 { font-size: 12px; }
+  .stamina-layout .build-drawer { height: calc(100dvh - 104px); min-height: 420px; }
 }
 .stamina-layout .build-drawer { z-index: var(--layer-panel); }
 .default-build-prompt { color: var(--tx2); font-size: 12px; }
@@ -301,7 +310,6 @@
 .import-chain { display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; border-top: 1px solid var(--line); padding: 6px 0; }
 .import-chain:last-child { border-bottom: 1px solid var(--line); }
 .import-tier { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0 8px; align-items: center; padding: 4px 6px; border-radius: var(--radius-md); min-width: 0; }
-.import-tier[data-selected=true] { background: var(--tone-skill-bg); }
 .import-skill-name { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; min-width: 0; overflow-wrap: anywhere; }
 .import-skill-name small { color: var(--good); font-size: 11px; }
 .import-skill-name .skill-icon { flex: none; }

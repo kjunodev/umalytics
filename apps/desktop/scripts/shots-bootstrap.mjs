@@ -1,4 +1,5 @@
 import { draftSnapshotFixture } from '../../../tests/fixtures/stamina-draft.mjs';
+import { releaseOrder } from '../../../packages/core/src/umas/umaReleaseOrder';
 import { mockIPC, mockWindows, mockConvertFileSrc } from '@tauri-apps/api/mocks';
 import { emit } from '@tauri-apps/api/event';
 import { apiResponse, catalog, finishedScans, fullStatsScans, learnOnlyScans, messages, screenshotCatalog, screenshotScans, staminaResult } from './shots-fixture.mjs';
@@ -57,7 +58,13 @@ mockIPC(async (command, args) => {
   }
   if (command === 'engine_catalog') {
     if (scene === 'stamina-missing-engine') throw 'UmaLytics engine data is missing at C:\\UmaLytics\\resources\\engine-data.';
-    if (['stamina-redesign', 'stamina-screenshot-import', 'stamina-finished-import', 'stamina-learn-import', 'stamina-capture', 'stamina-full-stats'].includes(scene)) {
+    if (scene === 'stamina-redesign') {
+      const extra = releaseOrder.filter(card => card.variant && !screenshotCatalog.umas.some(uma => uma.name === card.name)).slice(0, 60);
+      return { ...screenshotCatalog, umas: [...screenshotCatalog.umas, ...extra.map(card => ({
+        ...catalog.umas[0], card_id: Number(card.outfitId), name: card.name, title: `[${card.variant}]`,
+      }))] };
+    }
+    if (['stamina-screenshot-import', 'stamina-finished-import', 'stamina-learn-import', 'stamina-capture', 'stamina-full-stats'].includes(scene)) {
       return { ...screenshotCatalog, screenshot_import_enabled: !localStorage.getItem('shots:hide-screenshot-import') };
     }
     return scene === 'stamina-no-data' ? { ...catalog, local_skill_data: false, local_skill_count: 0, local_icon_count: 0, skills: catalog.skills.map(s => ({ ...s, icon_path: null })) } : catalog;
@@ -105,7 +112,14 @@ mockIPC(async (command, args) => {
     if (Object.hasOwn(args.input, 'screenshotImport')) throw new Error('Screenshot draft reached simulation IPC');
     if (window.__SHOT_CONTROL__.failNext) { window.__SHOT_CONTROL__.failNext = false; throw new Error('Engine could not complete this check.'); }
     if (window.__SHOT_CONTROL__.slow) return new Promise((resolve, reject) => { pending = { resolve, reject }; void emit('stamina-progress', { request_id: args.input.request_id, completed: 100, total: 544, stage: 'mapping', percent: 15 }); });
-    return staminaResult(reorderKeys(args.input), 0, window.__SHOT_CONTROL__.healRate ?? 1);
+    const result = staminaResult(reorderKeys(args.input), 0, window.__SHOT_CONTROL__.healRate ?? 1);
+    if (scene === 'stamina-redesign') {
+      for (const point of result.curve) {
+        const rate = point.stamina <= 750 ? 0 : point.stamina >= 1200 ? 100 : undefined;
+        if (rate !== undefined) Object.assign(point, { full_spurt_percent: rate, survival_percent: rate, joint_percent: rate });
+      }
+    }
+    return result;
   }
   if (command === 'stamina_check_races') {
     if (Object.hasOwn(args.input.build, 'umaCardId')) throw new Error('Uma card ID reached draft IPC');

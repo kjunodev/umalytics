@@ -135,6 +135,23 @@ test('what-if chips use a bracketed stable 95% crossing and the run’s measured
   assert.equal(answers.noRecoveryStamina({ ...result, thresholds: { joint: null } }), null);
 });
 
+test('per-stamina table trims only fully zero and fully complete tails and keeps the user row', () => {
+  const point = (stamina, full, survival = full, joint = full, seeds = 32) =>
+    ({ stamina, full_spurt_percent: full, survival_percent: survival, joint_percent: joint, seeds });
+  const curve = [point(600, 0), point(700, 0), point(750, 0, 5, 0), point(850, 80, 100, 78),
+    point(900, 100, 100, 98), point(1000, 100), point(1050, 100)];
+  const values = (current, samples = curve) => plain(answers.staminaTableRows(samples, current).map(row => row?.stamina ?? 'gap'));
+  assert.deepEqual(values(point(650, 0)), [650, 'gap', 700, 750, 850, 900, 1000]);
+  assert.deepEqual(values(point(1050, 100)), [700, 750, 850, 900, 1000, 'gap', 1050]);
+  assert.deepEqual(values(point(800, 45)), [700, 750, 800, 850, 900, 1000]);
+  assert.deepEqual(values(point(1050, 100), curve.slice(2, 5)), [750, 850, 900, 'gap', 1050]);
+  assert.deepEqual(values(point(800, 45), []), [800]);
+  const current = point(850, 90, 100, 90, 256);
+  const rows = answers.staminaTableRows([...curve].reverse(), current);
+  assert.equal(rows.filter(row => row?.stamina === 850).length, 1);
+  assert.equal(rows.find(row => row?.stamina === 850), current);
+});
+
 test('old showAll state is discarded; target and draft inputs restore independently', () => {
   const restored = state.restoreStaminaMemory({ showAll: true, input: { target: 95, build: { stats: { stamina: 700 }, skills: [{ id: 201241 }, { id: 210052 }] } }, draftInput: { target: 99, build: { stats: { stamina: 1500 } } } }, catalog);
   assert.equal('showAll' in restored, false); assert.equal(restored.input.target, 95);

@@ -226,7 +226,6 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; }
 .heal-note { font-size: 11px; }
 .joint-curve { stroke: var(--accent-green-soft); stroke-width: 3; stroke-dasharray: 2 4; }
 .chart-legend span:nth-child(3) i { background: var(--accent-green-soft); }
-.result-table summary { font-size: 12px; }
 .drawer-heading { padding: 14px 18px; border-bottom: 1px solid var(--border-subtle); flex-shrink: 0; }
 .build-body { display: flex; flex-direction: column; gap: 12px; padding: 14px; overflow-y: auto; min-height: 0; flex: 1; }
 .build-body label, .stamina-popover label { display: flex; flex-direction: column; gap: 5px; min-width: 0; color: var(--text-secondary); font-size: 12px; }

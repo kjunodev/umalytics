@@ -3,14 +3,15 @@ import { defaultStaminaInput, type Catalog, type CatalogUma, type StaminaEditorB
 import type { CourseChoices } from './staminaDraft';
 import { importedBuildSkills, restoreScreenshotImport, tierChains, type ScreenshotImport } from './staminaScreenshot';
 
-export const buildTabLabels = { attributes: 'Attributes', skills: 'Skills', race: 'Race', presets: 'Presets' } as const;
+export const buildTabLabels = { build: 'Build', race: 'Race', presets: 'Presets' } as const;
 export type BuildTab = keyof typeof buildTabLabels;
 export type StaminaView = 'requirement' | 'assessment';
 export const staminaStatLabels = { speed: 'Speed', stamina: 'Stamina', pow: 'Power', guts: 'Guts', wiz: 'Wit' } as const;
 export function editorStats(view: StaminaView) {
   return (Object.keys(staminaStatLabels) as (keyof typeof staminaStatLabels)[]).filter(stat => view === 'assessment' || stat !== 'stamina');
 }
-export interface StaminaMemory { mechanicsDefaults?: number; input: StaminaEditorInput; draftInput?: StaminaEditorInput; recent: number[]; view: StaminaView; buildTab: BuildTab; buildCustomized?: boolean; courseChoices?: CourseChoices }
+export const recentUmaLimit = 5;
+export interface StaminaMemory { mechanicsDefaults?: number; input: StaminaEditorInput; draftInput?: StaminaEditorInput; recent: number[]; recentUmas: number[]; view: StaminaView; buildTab: BuildTab; buildCustomized?: boolean; courseChoices?: CourseChoices }
 const object = (value: unknown): Record<string, unknown> => value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 const integer = (value: unknown, low: number, high: number): value is number => typeof value === 'number' && Number.isInteger(value) && value >= low && value <= high;
 
@@ -81,12 +82,13 @@ export function restoreStaminaMemory(value: unknown, catalog: Catalog, defaultTa
     const valid = Object.entries(object(entries)).filter((entry): entry is [string, string] => entry[0].length <= 2048 && typeof entry[1] === 'string' && catalog.courses.some(c => c.id === entry[1])).slice(-7);
     return valid.length ? [[code, Object.fromEntries(valid)]] : [];
   }));
-  const buildTab = saved.buildTab === 'skills' || saved.buildTab === 'scanned-skills' ? 'skills'
-    : saved.buildTab === 'race' || saved.buildTab === 'race-settings' ? 'race'
-    : saved.buildTab === 'presets' ? 'presets' : 'attributes';
+  const buildTab = saved.buildTab === 'race' || saved.buildTab === 'race-settings' ? 'race'
+    : saved.buildTab === 'presets' ? 'presets' : 'build';
+  const recentUmas = Array.isArray(saved.recentUmas) ? [...new Set(saved.recentUmas.filter((id): id is number =>
+    typeof id === 'number' && !!catalog.umas?.some(uma => uma.card_id === id)))].slice(0, recentUmaLimit) : [];
   const view = saved.view === 'assessment' ? 'assessment' : 'requirement';
   const { usesDefaultStamina: _usesDefaultStamina, ...buildValues } = input.build;
-  return { input, view, buildTab, buildCustomized: typeof saved.buildCustomized === 'boolean' ? saved.buildCustomized : JSON.stringify(buildValues) !== JSON.stringify(defaultStaminaInput.build), ...(Object.keys(courseChoices).length ? { courseChoices } : {}), ...(saved.draftInput ? { draftInput: restoreStaminaMemory({ input: saved.draftInput, mechanicsDefaults: saved.mechanicsDefaults }, catalog, defaultTarget).input } : {}), recent: Array.isArray(saved.recent) ? [...new Set(saved.recent.filter((id): id is number => typeof id === 'number' && catalog.skills.some(s => s.id === id)))].slice(0, 30) : [] };
+  return { input, view, buildTab, recentUmas, buildCustomized: typeof saved.buildCustomized === 'boolean' ? saved.buildCustomized : JSON.stringify(buildValues) !== JSON.stringify(defaultStaminaInput.build), ...(Object.keys(courseChoices).length ? { courseChoices } : {}), ...(saved.draftInput ? { draftInput: restoreStaminaMemory({ input: saved.draftInput, mechanicsDefaults: saved.mechanicsDefaults }, catalog, defaultTarget).input } : {}), recent: Array.isArray(saved.recent) ? [...new Set(saved.recent.filter((id): id is number => typeof id === 'number' && catalog.skills.some(s => s.id === id)))].slice(0, 30) : [] };
 }
 
 export function applyScreenshotBuild(input: StaminaEditorInput, build: Partial<StaminaEditorBuild>, scan: ScreenshotImport): StaminaEditorInput {

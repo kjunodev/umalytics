@@ -233,6 +233,10 @@ export function purchaseList(purchases: TierStep[], name: (id: number) => string
   return purchases.map(step => `${step.removal ? 'Remove ' : ''}${name(step.id)} — ${step.total === null ? 'Unknown price' : `${step.total.toLocaleString('en-US')} SP`}`).join('\n');
 }
 
+export function availablePurchaseTiers(chain: SkillChain, purchase?: TierStep): TierStep[] {
+  return chain.steps.filter(step => step.selectable && step.id !== purchase?.id);
+}
+
 export function scanSkillIds(chains: SkillChain[], catalog: ImportCatalog): Set<number> {
   const ids = new Set(chains.flatMap(chain => chain.steps.map(step => step.id)));
   const groups = new Set([...ids].map(id => catalog[id]?.tier?.group).filter(group => group !== undefined));

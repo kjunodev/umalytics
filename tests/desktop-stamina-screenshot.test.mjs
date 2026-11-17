@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-  dedupeRows, discountedPrice, hintDiscount, importedBuildSkills, priceAfterTier, purchaseList, purchasePlan,
+  availablePurchaseTiers, dedupeRows, discountedPrice, hintDiscount, importedBuildSkills, priceAfterTier, purchaseList, purchasePlan,
   restoreScreenshotImport, selectTier, tierChains,
 } from '../apps/desktop/src/staminaScreenshot.ts';
 
@@ -176,6 +176,18 @@ test('Buying uses the total across selected tiers and copies plain names and pri
   assert.equal(plan.purchases.length, 2);
   const names = { 200541: 'Escape Artist', 200033: 'Tokyo Racecourse ×' };
   assert.equal(purchaseList(plan.purchases, id => names[id]), 'Escape Artist — 252 SP\nRemove Tokyo Racecourse × — 50 SP');
+});
+
+test('a bought tier is omitted from Available while other tiers remain selectable', () => {
+  const [chain] = tierChains([fastPaced, escapeArtist], catalog);
+  const [purchase] = purchasePlan([chain], [200541, 200542], 252).purchases;
+  assert.equal(purchase.id, 200541);
+  assert.deepEqual(availablePurchaseTiers(chain, purchase).map(step => step.id), [200542]);
+  assert.deepEqual(availablePurchaseTiers(chain).map(step => step.id), [200542, 200541]);
+  const [debuff] = tierChains([owned(200033), offer(200033, 50, null)], catalog);
+  const [removal] = purchasePlan([debuff], [200033], 250).purchases;
+  assert.equal(removal.removal, true);
+  assert(!availablePurchaseTiers(debuff, removal).some(step => step.id === removal.id));
 });
 
 test('manual skills augment a scan without replacing purchases or duplicating scanned tiers', () => {

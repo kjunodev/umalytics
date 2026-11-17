@@ -20,6 +20,7 @@ import { roomIsActive } from './updateState';
 import { Lobby } from './Live';
 import { Draft } from './Draft';
 import { RailIcon } from './RailIcon';
+import { openSupportUrl } from './externalLinks';
 import { preferences, savePreferences, liveTabs, phaseLiveTab, type LiveTab, type Page } from './preferences';
 import { loadDesktopTeamIcons } from './sessionData';
 import { profileRosterKey } from './profileRosterKey';
@@ -194,7 +195,12 @@ export function App() {
       <div className="rail-group" role="group" aria-label="Live">{navItem('Live')}</div>
       <div className="rail-group" role="group" aria-label="Tools">{navItem('Stamina')}</div>
       <div className="rail-group" role="group" aria-label="Data">{(['Players', 'History'] as const).map(navItem)}</div>
-      <div className="sidebar-bottom">{navItem('Settings')}</div></nav>}
+      <div className="sidebar-bottom">
+        <button type="button" className="nav-item" aria-label="Support" title="Support UmaLytics on Ko-fi" onClick={() => {
+          void openSupportUrl().catch(() => setShellError('Could not open Ko-fi.'));
+        }}><RailIcon page="Support"/><span>Support</span><span className="rail-tooltip" role="tooltip">Support UmaLytics on Ko-fi</span></button>
+        {navItem('Settings')}
+      </div></nav>}
     <div className="workspace">
       {compact ? <header className="compact-header"><Logo/>{tabs}
         <span className="compact-room num" title={feedLabel}><i className={status?.state === 'connected' ? 'live-dot' : 'idle-dot'}/>{code ?? 'No room'}</span>

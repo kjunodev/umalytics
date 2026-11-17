@@ -11,7 +11,7 @@ import { StaminaUmaPicker } from './StaminaUmaPicker';
 import { StaminaScreenshotImport } from './StaminaScreenshotImport';
 import { StaminaBuildSkills } from './StaminaBuildSkills';
 import { importedBuildSkills, tierChains, type ScreenshotImport } from './staminaScreenshot';
-import { applyScreenshotBuild, buildTabLabels, editorStats, loadStaminaMemory, saveStaminaMemory, selectUma, staminaStatLabels, undoScreenshotBuild, type BuildTab, type StaminaView } from './staminaState';
+import { applyScreenshotBuild, buildTabLabels, editorStats, loadStaminaMemory, recentUmaLimit, saveStaminaMemory, selectUma, staminaStatLabels, undoScreenshotBuild, type BuildTab, type StaminaView } from './staminaState';
 import { RaceSettings } from './RaceSettings';
 import { defaultStaminaInput, defaultStamina, groundNames, weatherNames, seasonNames, staminaEngineInput, type Catalog, type StaminaEditorBuild, type StaminaEditorInput, type StaminaInput, type StaminaProgress, type StaminaResult, type StaminaRaceResult, roleNames, strategy, withStrategy } from './staminaTypes';
 import { formatStamina, raceName, staminaMargin } from './staminaAnswers';
@@ -45,7 +45,7 @@ export function Stamina({ draft, openDraft = 0, view, onViewChange, onDraftRunCh
   const screenshotSkills = catalog?.screenshot_import_enabled ? catalog.screenshot_skills : undefined;
   const screenshotImport = screenshotSkills ? input.screenshotImport : undefined;
   const importedChains = useMemo(() => screenshotImport && screenshotSkills ? tierChains(screenshotImport.observations, screenshotSkills) : [], [screenshotImport, screenshotSkills]);
-  const [buildTab, setBuildTab] = useState<BuildTab>('attributes');
+  const [buildTab, setBuildTab] = useState<BuildTab>('build');
   const [buildCustomized, setBuildCustomized] = useState(false);
   const [presets, setPresets] = useState<PresetMemory>();
   const fallbackStamina = presets?.defaults.stats.stamina ?? defaultStamina;
@@ -59,6 +59,8 @@ export function Stamina({ draft, openDraft = 0, view, onViewChange, onDraftRunCh
   const [courseChoice, setCourseChoice] = useState<{ code: string; key: string; raw: string }>();
   const [courseQuery, setCourseQuery] = useState('');
   const [recent, setRecent] = useState<number[]>([]);
+  const [recentUmas, setRecentUmas] = useState<number[]>([]);
+  const rememberUma = (id: number) => setRecentUmas(previous => [id, ...previous.filter(value => value !== id)].slice(0, recentUmaLimit));
   const [popover, setPopover] = useState<Popover>();
   const [notice, setNotice] = useState(false), [error, setError] = useState(''), [saveError, setSaveError] = useState('');
   const [ready, setReady] = useState(false), [running, setRunning] = useState(false), [cancelling, setCancelling] = useState(false);
@@ -96,7 +98,7 @@ export function Stamina({ draft, openDraft = 0, view, onViewChange, onDraftRunCh
       catch { if (!disposed) setSaveError('Remembered inputs could not be loaded. Using defaults.'); }
       if (!disposed) {
         setCatalog(data);
-        if (memory) { setAnyInput(memory.input); setDraftInput(memory.draftInput ?? structuredClone(memory.input)); setRecent(memory.recent); onViewChange(memory.view); setBuildTab(memory.buildTab); setBuildCustomized(memory.buildCustomized ?? false); setCourseChoices(memory.courseChoices ?? {}); }
+        if (memory) { setAnyInput(memory.input); setDraftInput(memory.draftInput ?? structuredClone(memory.input)); setRecent(memory.recent); setRecentUmas(memory.recentUmas); onViewChange(memory.view); setBuildTab(memory.buildTab); setBuildCustomized(memory.buildCustomized ?? false); setCourseChoices(memory.courseChoices ?? {}); }
         if (!data.local_skill_data && !missingDataNoticeShown) { missingDataNoticeShown = true; setNotice(true); }
       }
       try { const saved = await loadPresets(data); if (!disposed) { setPresets(saved); setPresetWritable(true); } }
@@ -107,8 +109,8 @@ export function Stamina({ draft, openDraft = 0, view, onViewChange, onDraftRunCh
   }, []);
 
   useEffect(() => {
-    if (ready) void saveStaminaMemory({ input: anyInput, draftInput, recent, view, buildTab, buildCustomized, courseChoices }, !!screenshotSkills).then(() => setSaveError('')).catch(() => setSaveError('Inputs could not be saved. Your current build is still available.'));
-  }, [ready, anyInput, draftInput, recent, view, buildTab, buildCustomized, courseChoices, screenshotSkills]);
+    if (ready) void saveStaminaMemory({ input: anyInput, draftInput, recent, recentUmas, view, buildTab, buildCustomized, courseChoices }, !!screenshotSkills).then(() => setSaveError('')).catch(() => setSaveError('Inputs could not be saved. Your current build is still available.'));
+  }, [ready, anyInput, draftInput, recent, recentUmas, view, buildTab, buildCustomized, courseChoices, screenshotSkills]);
   useEffect(() => {
     const escape = (e: KeyboardEvent) => {
       if (e.key !== 'Escape' || e.defaultPrevented) return;
@@ -187,7 +189,6 @@ export function Stamina({ draft, openDraft = 0, view, onViewChange, onDraftRunCh
   const worst = short.reduce<StaminaResult | undefined>((current, race) =>
     !current || (race.thresholds.joint ?? Infinity) > (current.thresholds.joint ?? Infinity) ? race : current, undefined);
   const assessment = view === 'assessment';
-  const summary = [selectedUma?.name ?? 'No Uma', roleNames[strategy(input.build) - 1], ...Object.values(engineInput.build.stats)].join(' · ');
   const changePresets = (next: PresetMemory) => { setPresets(next); if (presetWritable) void savePresets(next).then(() => setPresetError('')).catch(() => setPresetError('Presets could not be saved. Your edits are still available until reload.')); };
   if (dataError) return <section className="panel stamina-data-error" role="alert">
     <h2>UmaLytics could not load its race data.</h2>
@@ -277,46 +278,44 @@ export function Stamina({ draft, openDraft = 0, view, onViewChange, onDraftRunCh
         <h2>{assessment ? 'Does your build have enough stamina?' : 'How much stamina do you need?'}</h2>
         <p>Choose a race and build, then run a check.</p>
       </div>}
-      {ready && !buildCustomized && <p className="default-build-prompt">Using the default Pace build · <button type="button" aria-label="Edit default build" onClick={() => openBuild('attributes')}>Edit build</button></p>}
+      {ready && !buildCustomized && <p className="default-build-prompt">Using the default Pace build · <button type="button" aria-label="Edit default build" onClick={() => openBuild('build')}>Edit build</button></p>}
       {staleInputs && <p className="stale-notice" role="status">Inputs changed since this run. Run the check again to update.</p>}
       <footer>Simulated with uma-race-simulator (MIT). Game data © Cygames.</footer>
     </section>
     {catalog && <aside ref={drawer} className="build-drawer panel" data-tab={buildTab} aria-label="Build editor">
-      <div className="build-heading">
-        <h2 title={summary}>{summary}</h2>
-        {screenshotSkills && <div className="build-import-actions">
+      {screenshotSkills && <div className="build-import-actions">
           <button type="button" className="import-trigger" disabled={running} onClick={() => setImportOpen(true)}>Import from screenshots</button>
-          <button type="button" disabled={running || !input.importUndo} onClick={() => { setInput(undoScreenshotBuild); openBuild('attributes'); }}>Undo import</button>
-        </div>}
-      </div>
+          {input.importUndo && <button type="button" disabled={running} onClick={() => { setInput(undoScreenshotBuild); openBuild('build'); }}>Undo import</button>}
+      </div>}
       <div className="drawer-tabs" role="tablist" aria-label="Build panel">{(Object.keys(buildTabLabels) as BuildTab[]).map(tab =>
         <button key={tab} id={`build-tab-${tab}`} type="button" role="tab" disabled={running} aria-selected={buildTab === tab} aria-controls="stamina-build-tab" onClick={() => openBuild(tab)}>{buildTabLabels[tab]}</button>)}</div>
       <div key={buildTab} className="build-body" id="stamina-build-tab" role="tabpanel" aria-labelledby={`build-tab-${buildTab}`}>
-        {buildTab === 'skills' ? <>
-          {notice && <small className="skills-notice muted" role="status">Local skill data unavailable. Using engine names without icons.</small>}
-          <StaminaBuildSkills catalog={catalog} scan={screenshotImport} chains={importedChains} skills={ordinary} uniques={uniques} running={running}
+        {buildTab === 'build' ? <>
+          <fieldset disabled={running} className="build-controls build-attributes" aria-label="Attributes">
+            <StaminaUmaPicker umas={catalog.umas} selected={selectedUma} recent={recentUmas} hasUnique={!!uniques.length} locked={!!screenshotImport} full={ordinary.length >= 100}
+              onSelect={uma => { if (uma) rememberUma(uma.card_id); patchBuild(selectUma(input.build, uma, catalog)); }} onAptitudes={patchBuild}/>
+            <Segments label="Strategy" value={screenshotImport ? input.build.running_style : strategy(input.build)} options={screenshotImport ? styles : roleNames} onChange={value => patchBuild(screenshotImport ? { running_style: value } : withStrategy(input.build, value))}/>
+            <div className={`raw-stats${assessment ? '' : ' without-stamina'}`}>{editorStats(view).map(stat =>
+              <label key={stat}>{staminaStatLabels[stat]}<NumberField className={`num${stat === 'stamina' ? ' stamina-input' : ''}`} aria-label={staminaStatLabels[stat]} required min={1} max={2000}
+                value={engineInput.build.stats[stat]} onChange={value => patchBuild({ stats: { ...input.build.stats, [stat]: value }, ...(stat === 'stamina' ? { usesDefaultStamina: undefined } : {}) })}/></label>)}</div>
+            <div className="field"><span>Aptitudes</span>{(['distance', 'style', 'ground'] as const).map(group => <div className={`aptitude-grid aptitude-${group}`} key={group}>{({ distance: ['Sprint', 'Mile', 'Medium', 'Long'], style: styles, ground: ['Turf', 'Dirt'] })[group].map((name, i) => aptitude(group, i, `${name} aptitude`))}</div>)}</div>
+          </fieldset>
+          <StaminaBuildSkills catalog={catalog} scan={screenshotImport} chains={importedChains} skills={ordinary} uniques={uniques} running={running} notice={notice}
             recent={recent} onRecent={setRecent} onScan={changeImport} onRemoveScan={() => patch({ screenshotImport: undefined })}
             onManual={skills => screenshotImport ? changeImport({ ...screenshotImport, manualSkills: skills.map(skill => skill.id) }) : patchBuild({ skills: [...skills, ...uniques.map(unique => unique.skill)] })}
             onLevel={changeUniqueLevel}/>
         </> : <fieldset disabled={running} className="build-controls">{buildTab === 'race' ? <RaceSettings input={input} onChange={patch} onMood={motivation => patchBuild({ motivation })}/>
-        : buildTab === 'presets' ? <>
+        : <>
           {presetError && <p role="status">{presetError}</p>}
           {presets ? <StaminaPresets catalog={catalog} memory={presets} onChange={changePresets} build={input.build} onLoad={build => {
-            setBuildCustomized(true); setInput(previous => ({ ...previous, screenshotImport: undefined, build })); openBuild('attributes');
+            setBuildCustomized(true); setInput(previous => ({ ...previous, screenshotImport: undefined, build })); openBuild('build');
           }} recent={recent} onRecent={setRecent}/> : <p>Loading presets…</p>}
-        </> : <>
-          <StaminaUmaPicker umas={catalog.umas} selected={selectedUma} hasUnique={!!uniques.length} locked={!!screenshotImport} full={ordinary.length >= 100} onSelect={uma => patchBuild(selectUma(input.build, uma, catalog))} onAptitudes={patchBuild}/>
-          <Segments label="Strategy" value={screenshotImport ? input.build.running_style : strategy(input.build)} options={screenshotImport ? styles : roleNames} onChange={value => patchBuild(screenshotImport ? { running_style: value } : withStrategy(input.build, value))}/>
-          <div className={`raw-stats${assessment ? '' : ' without-stamina'}`}>{editorStats(view).map(stat =>
-            <label key={stat}>{staminaStatLabels[stat]}<NumberField className={`num${stat === 'stamina' ? ' stamina-input' : ''}`} aria-label={staminaStatLabels[stat]} required min={1} max={2000}
-              value={engineInput.build.stats[stat]} onChange={value => patchBuild({ stats: { ...input.build.stats, [stat]: value }, ...(stat === 'stamina' ? { usesDefaultStamina: undefined } : {}) })}/></label>)}</div>
-          <div className="field"><span>Aptitudes</span>{(['distance', 'style', 'ground'] as const).map(group => <div className={`aptitude-grid aptitude-${group}`} key={group}>{({ distance: ['Sprint', 'Mile', 'Medium', 'Long'], style: styles, ground: ['Turf', 'Dirt'] })[group].map((name, i) => aptitude(group, i, `${name} aptitude`))}</div>)}</div>
         </>}</fieldset>}
       </div>
     </aside>}
     </div>
     {copyStatus && <p role="status" aria-live="polite">{copyStatus}</p>}
-    {importOpen && catalog && screenshotSkills && <StaminaScreenshotImport catalog={catalog} recent={recent} onRecent={setRecent} onClose={() => setImportOpen(false)}
-      onApply={(build, scan) => { changeImport(scan, build); setImportOpen(false); openBuild('skills'); }}/>}
+    {importOpen && catalog && screenshotSkills && <StaminaScreenshotImport catalog={catalog} recent={recent} recentUmas={recentUmas} onRecent={setRecent} onUmaPicked={rememberUma} onClose={() => setImportOpen(false)}
+      onApply={(build, scan) => { changeImport(scan, build); setImportOpen(false); openBuild('build'); }}/>}
   </section>;
 }

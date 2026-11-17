@@ -52,10 +52,12 @@ async function scanImage(file: File) {
   } finally { bitmap.close(); }
 }
 
-export function StaminaScreenshotImport({ catalog, recent, onRecent, onClose, onApply }: {
+export function StaminaScreenshotImport({ catalog, recent, recentUmas, onRecent, onUmaPicked, onClose, onApply }: {
   catalog: Catalog;
   recent: number[];
+  recentUmas: number[];
   onRecent: (ids: number[]) => void;
+  onUmaPicked: (id: number) => void;
   onClose: () => void;
   onApply: (build: Pick<StaminaEditorBuild, 'umaCardId' | 'stats' | 'ground' | 'distance' | 'style'>, scan: ScreenshotImport) => void;
 }) {
@@ -333,7 +335,8 @@ export function StaminaScreenshotImport({ catalog, recent, onRecent, onClose, on
             <h3>Review build</h3>
             {cards.size > 1 && <p className="import-warning" role="alert">These Career screenshots show different Umas. Remove the screenshots from the other career.</p>}
             {mixed && <p className="import-warning" role="alert">Remove the in-career screenshots to load the finished Uma.</p>}
-            <StaminaUmaPicker umas={catalog.umas} selected={uma} full={false} onSelect={card => setChosen(card?.card_id ?? 0)}/>
+            <StaminaUmaPicker umas={catalog.umas} selected={uma} recent={recentUmas} full={false}
+              onSelect={card => { if (card) onUmaPicked(card.card_id); setChosen(card?.card_id ?? 0); }}/>
             {uma && <div className="import-unique-level">
               <label>Unique skill level<select required value={uniqueLevel} onChange={event => edit(uniqueKey, event.target.value)}>
                 <option value="">Check level</option>{[1, 2, 3, 4, 5, 6].map(level => <option key={level} value={level}>Lv {level}</option>)}
