@@ -72,6 +72,10 @@ See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for the architecture, the test la
 
 Found a bug or a wrong detection? [Open an issue](https://github.com/kjunodev/umalytics/issues/new?template=bug_report.md) saying whether you use the extension (and which browser) or the desktop app, the UmaLytics version, what you expected and what happened. If you attach diagnostics from Copy diagnostics, review them first: they can contain room codes and player IDs.
 
+## Support
+
+UmaLytics is free. If it helps you, you can support its development on [Ko-fi](https://ko-fi.com/kjuno).
+
 ## License
 
 [MIT](LICENSE)
