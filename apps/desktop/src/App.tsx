@@ -181,7 +181,7 @@ export function App() {
     finally { setFeedBusy(false); }
   };
   const copyDiagnostics = async () => {
-    try { await navigator.clipboard.writeText(feedDiagnostics(status)); setCopyStatus('Diagnostics copied'); }
+    try { await navigator.clipboard.writeText(feedDiagnostics(status, room.current.unrecognisedFeedFields.snapshot())); setCopyStatus('Diagnostics copied'); }
     catch { setCopyStatus('Unable to copy diagnostics.'); }
   };
   const feedBox = <div className={`feed-status ${status?.state === 'connected' ? 'connected' : ''}`} role="status"><i className={status?.state === 'connected' ? 'live-dot' : 'idle-dot'}/><span>{feedLabel}{code && <> · Room <b className="num">{code}</b></>}</span></div>;

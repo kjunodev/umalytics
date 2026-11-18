@@ -1,5 +1,5 @@
 import '../runtime/corePlatform';
-import { recordDiagnostic, getDiagnosticTrace } from '../runtime/diagnosticRecorder';
+import { recordDiagnostic, getDiagnosticTrace, getUnrecognisedFeedFields } from '../runtime/diagnosticRecorder';
 import { mergeProfileScopes } from '@umalytics/core/profiles/profileMerge';
 import { registerExplorerService } from '../explorer/explorerService';
 import { normalizeRosterForDisplay } from '@umalytics/core/room/rosterDisplay';
@@ -150,13 +150,16 @@ export default defineBackground(() => {
       return undefined;
     }
 
-    if (message.type === 'diagnostic-trace-requested') return getDiagnosticTrace();
+    if (message.type === 'diagnostic-trace-requested') {
+      const [trace, feedFields] = await Promise.all([getDiagnosticTrace(), getUnrecognisedFeedFields()]);
+      return { trace, feedFields };
+    }
     // Resolves as soon as the tab is set, before the startup scan awaits this
     // tab's own roster acknowledgement, so it cannot deadlock.
     if (message.type === 'diagnostic-event' || message.type === 'prematch-roster-detected' ||
         message.type === 'draft-snapshot-detected') await drafterTabChosen;
     if (message.type === 'diagnostic-event') {
-      if (sender.tab?.id === selectedDrafterTabId) recordDiagnostic(message.event);
+      if (sender.tab?.id === selectedDrafterTabId) return recordDiagnostic(message.event);
       return;
     }
     if ((message.type === 'prematch-roster-detected' || message.type === 'draft-snapshot-detected') &&

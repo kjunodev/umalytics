@@ -7,6 +7,7 @@ import type {
   PrematchRoster
 } from '@umalytics/shared';
 import { getRefreshCooldownMs, latestStatsCheckAt } from '@umalytics/core/profiles/profileTiming';
+import { formatUnrecognisedFeedFields } from '@umalytics/core/room/feedDiagnostics';
 import { getTeamGroups, normalizeRosterForDisplay } from '@umalytics/core/room/rosterDisplay';
 import {
   getPlayerProfileSummaries,
@@ -273,19 +274,20 @@ export default function App() {
   };
 
   const copyDiagnostics = () => {
-    void browser.runtime.sendMessage({ type: 'diagnostic-trace-requested' }).then(trace => {
-    const text = formatDiagnosticsForClipboard(diagnostics) +
-      `\n\nRoom events, last ${ROOM_EVENT_SUMMARY_LIMIT} (counts only; no names, IDs, tokens or chat):\n` + formatRoomEventSummary(trace) +
-      '\n\nRecent event trace (no tokens or chat):\n' + JSON.stringify(trace ?? [], null, 2);
+    void browser.runtime.sendMessage({ type: 'diagnostic-trace-requested' }).then(report => {
+      const text = formatDiagnosticsForClipboard(diagnostics) +
+        `\n\nRoom events, last ${ROOM_EVENT_SUMMARY_LIMIT} (counts only; no names, IDs, tokens or chat):\n` + formatRoomEventSummary(report?.trace) +
+        '\n\nRecent event trace (no tokens or chat):\n' + JSON.stringify(report?.trace ?? [], null, 2) +
+        '\n\n' + formatUnrecognisedFeedFields(report?.feedFields);
 
-    void navigator.clipboard.writeText(text).then(() => {
-      setDiagnosticsCopied(true);
-      window.setTimeout(() => {
-        setDiagnosticsCopied(false);
-      }, 1_500);
-    }).catch((caught) => {
-      console.warn('[UmaLytics] Unable to copy diagnostics:', caught);
-    });
+      void navigator.clipboard.writeText(text).then(() => {
+        setDiagnosticsCopied(true);
+        window.setTimeout(() => {
+          setDiagnosticsCopied(false);
+        }, 1_500);
+      }).catch((caught) => {
+        console.warn('[UmaLytics] Unable to copy diagnostics:', caught);
+      });
     }).catch(caught => console.warn('[UmaLytics] Unable to read diagnostics:', caught));
   };
 

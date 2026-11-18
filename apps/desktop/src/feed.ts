@@ -1,4 +1,5 @@
 import { RoomEventState, decodeRoomEvent } from '@umalytics/core/room/roomEvents';
+import { UnrecognisedFeedFields, type UnrecognisedFeedField } from '@umalytics/core/room/feedDiagnostics';
 import type { DraftSnapshot, DraftUmaAction } from '@umalytics/shared';
 import { normalizeUmaOutfitId } from '@umalytics/core/umas/umaPortraits';
 
@@ -10,6 +11,7 @@ export type FeedStatus = {
 };
 
 export class DesktopRoom {
+  readonly unrecognisedFeedFields = new UnrecognisedFeedFields();
   state = new RoomEventState();
   pickOrder?: DraftUmaAction[];
   lastState?: RoomEventState;
@@ -21,7 +23,7 @@ export class DesktopRoom {
       this.state = new RoomEventState(); this.pickOrder = undefined;
     }
     else {
-      const result = this.state.apply(message.event, message.roomCode);
+      const result = this.state.apply(message.event, message.roomCode, this.unrecognisedFeedFields);
       if (result.reason === 'match-snapshot') this.pickOrder = snapshotPickOrder(message.event, this.state.draft);
       else if (!this.state.draft) this.pickOrder = undefined;
     }
@@ -45,10 +47,11 @@ export function snapshotPickOrder(event: unknown, draft?: DraftSnapshot): DraftU
   return picks.length > 0 && picks.length === available.length ? picks : undefined;
 }
 
-export function feedDiagnostics(status?: FeedStatus): string {
+export function feedDiagnostics(status?: FeedStatus, fields: readonly UnrecognisedFeedField[] = []): string {
   const states = ['listening', 'connected', 'disconnected', 'port-in-use', 'error'];
   const count = (value?: number) => Number.isSafeInteger(value) && value! >= 0 ? value : 0;
   return JSON.stringify({ app: 'UmaLytics', listener: '127.0.0.1:38917',
     state: status && states.includes(status.state) ? status.state : 'starting',
-    accepted: count(status?.accepted), rejected: count(status?.rejected) }, null, 2);
+    accepted: count(status?.accepted), rejected: count(status?.rejected),
+    'Unrecognised feed fields': fields.length ? fields : 'none' }, null, 2);
 }

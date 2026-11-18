@@ -1,4 +1,5 @@
 import { decodeRoomEvent } from '@umalytics/core/room/roomEvents';
+import { UnrecognisedFeedFields } from '@umalytics/core/room/feedDiagnostics';
 import { selectRoomSyncedState } from '@umalytics/core/room/syncPayload';
 import { extractMatchCodeFromUrl } from '@umalytics/core/room/matchDetection';
 import { extractRoomCodeFromRoomDom } from './domLobbyExtraction';
@@ -106,12 +107,22 @@ function inspectPossiblePayload(payload: unknown, source: HookSource, capturedRo
   }
 
   if (source === 'websocket') {
-    const event = decodeRoomEvent(payload);
+    const diagnostics = new UnrecognisedFeedFields();
+    const event = decodeRoomEvent(payload, diagnostics);
     if (event !== null) {
       rememberRoomEvent(event);
       // Live events are always forwarded; the extension's reducer decides which
       // are stale. Only the replay buffer below keeps the newest version.
       window.postMessage({ type: 'umalytics:room-event', payload: event, hookVersion: 4 }, window.location.origin);
+    }
+    const fields = diagnostics.snapshot();
+    if (fields.length) {
+      if (roomEventListenerReady) postFeedFields(fields);
+      else {
+        const firstBatch = pendingFeedFields === undefined;
+        (pendingFeedFields ??= new UnrecognisedFeedFields()).merge(fields);
+        if (firstBatch) window.postMessage({ type: 'umalytics:room-feed-fields-ready', hookVersion: 4 }, window.location.origin);
+      }
     }
     return;
   }
@@ -185,6 +196,13 @@ function getVisibleRoomCode(): string | undefined {
 
 // Only sanitized room events are retained, never raw socket frames or credentials.
 const capturedRoomEvents = new Map<string, Record<string, any>>();
+let roomEventListenerReady = false;
+let pendingFeedFields: UnrecognisedFeedFields | undefined;
+
+function postFeedFields(fields: ReturnType<UnrecognisedFeedFields['snapshot']>): void {
+  window.postMessage({ type: 'umalytics:room-feed-fields', fields, hookVersion: 4 }, window.location.origin);
+}
+
 function rememberRoomEvent(event: Record<string, any>): void {
   const key = event.matchId + ':' + event.type + ':' + (event.team ?? '');
   const previous = capturedRoomEvents.get(key);
@@ -200,6 +218,12 @@ function replayRoomEvents(message: MessageEvent<unknown>): void {
   if (message.source !== window || message.origin !== window.location.origin) return;
   const data = message.data;
   if (data === null || typeof data !== 'object' || !('type' in data) || data.type !== 'umalytics:request-room-events') return;
+  roomEventListenerReady = true;
+  // Drain startup observations once. Room-event replays never recount fields.
+  if (pendingFeedFields) {
+    postFeedFields(pendingFeedFields.snapshot());
+    pendingFeedFields = undefined;
+  }
   const room = getVisibleRoomCode();
   if (room === undefined) return;
   for (const event of capturedRoomEvents.values()) {
