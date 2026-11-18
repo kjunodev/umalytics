@@ -76,11 +76,11 @@ export interface SkillChain {
 function reconcileOffer(offers: Observation[], hint: number | null | undefined, prefix: number | null,
   price: (hint: number | null | undefined) => number | null) {
   const scanned = [...new Set(offers.flatMap(offer => offer.price === null ? [] : [offer.price]))].sort((a, b) => a - b);
-  const readHints = new Set(offers.filter(offer => !offer.hintUnreadable && !offer.hintConflict).map(offer => offer.hint));
   const withPrerequisite = (own: number | null) => own === null || prefix === null ? null : own + prefix;
   const tierPrice = price(hint);
   const total = withPrerequisite(tierPrice);
-  const disputed = scanned.length > 1 || readHints.size > 1;
+  // Only differing prices are a real disagreement; a differing hint read is settled by the price.
+  const disputed = scanned.length > 1;
   if (!disputed && scanned.length === 1 && prefix !== null && price(null) !== null) {
     const observed = scanned[0]!;
     const matches = hintLevels.filter(level => withPrerequisite(price(level)) === observed);

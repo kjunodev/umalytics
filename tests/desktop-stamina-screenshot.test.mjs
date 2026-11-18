@@ -149,7 +149,7 @@ test('a scanned double-circle price can establish the missing single-circle disc
   assert.equal(chain.steps[0].inferredFrom, 200181);
 });
 
-test('Focus at 84 SP recovers Hint Max from a misread or unreadable hint', () => {
+test('Focus at 84 SP recovers Hint Max from misread, unreadable or differing hint reads', () => {
   const focus = { 1: { cost: 140, tier: null } };
   for (const read of [offer(1, 84, 4), { ...offer(1, 84, null), hintUnreadable: true }]) {
     const [chain] = tierChains([read], focus);
@@ -159,7 +159,9 @@ test('Focus at 84 SP recovers Hint Max from a misread or unreadable hint', () =>
   }
   assert.deepEqual(costs(tierChains([offer(1, 74, 4)], focus)[0]), [[1, 91, 'Price mismatch']]);
   assert.equal(tierChains([offer(1, 84, 4), offer(1, 91, 4)], focus)[0].steps[0].priceIssue, 'Price mismatch');
-  assert.equal(tierChains([offer(1, 84, 4), offer(1, 84, 5)], focus)[0].steps[0].priceIssue, 'Price mismatch');
+  const [twoReads] = tierChains([offer(1, 84, 4), offer(1, 84, 5)], focus);
+  assert.deepEqual(costs(twoReads), [[1, 84, null]]);
+  assert.equal(twoReads.steps[0].hint, 5);
 });
 
 test('reconciled lower and gold prices preserve the full price and incremental upgrade', () => {
