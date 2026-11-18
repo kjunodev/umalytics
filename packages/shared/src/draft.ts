@@ -96,6 +96,7 @@ export interface DraftTeamSnapshot {
 
 export interface DraftSnapshot {
   matchCode?: MatchCode;
+  queueContext?: 'quickplay';
   version?: number;
   rules?: { maps: number; picks: number; bans: number; vetoes: number; mapVetoes: number };
   phase?: string;

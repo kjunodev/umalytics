@@ -12,7 +12,7 @@ export function checkGeometry() {
     '.draft-experience-panel', '.draft-experience-row', '.draft-races-panel',
     '.draft-race-list', '.draft-race-card', '.draft-vetoed-map-row',
     '.draft-team-header', '.draft-races-header', '.draft-races-legend', '.draft-team-legend',
-    '.draft-race-title', '.draft-race-mods', '.draft-blessing', '.draft-style-mix', '.draft-candidate-row', '.draft-candidate-tags',
+    '.draft-race-title', '.draft-race-mods', '.draft-blessing', '.draft-format', '.draft-style-mix', '.draft-candidate-row', '.draft-candidate-tags',
     '.player-drawer', '.player-drawer-head', '.player-drawer-identity',
     '.player-drawer-title-row', '.drawer-stat-row', '.drawer-stat-panel',
     '.drawer-section', '.drawer-section-head', '.uma-table-rows', '.uma-table-row',

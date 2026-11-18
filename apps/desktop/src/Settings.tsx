@@ -5,19 +5,42 @@ import type { UpdateControls } from './useUpdater';
 import type { Catalog } from './staminaTypes';
 import type { Preferences } from './preferences';
 
-export function Settings({ updates, prefs, update, pinned, busy, togglePin, copyDiagnostics, copyStatus }: {
+interface ScreenshotImportSetting { saved: boolean; enabled: boolean; forcedBy: 'debug' | 'environment' | null }
+
+export function Settings({ updates, prefs, update, pinned, busy, togglePin, copyDiagnostics, copyStatus, onScreenshotImportChange }: {
   updates: UpdateControls; prefs: Preferences; update: (patch: Partial<Preferences>) => void; pinned: boolean; busy: boolean; togglePin: () => void; copyDiagnostics: () => void; copyStatus: string;
+  onScreenshotImportChange: () => void;
 }) {
   const [catalog, setCatalog] = useState<Catalog>();
   const [version, setVersion] = useState('');
   const [error, setError] = useState('');
+  const [screenshotImport, setScreenshotImport] = useState<ScreenshotImportSetting>();
+  const [savingImport, setSavingImport] = useState(false);
+  const [importError, setImportError] = useState('');
   useEffect(() => {
     let disposed = false;
     void invoke<Catalog>('engine_catalog').then(data => { if (!disposed) setCatalog(data); }).catch(() => { if (!disposed) setError('Local data status unavailable.'); });
     void getVersion().then(v => { if (!disposed) setVersion(v); }).catch(() => { if (!disposed) setVersion('Unavailable'); });
+    void invoke<ScreenshotImportSetting>('get_screenshot_import_setting')
+      .then(setting => { if (!disposed) setScreenshotImport(setting); })
+      .catch(() => { if (!disposed) setImportError('Unable to load the screenshot import setting.'); });
     return () => { disposed = true; };
   }, []);
-  return <section className="arena-data settings-layout" aria-label="Settings"><nav aria-label="Settings sections">{['Window', 'Display', 'Data', 'Diagnostics', 'About'].map(s => <a key={s} href={`#settings-${s.toLowerCase()}`}>{s}</a>)}</nav><div className="settings-groups">
+  const toggleScreenshotImport = async () => {
+    if (!screenshotImport || screenshotImport.forcedBy || savingImport) return;
+    setSavingImport(true);
+    setImportError('');
+    try {
+      setScreenshotImport(await invoke<ScreenshotImportSetting>('set_screenshot_import_setting', { enabled: !screenshotImport.saved }));
+      onScreenshotImportChange();
+    } catch {
+      setImportError('Unable to save the screenshot import setting.');
+    } finally {
+      setSavingImport(false);
+    }
+  };
+  const forcedBy = screenshotImport?.forcedBy;
+  return <section className="arena-data settings-layout" aria-label="Settings"><nav aria-label="Settings sections">{['Window', 'Display', 'Data', 'Experimental', 'Diagnostics', 'About'].map(s => <a key={s} href={`#settings-${s.toLowerCase()}`}>{s}</a>)}</nav><div className="settings-groups">
     <section className="data-box" id="settings-window"><h2>Window</h2><div className="setting-row"><div><b>Pin on top</b><small>Keeps UmaLytics above the browser</small></div><button role="switch" aria-label="Pin on top" aria-checked={pinned} disabled={busy} onClick={togglePin}>{pinned ? 'On' : 'Off'}</button></div></section>
     <section className="data-box" id="settings-display"><h2>Display</h2>
       <div className="setting-row"><div><b>UI size</b><small>Scales the whole app</small></div><div className="seg" role="group" aria-label="UI size">{(['Small', 'Default', 'Large'] as const).map(value => <button key={value} aria-pressed={prefs.uiSize === value} onClick={() => update({ uiSize: value })}>{value}</button>)}</div></div>
@@ -25,6 +48,17 @@ export function Settings({ updates, prefs, update, pinned, busy, togglePin, copy
       <div className="setting-row"><div><b>Default stats scope</b><small>Used by Lobby, Draft, Umas, Players and History when the app opens</small></div><div className="seg" role="group" aria-label="Default stats scope">{(['currentSeason', 'allTime'] as const).map(value => <button key={value} aria-pressed={prefs.defaultScope === value} onClick={() => update({ defaultScope: value })}>{value === 'currentSeason' ? 'Season' : 'All-time'}</button>)}</div></div>
     </section>
     <section className="data-box" id="settings-data"><h2>Data</h2><div className="setting-row"><div><b>Local skill data</b><small className="local-data-path">{catalog?.local_skill_path ?? (error || 'Loading folder path…')}</small><small>{catalog ? `${catalog.local_skill_count ?? 0} skills · ${catalog.local_icon_count ?? 0} icons` : 'Reading local data status'}</small></div><span className={catalog?.local_skill_data ? 'win' : 'muted'}>{catalog ? catalog.local_skill_data ? 'Found' : 'Not found' : '—'}</span></div><div className="setting-row"><div><b>Engine data version</b><small>{catalog?.engine_data_version ?? 'Not exposed by the engine'}</small></div></div></section>
+    <section className="data-box" id="settings-experimental"><h2>Experimental</h2>
+      <div className="setting-row">
+        <div><b>Screenshot import</b><small id="screenshot-import-help">Import skills and stats from game screenshots and live capture. Experimental: check every scan before applying.</small>
+          {forcedBy && <small id="screenshot-import-lock">{forcedBy === 'debug' ? 'Enabled by this debug build.' : 'Enabled by UMALYTICS_EXPERIMENTAL=1.'}</small>}
+          {importError && <small role="alert">{importError}</small>}
+        </div>
+        <button type="button" role="switch" aria-label="Screenshot import" aria-describedby={forcedBy ? 'screenshot-import-help screenshot-import-lock' : 'screenshot-import-help'} aria-checked={screenshotImport?.enabled ?? false} disabled={!screenshotImport || !!forcedBy || savingImport} onClick={() => { void toggleScreenshotImport(); }}>
+          {screenshotImport ? screenshotImport.enabled ? 'On' : 'Off' : '—'}
+        </button>
+      </div>
+    </section>
     <section className="data-box" id="settings-diagnostics"><h2>Diagnostics</h2><div className="setting-row"><div><b>Local feed</b><small>Listener status and accepted/rejected counts</small></div><button onClick={copyDiagnostics}>Copy diagnostics</button></div><p role="status">{copyStatus}</p></section>
     <section className="data-box" id="settings-about"><h2>About</h2><div className="setting-row"><div><b>UmaLytics {version || '…'}</b><small>Beta installers are unsigned.</small></div></div>
       <div className="setting-row"><div><b>Check for updates automatically</b><small>After launch and every six hours</small></div><button role="switch" aria-label="Check for updates automatically" aria-checked={prefs.automaticUpdates} onClick={() => update({ automaticUpdates: !prefs.automaticUpdates })}>{prefs.automaticUpdates ? 'On' : 'Off'}</button></div>

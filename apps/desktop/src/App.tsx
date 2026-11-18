@@ -43,6 +43,7 @@ export function App() {
   const [draftRun, setDraftRun] = useState<DraftRun>();
   const [openStaminaDraft, setOpenStaminaDraft] = useState(0);
   const [staminaView, setStaminaView] = useState<StaminaView>('requirement');
+  const [staminaCatalogRevision, setStaminaCatalogRevision] = useState(0);
   const [showRaceDataError, setShowRaceDataError] = useState(false);
   const [shellError, setShellError] = useState('');
   const room = useRef(new DesktopRoom());
@@ -225,10 +226,10 @@ export function App() {
             {liveTab === 'Umas' && <Umas roster={roster ?? { players: [] }} profiles={profiles} scope={scope} compact={compact}/>}
           </div>
         </>}
-        <div className="desktop-tool" hidden={displayedPage !== 'Stamina'}><Stamina draft={draft} openDraft={openStaminaDraft} view={staminaView} onViewChange={setStaminaView} onDraftRunChange={setDraftRun} onDataError={setShowRaceDataError}/></div>
+        <div className="desktop-tool" hidden={displayedPage !== 'Stamina'}><Stamina draft={draft} openDraft={openStaminaDraft} view={staminaView} onViewChange={setStaminaView} onDraftRunChange={setDraftRun} onDataError={setShowRaceDataError} catalogRevision={staminaCatalogRevision}/></div>
         {displayedPage === 'Players' && <Players onScopeChange={setScope} scope={scope} teamIcons={teamIcons} onOpenMatch={openMatch}/>}
         <div hidden={displayedPage !== 'History'}><History onScopeChange={setScope} scope={scope} requestedMatch={requestedMatch} teamIcons={teamIcons} onOpenMatch={openMatch}/></div>
-        {displayedPage === 'Settings' && <Settings updates={updates} prefs={prefs} update={persist} pinned={pinned} busy={windowBusy} togglePin={() => { void togglePin(); }} copyDiagnostics={() => { void copyDiagnostics(); }} copyStatus={copyStatus}/>}
+        {displayedPage === 'Settings' && <Settings updates={updates} prefs={prefs} update={persist} pinned={pinned} busy={windowBusy} togglePin={() => { void togglePin(); }} copyDiagnostics={() => { void copyDiagnostics(); }} copyStatus={copyStatus} onScreenshotImportChange={() => setStaminaCatalogRevision(value => value + 1)}/>}
       </main>
       {compact && liveTab === 'Draft' && <CompactStamina run={currentRun} onOpen={() => { void openStamina(); }}/>}
     </div>

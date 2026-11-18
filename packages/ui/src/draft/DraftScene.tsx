@@ -134,8 +134,9 @@ export function DraftPhaseBar({
   initialPickCount: number;
   stageIndex: number;
 }) {
-  const statusText = historical ? undefined : formatDraftStatusText(snapshot, stageIndex, DRAFT_PICK_SLOT_COUNT);
-  const stages = getDraftStages(initialPickCount);
+  const vetoCount = snapshot.rules?.vetoes ?? DRAFT_VETO_SLOT_COUNT;
+  const statusText = historical ? undefined : formatDraftStatusText(snapshot, stageIndex, vetoCount === 0 ? initialPickCount : DRAFT_PICK_SLOT_COUNT);
+  const stages = getDraftStages(initialPickCount, vetoCount);
 
   return (
     <div className="draft-phase-bar">
@@ -143,8 +144,9 @@ export function DraftPhaseBar({
       <strong className="draft-phase-title">{stages[stageIndex]?.label ?? 'Draft'}</strong>
       {statusText === undefined ? null : <span className="draft-phase-status">{statusText}</span>}
       {snapshot.blessing === undefined ? null : <DraftBlessingChip blessing={snapshot.blessing} mapRules={snapshot.mapRules} />}
+      {snapshot.queueContext === 'quickplay' && <strong className="draft-format">Quickplay</strong>}
       <div className="draft-phase-bar-spacer" />
-      <DraftStageTrack stages={stages} stageIndex={stageIndex} />
+      {stages.length > 1 && <DraftStageTrack stages={stages} stageIndex={stageIndex} />}
     </div>
   );
 }
@@ -213,6 +215,7 @@ export function DraftTeamPanel({
   const picks = team.umas.filter((uma) => uma.kind === 'pick');
   const bans = team.umas.filter((uma) => uma.kind === 'ban');
   const vetoes = team.umas.filter((uma) => uma.kind === 'veto');
+  const pickCount = rules?.vetoes === 0 ? Math.max(rules.picks, picks.length) : DRAFT_PICK_SLOT_COUNT;
   const pickSignature = picks.map(getDraftActionKey).join('|');
   const [selectedPickKey, setSelectedPickKey] = useState<string | undefined>();
 
@@ -231,13 +234,13 @@ export function DraftTeamPanel({
         <h2>{formatTeamName(team)}</h2>
         {isCurrentTeam ? <span className="draft-picking-badge">Picking</span> : null}
         <div className="draft-team-header-spacer" />
-        <span className="draft-team-pick-count">{picks.length}/{DRAFT_PICK_SLOT_COUNT} picks</span>
+        <span className="draft-team-pick-count">{picks.length}/{pickCount} picks</span>
       </header>
 
       <DraftStyleMix picks={picks} />
 
       <ol className="draft-pick-grid">
-        {getDraftSlots(picks, DRAFT_PICK_SLOT_COUNT).map((action, index) =>
+        {getDraftSlots(picks, pickCount).map((action, index) =>
           action === undefined ? (
             <DraftPickPlaceholder
               key={`pick-placeholder:${index}`}

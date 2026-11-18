@@ -703,7 +703,7 @@
 /* Season 3: the goddess chip in the phase bar, the per-team style mix, the
    style pill on a pick tile, the map-limits line and the Byerley Turk
    tiebreaker candidates. */
-.draft-blessing {
+.draft-format, .draft-blessing {
   align-items: center;
   background: var(--tone-rank-bg);
   border-radius: var(--radius-pill);

@@ -27,6 +27,8 @@ const statesOnly = process.env.DESKTOP_SHOTS_SCENES === 'states';
 const dataOnly = process.env.DESKTOP_SHOTS_SCENES === 'data';
 const usabilityOnly = process.env.DESKTOP_SHOTS_SCENES === 'usability';
 const blessingOnly = process.env.DESKTOP_SHOTS_SCENES === 'blessing';
+const prepOnly = process.env.DESKTOP_SHOTS_SCENES === 'prep';
+const runDesktopPrepShots = async (harness) => (await import('../../../tests/support/desktop-prep-shots.mjs')).runDesktopPrepShots(harness);
 const localIcons = process.env.UMALYTICS_GAMEDATA_DIR ?? path.join(os.homedir(), 'Documents/Coding Projects/UmaLytics-GameData/gametora');
 const fixtureIcon = await fs.readFile(path.join(localIcons, 'icons/20051.webp')).catch(() => null);
 const portraitDir = process.env.DESKTOP_SHOTS_PORTRAITS;
@@ -799,6 +801,7 @@ try {
   else if (drawerOnly) await (await import('./shots-player-drawer.mjs')).runPlayerDrawerShots({ open, nav, shot, check });
   else if (updatesOnly) await (await import('./shots-updater.mjs')).runUpdateShots({ open, nav, shot, check });
   else if (blessingOnly) await (await import('./shots-blessing.mjs')).runBlessingShots({ open, nav, shot, check });
+  else if (prepOnly) await runDesktopPrepShots({ open, nav, shot, check });
   else {
   if (!arenaOnly && !statesOnly && !dataOnly && !usabilityOnly) {
     await staminaRedesignShots();
@@ -1732,6 +1735,7 @@ try {
   if (!staminaOnly && !arenaOnly && !statesOnly && !dataOnly) await (await import('./shots-usability.mjs')).runUsabilityShots({ open, nav, shot, check });
   if (!staminaOnly && !arenaOnly && !statesOnly && !dataOnly && !usabilityOnly) await (await import('./shots-updater.mjs')).runUpdateShots({ open, nav, shot, check });
   if (!staminaOnly && !arenaOnly && !statesOnly && !dataOnly && !usabilityOnly) await (await import('./shots-blessing.mjs')).runBlessingShots({ open, nav, shot, check });
+  if (!staminaOnly && !arenaOnly && !statesOnly && !dataOnly && !usabilityOnly) await runDesktopPrepShots({ open, nav, shot, check });
   }
   check(failures.length === 0, failures.join('\n'));
   console.log(`${checks} checks passed; screenshots: ${out}`);

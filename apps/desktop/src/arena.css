@@ -134,8 +134,8 @@
 .arena-race.pending { color: var(--tx3); border: 1px dashed var(--line); background: transparent; }
 .arena-race.pending > i { background: var(--line); }
 .vetoed-maps { margin: 12px 0 0; color: var(--tx3); font-size: 11px; overflow-wrap: anywhere; }
-.blessing-chip { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 0 4px; margin-left: auto; padding: 3px 10px; border-radius: var(--radius-pill); background: var(--tone-rank-bg); color: var(--tone-rank-fg); font: 400 12px/1.4 var(--font-body); font-style: normal; }
-.blessing-chip b { font-weight: 700; }
+.blessing-chip, .format-chip { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 0 4px; margin-left: auto; padding: 3px 10px; border-radius: var(--radius-pill); background: var(--tone-rank-bg); color: var(--tone-rank-fg); font: 400 12px/1.4 var(--font-body); font-style: normal; }
+.blessing-chip b, .format-chip { font-weight: 700; }
 .arena-draft .style-mix { flex-basis: 100%; font-size: 12px; font-weight: 600; color: var(--tone-style-fg); }
 .style-tag { flex-shrink: 0; padding: 1px 6px; border-radius: 6px; background: var(--tone-style-bg); color: var(--tone-style-fg); font-size: 10px; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; }
 .arena-races .map-limits { margin: 0 0 8px; color: var(--tx2); font-size: 12px; }

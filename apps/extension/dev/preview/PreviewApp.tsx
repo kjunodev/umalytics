@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { parseHistoricalMatch } from '@umalytics/core/explorer/explorerData';
+import { quickplayCode, quickplayMatch } from '../../../../tests/fixtures/quickplay-match.mts';
 import type { PlayerStatsScope } from '@umalytics/shared';
 import '@umalytics/ui/common/base.css';
 import { DraftScene } from '@umalytics/ui/draft/DraftScene';
@@ -20,10 +22,15 @@ import {
   PREVIEW_TEAM_ICONS
 } from './fixtures';
 
-type DraftVariant = 'mid' | 'complete' | 'barb' | 'arabian' | 'turk';
-const DRAFT_VARIANTS: DraftVariant[] = ['mid', 'complete', 'barb', 'arabian', 'turk'];
-const DRAFT_FIXTURES = { mid: PREVIEW_DRAFT_MID, complete: PREVIEW_DRAFT_COMPLETE, barb: PREVIEW_DRAFT_BARB, arabian: PREVIEW_DRAFT_ARABIAN, turk: PREVIEW_DRAFT_TURK };
-const DRAFT_LABELS: Record<DraftVariant, string> = { mid: 'Mid-draft', complete: 'Complete', barb: 'Barb', arabian: 'Arabian', turk: 'Turk' };
+const PREVIEW_DRAFT_QUICKPLAY = parseHistoricalMatch(quickplayMatch(), quickplayCode).draft;
+for (const team of Object.values(PREVIEW_DRAFT_QUICKPLAY.teams)) {
+  for (const action of team.umas) action.imageUrl = '/portrait-fixture.svg';
+}
+
+type DraftVariant = 'mid' | 'complete' | 'barb' | 'arabian' | 'turk' | 'quickplay';
+const DRAFT_VARIANTS: DraftVariant[] = ['mid', 'complete', 'barb', 'arabian', 'turk', 'quickplay'];
+const DRAFT_FIXTURES = { mid: PREVIEW_DRAFT_MID, complete: PREVIEW_DRAFT_COMPLETE, barb: PREVIEW_DRAFT_BARB, arabian: PREVIEW_DRAFT_ARABIAN, turk: PREVIEW_DRAFT_TURK, quickplay: PREVIEW_DRAFT_QUICKPLAY };
+const DRAFT_LABELS: Record<DraftVariant, string> = { mid: 'Mid-draft', complete: 'Complete', barb: 'Barb', arabian: 'Arabian', turk: 'Turk', quickplay: 'Quickplay' };
 
 // Reads ?mode=&scene=&draft=&player= from the URL so pnpm preview:shots can
 // deep-link straight to a scene/state instead of scripting header clicks.
@@ -57,6 +64,7 @@ export default function PreviewApp() {
   const [openedMatchCode, setOpenedMatchCode] = useState<string>();
   const openMatch = (code: string) => { setOpenedMatchCode(code); setSelectedPlayerKey(undefined); setMode('history'); };
   const draftSnapshot = DRAFT_FIXTURES[draftVariant];
+  const draftCode = draftVariant === 'quickplay' && scene === 'draft' ? draftSnapshot.matchCode : undefined;
 
   const teams = [PREVIEW_ROSTER.teams!.team1, PREVIEW_ROSTER.teams!.team2];
   const selectedContext = getSelectedPlayerContext(teams, selectedPlayerKey);
@@ -72,8 +80,8 @@ export default function PreviewApp() {
         sceneDimmed={mode === 'profiles'}
         visibleScope={statsScope}
         onScopeChange={setStatsScope}
-        matchCode={PREVIEW_ROSTER.matchCode}
-        historicalMatchCode={mode === 'history' ? openedMatchCode ?? 'PVW999' : undefined}
+        matchCode={draftCode ?? PREVIEW_ROSTER.matchCode}
+        historicalMatchCode={mode === 'history' ? openedMatchCode ?? draftCode ?? 'PVW999' : undefined}
         hasRoster
         isLive={mode === 'live'}
         profileStatusLabel="Latest stats check just now"
