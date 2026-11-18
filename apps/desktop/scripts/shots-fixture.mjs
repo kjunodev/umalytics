@@ -46,6 +46,12 @@ export const screenshotCatalog = {
   umas: [...catalog.umas, { card_id: 106802, name: 'Kitasan Black', title: "[Crane's Ambition]", unique_skill_id: 110681,
     aptitudes: { distance: [3, 6, 7, 7], style: [7, 6, 4, 1], ground: [7, 3] } }],
   screenshot_import_enabled: true,
+  hp_effects: {
+    910311: [{ value: 150, conditional: true, other_runner: false }],
+    200351: [{ value: 550, conditional: true, other_runner: false }],
+    200352: [{ value: 150, conditional: true, other_runner: false }],
+    202151: [{ value: -200, conditional: true, other_runner: false }],
+  },
   screenshot_skills: {
     110311: { cost: null, tier: null },
     210052: { cost: null, tier: null },
@@ -61,9 +67,12 @@ export const screenshotCatalog = {
     201113: { cost: 150, tier: { group: 20111, rank: 3 } },
     200033: { cost: 50, tier: { group: 20003, rank: -1 } },
     200032: { cost: 90, tier: { group: 20003, rank: 1 } },
+    200351: { cost: 170, tier: { group: 20035, rank: 2 } },
+    200352: { cost: 170, tier: { group: 20035, rank: 1 } },
+    202151: { cost: 180, tier: null },
   },
   skills: [
-    ...catalog.skills.filter(skill => ![200181, 200182, 200501, 200502, 910311, 200542, 201111, 201112, 201113].includes(skill.id)),
+    ...catalog.skills.filter(skill => ![200181, 200182, 200501, 200502, 910311, 200542, 201111, 201112, 201113, 200351, 200352, 202151].includes(skill.id)),
     { id: 200501, name: 'Lane Legerdemain', rarity: 'gold', hp_recovery: false, icon_path: 'fixture-heal.webp' },
     { id: 200502, name: 'Go with the Flow', rarity: 'white', hp_recovery: false, icon_path: 'fixture-heal.webp' },
     { id: 910311, name: 'Fresh☆Parlor (inherited)', rarity: 'white', hp_recovery: true, icon_path: 'fixture-heal.webp' },
@@ -76,6 +85,9 @@ export const screenshotCatalog = {
     { id: 201113, name: 'Refraction Arc', rarity: 'gold', hp_recovery: false, icon_path: 'fixture-heal.webp' },
     { id: 200033, name: 'Tokyo Racecourse ×', rarity: 'white', hp_recovery: false, icon_path: 'fixture-heal.webp' },
     { id: 200032, name: 'Tokyo Racecourse ○', rarity: 'white', hp_recovery: false, icon_path: 'fixture-heal.webp' },
+    { id: 200351, name: 'Swinging Maestro', rarity: 'gold', hp_recovery: true, icon_path: 'fixture-heal.webp' },
+    { id: 200352, name: 'Corner Recovery ○', rarity: 'white', hp_recovery: true, icon_path: 'fixture-heal.webp' },
+    { id: 202151, name: 'Keep Going!', rarity: 'gold', hp_recovery: false, icon_path: 'fixture-heal.webp' },
   ],
 };
 
@@ -119,6 +131,18 @@ export const fullStatsScans = [
     read('Tokyo Racecourse ○', 200032, { cost: 140, obtained: false }),
   ] }),
 ];
+export const shopScans = {
+  learn: scan('learn', { skill_points: 300, skills: [
+    ...fullStatsScans[2].skills,
+    read('Corner Recovery ○', 200352, { cost: 153, hint: 1 }),
+    read('Swinging Maestro', 200351, { cost: 323 }),
+    read('Keep Going!', 202151, { cost: 180 }),
+    read('Go with the Flow', 200502, { cost: 120 }),
+    read('Lane Legerdemain', 200501, { cost: 228, hint: 1 }),
+  ] }),
+  extra: scan('learn', { skill_points: 300, skills: [read('Medium Corners ○', 201112, { cost: 100 })] }),
+  unknown: scan('learn', { skill_points: 300, skills: [read('Unmatched Heal', null)] }),
+};
 export const finishedScans = [
   scan('finished-details', { ...finished, skills: [read('Bring on the Banquet!', 110681, { level: 5 }), read('Fast-Paced', 200542)] }),
   scan('finished-details', { ...finished, small_game_panel: true, skills: [read('Fast-Paced', 200542),

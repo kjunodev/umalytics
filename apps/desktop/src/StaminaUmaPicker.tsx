@@ -1,64 +1,96 @@
-import { useId, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { UmaImage, getFallbackUmaImageUrl } from '@umalytics/ui/common/UmaImage';
-import { SkillIcon } from './SkillPicker';
 import { fuzzyScore } from './staminaState';
-import type { CatalogSkill, CatalogUma, StaminaBuild } from './staminaTypes';
+import type { CatalogUma } from './staminaTypes';
 
-function UmaLabel({ uma, placeholder = 'No Uma' }: { uma?: CatalogUma; placeholder?: string }) {
-  return <>
-    {uma && <span className="stamina-uma-portrait" aria-hidden="true"><UmaImage imageUrl={getFallbackUmaImageUrl(String(uma.card_id))} name={uma.name}/></span>}
-    <span className="stamina-uma-name">{uma ? `${uma.name} ${uma.title}` : placeholder}</span>
-  </>;
+function Portrait({ uma }: { uma: CatalogUma }) {
+  return <span className="stamina-uma-portrait" aria-hidden="true"><UmaImage imageUrl={getFallbackUmaImageUrl(String(uma.card_id))} name={uma.name}/></span>;
 }
 
-export function StaminaUmaPicker({ umas, selected, uniques, full, locked = false, onSelect, onAptitudes, onLevel }: {
+function UmaDialog({ umas, recent, selected, full, onClose, onPick }: {
+  umas: CatalogUma[];
+  recent: number[];
+  selected?: CatalogUma;
+  full: boolean;
+  onClose: () => void;
+  onPick: (uma: CatalogUma | undefined) => void;
+}) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  const search = useRef<HTMLInputElement>(null);
+  const grid = useRef<HTMLDivElement>(null);
+  const title = useId();
+  const [query, setQuery] = useState('');
+  const searching = !!query.trim();
+  const matches = useMemo(() => full ? [] : umas.map(uma => ({ uma, score: fuzzyScore(`${uma.name} ${uma.title} ${uma.card_id}`, query) }))
+    .filter(({ score }) => Number.isFinite(score)).sort((a, b) => a.score - b.score).map(({ uma }) => uma), [full, umas, query]);
+  const recentCards = searching || full ? [] : recent.flatMap(id => {
+    const uma = umas.find(card => card.card_id === id);
+    return uma ? [uma] : [];
+  });
+  const canClear = Number.isFinite(fuzzyScore('No Uma', query));
+
+  useEffect(() => {
+    const element = dialog.current!;
+    element.showModal();
+    search.current?.focus();
+    return () => element.close();
+  }, []);
+
+  const card = (uma: CatalogUma, compact = false) => <button key={uma.card_id} type="button"
+    aria-label={`${uma.name} ${uma.title}`} aria-pressed={selected?.card_id === uma.card_id} onClick={() => onPick(uma)}>
+    <Portrait uma={uma}/><span className="stamina-uma-card-text"><strong>{uma.name}</strong>{!compact && <small>{uma.title}</small>}</span>
+  </button>;
+
+  return <dialog className="panel stamina-uma-dialog" ref={dialog} aria-labelledby={title}
+    onCancel={event => { event.preventDefault(); event.stopPropagation(); onClose(); }}>
+    <div className="drawer-heading"><h2 id={title}>Choose Uma</h2><button type="button" aria-label="Close Uma picker" onClick={onClose}>×</button></div>
+    <div className="stamina-uma-search">
+      <input ref={search} type="search" aria-label="Search Umas" placeholder="Search by name or title…" value={query}
+        onChange={event => { setQuery(event.target.value); if (grid.current) grid.current.scrollTop = 0; }} onKeyDown={event => {
+          if (event.key !== 'Enter' || event.nativeEvent.isComposing) return;
+          event.preventDefault();
+          if (query.trim().toLowerCase() === 'no uma') onPick(undefined);
+          else if (matches[0] || canClear) onPick(matches[0]);
+        }}/>
+      {canClear && <button type="button" onClick={() => onPick(undefined)}>No Uma</button>}
+    </div>
+    {recentCards.length > 0 && <section className="stamina-uma-recent" aria-label="Recent">
+      <h3>Recent</h3><div>{recentCards.map(uma => card(uma, true))}</div>
+    </section>}
+    <div ref={grid} className="stamina-uma-grid" role="group" aria-label={searching ? 'Matching Umas' : 'All Umas'}>
+      {matches.map(uma => card(uma))}
+      {full ? <p role="status">Remove a skill to choose an Uma.</p> : !matches.length && <p role="status">No matching Umas.</p>}
+    </div>
+  </dialog>;
+}
+
+export function StaminaUmaPicker({ umas, selected, recent, hasUnique = false, full, locked = false, onSelect, onAptitudes }: {
   umas: CatalogUma[];
   selected: CatalogUma | undefined;
-  uniques: { skill: StaminaBuild['skills'][number]; meta: CatalogSkill }[];
+  recent: number[];
+  hasUnique?: boolean;
   full: boolean;
   locked?: boolean;
   onSelect: (uma: CatalogUma | undefined) => void;
   onAptitudes?: (aptitudes: CatalogUma['aptitudes']) => void;
-  onLevel: (id: number, level: number) => void;
 }) {
-  const [open, setOpen] = useState(false);
-  const [query, setQuery] = useState('');
-  const [active, setActive] = useState(0);
+  const [portal, setPortal] = useState<HTMLElement | null>(null);
   const trigger = useRef<HTMLButtonElement>(null);
-  const listId = useId();
-  const matches = full ? [] : umas.map(uma => ({ uma, score: fuzzyScore(`${uma.name} ${uma.title} ${uma.card_id}`, query) }))
-    .filter(({ score }) => Number.isFinite(score)).sort((a, b) => a.score - b.score).map(({ uma }) => uma);
-  const options = Number.isFinite(fuzzyScore('No Uma', query)) ? [undefined, ...matches] : matches;
-  const index = Math.min(active, Math.max(0, options.length - 1));
-  const close = () => { setOpen(false); trigger.current?.focus(); };
-  const choose = (uma: CatalogUma | undefined) => { onSelect(uma); close(); };
+  const close = () => { setPortal(null); requestAnimationFrame(() => trigger.current?.focus()); };
 
-  return <div className="field stamina-uma-field" onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false); }}>
+  return <div className="field stamina-uma-field">
     <span>Uma</span>
     <div className={onAptitudes ? 'stamina-uma-actions' : 'stamina-uma-single'}>
-      <button type="button" className="stamina-uma-trigger" ref={trigger} disabled={locked} aria-haspopup="listbox" aria-expanded={open} aria-controls={open ? listId : undefined} onClick={() => { setQuery(''); setActive(0); setOpen(!open); }}>
-        <UmaLabel uma={selected} placeholder={uniques.length ? 'Choose Uma' : 'No Uma'}/><span className="stamina-uma-chevron" aria-hidden="true">▾</span>
+      <button type="button" className="stamina-uma-trigger" ref={trigger} disabled={locked} aria-haspopup="dialog" aria-expanded={!!portal}
+        onClick={event => setPortal(event.currentTarget.closest<HTMLElement>('.stamina-layout'))}>
+        {selected && <Portrait uma={selected}/>}
+        <span className="stamina-uma-name">{selected ? `${selected.name} ${selected.title}` : hasUnique ? 'Choose Uma' : 'No Uma'}</span>
+        <span className="stamina-uma-chevron" aria-hidden="true">…</span>
       </button>
       {onAptitudes && <button type="button" className="stamina-uma-aptitudes" disabled={!selected} onClick={() => { if (selected) onAptitudes(selected.aptitudes); }}>Use base aptitudes</button>}
     </div>
-    {open && <div className="skill-typeahead stamina-uma-typeahead">
-      <input autoFocus role="combobox" aria-label="Search Umas" aria-autocomplete="list" aria-expanded="true" aria-controls={listId} aria-activedescendant={options.length ? `${listId}-${index}` : undefined} placeholder="Search by name or title…" value={query} onChange={event => { setQuery(event.target.value); setActive(0); }} onKeyDown={event => {
-        if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); close(); }
-        if ((event.key === 'ArrowDown' || event.key === 'ArrowUp') && options.length) {
-          event.preventDefault();
-          const next = (index + (event.key === 'ArrowDown' ? 1 : -1) + options.length) % options.length;
-          setActive(next);
-          document.getElementById(`${listId}-${next}`)?.scrollIntoView({ block: 'nearest' });
-        }
-        if (event.key === 'Enter' && options.length) { event.preventDefault(); choose(options[index]); }
-      }}/>
-      <div className="skill-options stamina-uma-options" id={listId} role="listbox" aria-label="Matching Umas">
-        {options.map((uma, i) => <button type="button" role="option" key={uma?.card_id ?? 'none'} id={`${listId}-${i}`} aria-selected={i === index} tabIndex={-1} onMouseDown={event => event.preventDefault()} onClick={() => choose(uma)}><UmaLabel uma={uma}/></button>)}
-        {full ? <p role="status">Remove a skill to choose an Uma.</p> : !options.length && <p role="status">No matching Umas.</p>}
-      </div>
-    </div>}
-    {uniques.map(({ skill, meta }) => <div className="skill-chips" key={skill.id}><span className="skill-chip rarity-unique"><SkillIcon skill={meta}/><span>{meta.name}</span>
-      <label className="skill-level">Lv<select aria-label={`${meta.name} level`} value={skill.level} onChange={event => onLevel(skill.id, Number(event.target.value))}>{[1, 2, 3, 4, 5, 6].map(level => <option key={level}>{level}</option>)}</select></label>
-    </span></div>)}
+    {portal && createPortal(<UmaDialog umas={umas} recent={recent} selected={selected} full={full} onClose={close}
+      onPick={uma => { onSelect(uma); close(); }}/>, portal)}
   </div>;
 }

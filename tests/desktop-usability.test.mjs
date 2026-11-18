@@ -52,14 +52,16 @@ test('team icons use the 24h persistent cache, load once per session, and retain
   }
 });
 
-test('external URLs use the opener and are limited to the exact Drafter HTTPS origin', async () => {
+test('external URLs use the opener with the Drafter origin and the exact Ko-fi account scope', async () => {
   const opened = [];
   const m = moduleWithMocks('../apps/desktop/src/externalLinks.ts', { '@tauri-apps/plugin-opener': { openUrl: async url => opened.push(url) } });
   await m.openDrafterUrl('https://drafter.uma.guide/matches/ABC123');
   for (const url of ['http://drafter.uma.guide/matches/ABC123', 'https://drafter.uma.guide.evil/', 'https://secret@drafter.uma.guide/']) await assert.rejects(m.openDrafterUrl(url));
-  assert.deepEqual(opened, ['https://drafter.uma.guide/matches/ABC123']);
+  await m.openSupportUrl();
+  assert.deepEqual(opened, ['https://drafter.uma.guide/matches/ABC123', 'https://ko-fi.com/kjuno']);
   const capabilities = JSON.parse(fs.readFileSync(new URL('../apps/desktop/src-tauri/capabilities/main.json', import.meta.url)));
-  assert.deepEqual(capabilities.permissions.find(p => p.identifier === 'opener:allow-open-url').allow, [{ url: 'https://drafter.uma.guide/*' }]);
+  assert.deepEqual(capabilities.permissions.find(p => p.identifier === 'opener:allow-open-url').allow,
+    [{ url: 'https://drafter.uma.guide/*' }, { url: 'https://ko-fi.com/kjuno*' }]);
   assert(!capabilities.permissions.includes('opener:default'));
 });
 

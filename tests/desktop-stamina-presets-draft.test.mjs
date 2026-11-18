@@ -20,6 +20,7 @@ const state = module('../apps/desktop/src/staminaState.ts', {
 const presets = module('../apps/desktop/src/staminaPresetState.ts', { './staminaTypes': types, './staminaState': state, '../src-tauri/data/role-kits.json': { default: bundled } });
 const blessing = module('../packages/core/src/room/blessing.ts', { '../umas/umaPortraits': { normalizeUmaOutfitId: id => id } });
 const draft = module('../apps/desktop/src/staminaDraft.ts', { './staminaTypes': types, '@umalytics/core/room/blessing': blessing });
+const answers = module('../apps/desktop/src/staminaAnswers.ts', { './staminaDraft': draft });
 const catalog = { courses: pool.maps.map(m => ({ ...m, track_name: m.track, surface: m.surface === 'Turf' ? 1 : 2 })),
   skills: [...new Set(Object.values(bundled).filter(Array.isArray).flat()), 202051, 210052, 201241].map(id => ({ id, rarity: 'white' })).concat([{ id: 1, rarity: 'unique' }]) };
 const plain = v => JSON.parse(JSON.stringify(v));
@@ -100,6 +101,55 @@ test('presets validate corrupt data, preserve empty kit overrides and keep bundl
   assert.deepEqual(plain(memory.builds[0].build.skills), [{ id: 1, level: 6 }]);
   assert.equal(presets.ballparkBuild('front', memory, types.defaultStaminaInput.build).skills.length, 0);
   assert.equal(memory.kits.late, undefined);
+});
+
+test('unset stamina uses 600 or the configured Presets default, and explicit saved stamina wins', () => {
+  const missing = state.restoreStaminaMemory({ input: { build: { stats: { speed: 1234 } } } }, catalog).input;
+  const explicit = state.restoreStaminaMemory({ input: { build: { stats: { stamina: 800 } } } }, catalog).input;
+  const defaults = presets.restorePresets({ defaults: { stats: { stamina: -1 } } }, catalog);
+  assert.equal(defaults.defaults.stats.stamina, 600);
+  assert.equal(types.staminaEngineInput(missing).build.stats.stamina, 600);
+  defaults.defaults.stats.stamina = 777;
+  assert.equal(types.staminaEngineInput(missing, defaults.defaults.stats.stamina).build.stats.stamina, 777);
+  assert.equal(presets.ballparkBuild('pace', defaults, missing.build).stats.stamina, 777);
+  assert.equal(presets.ballparkBuild('pace', defaults, explicit.build).stats.stamina, 800);
+});
+
+test('what-if chips use a bracketed stable 95% crossing and the run’s measured recovery credit', () => {
+  const result = {
+    input: { target: 90 }, thresholds: { joint: 1070 }, needed_effective_stamina: { joint: 1251 },
+    current: { stamina: 800, joint_percent: 40 }, heal_equivalents: [{ stamina: 150 }],
+    curve: [{ stamina: 1000, joint_percent: 80 }, { stamina: 1100, joint_percent: 96 },
+      { stamina: 1150, joint_percent: 93 }, { stamina: 1200, joint_percent: 96 }],
+  };
+  assert.equal(answers.noRecoveryStamina(result), 1260);
+  assert.equal(answers.higherTargetStamina(result), 1200);
+  assert.equal(answers.staminaMargin(result), -270);
+  assert.equal(answers.staminaMargin({ ...result, current: { stamina: 1150, joint_percent: 87 } }), null);
+  assert.equal(answers.staminaMargin({ ...result, current: { stamina: 1150, joint_percent: 91 } }), 80);
+  assert.equal(answers.higherTargetStamina({ ...result, curve: result.curve.slice(0, -1) }), null);
+  assert.equal(answers.higherTargetStamina({ ...result, curve: result.curve.slice(-1) }), null);
+  assert.equal(answers.higherTargetStamina({ ...result, input: { target: 95 } }), null);
+  assert.equal(answers.higherTargetStamina({ ...result, thresholds: { joint: null } }), null);
+  assert.equal(answers.noRecoveryStamina({ ...result, heal_equivalents: [{ stamina: 0 }] }), null);
+  assert.equal(answers.noRecoveryStamina({ ...result, thresholds: { joint: null } }), null);
+});
+
+test('per-stamina table trims only fully zero and fully complete tails and keeps the user row', () => {
+  const point = (stamina, full, survival = full, joint = full, seeds = 32) =>
+    ({ stamina, full_spurt_percent: full, survival_percent: survival, joint_percent: joint, seeds });
+  const curve = [point(600, 0), point(700, 0), point(750, 0, 5, 0), point(850, 80, 100, 78),
+    point(900, 100, 100, 98), point(1000, 100), point(1050, 100)];
+  const values = (current, samples = curve) => plain(answers.staminaTableRows(samples, current).map(row => row?.stamina ?? 'gap'));
+  assert.deepEqual(values(point(650, 0)), [650, 'gap', 700, 750, 850, 900, 1000]);
+  assert.deepEqual(values(point(1050, 100)), [700, 750, 850, 900, 1000, 'gap', 1050]);
+  assert.deepEqual(values(point(800, 45)), [700, 750, 800, 850, 900, 1000]);
+  assert.deepEqual(values(point(1050, 100), curve.slice(2, 5)), [750, 850, 900, 'gap', 1050]);
+  assert.deepEqual(values(point(800, 45), []), [800]);
+  const current = point(850, 90, 100, 90, 256);
+  const rows = answers.staminaTableRows([...curve].reverse(), current);
+  assert.equal(rows.filter(row => row?.stamina === 850).length, 1);
+  assert.equal(rows.find(row => row?.stamina === 850), current);
 });
 
 test('old showAll state is discarded; target and draft inputs restore independently', () => {

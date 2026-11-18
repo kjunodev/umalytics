@@ -101,6 +101,7 @@ struct Uma {
 pub struct Catalog {
     courses: Vec<Course>,
     skills: Vec<Skill>,
+    hp_effects: BTreeMap<i32, Vec<skill_data::HpEffect>>,
     umas: Vec<Uma>,
     local_skill_data: bool,
     local_skill_path: String,
@@ -317,6 +318,7 @@ fn load_engine_from(data_dir: &Path) -> Result<Engine, String> {
         catalog: Catalog {
             courses,
             skills,
+            hp_effects: skill_data::bundled_hp_effects(),
             umas,
             local_skill_data,
             local_skill_path,
@@ -1383,6 +1385,7 @@ pub async fn set_stamina_capture_hotkey(
 #[tauri::command]
 pub fn scan_stamina_while_scrolling(
     id: u32,
+    finished_uma: bool,
     updates: tauri::ipc::Channel<capture::ScanUpdate>,
     app: tauri::AppHandle,
     access: tauri::State<'_, crate::ScreenshotImportAccess>,
@@ -1394,7 +1397,7 @@ pub fn scan_stamina_while_scrolling(
     use tauri::Manager;
     let token = scans.start(id);
     tauri::async_runtime::spawn_blocking(move || {
-        let result = capture::scan_while_scrolling(&token, &updates);
+        let result = capture::scan_while_scrolling(&token, finished_uma, &updates);
         app.state::<capture::ScrollingScans>().finish(&token);
         let _ = updates.send(capture::ScanUpdate::Finished(result.err()));
     });
@@ -1405,13 +1408,18 @@ pub fn scan_stamina_while_scrolling(
 #[tauri::command]
 pub fn stop_stamina_scrolling_scan(
     id: u32,
+    drain: bool,
     access: tauri::State<'_, crate::ScreenshotImportAccess>,
     scans: tauri::State<'_, capture::ScrollingScans>,
 ) -> Result<(), &'static str> {
     if !access.0 {
         return Err("Screenshot import is unavailable.");
     }
-    scans.stop(Some(id));
+    if drain {
+        scans.drain(id);
+    } else {
+        scans.stop(Some(id));
+    }
     Ok(())
 }
 

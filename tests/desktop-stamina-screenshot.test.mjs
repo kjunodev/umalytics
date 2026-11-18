@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-  dedupeRows, discountedPrice, hintDiscount, priceAfterTier, purchasePlan,
+  availablePurchaseTiers, dedupeRows, discountedPrice, hintDiscount, importedBuildSkills, priceAfterTier, purchaseList, purchasePlan,
   restoreScreenshotImport, selectTier, tierChains,
 } from '../apps/desktop/src/staminaScreenshot.ts';
 
@@ -29,12 +29,13 @@ const escapeArtist = offer(200541, 252, 3);
 const mediumCorners = offer(201112, 70, 3);
 const refractionArc = offer(201113, 282, 1);
 const costs = chain => chain.steps.filter(step => step.selectable).map(step => [step.id, step.total, step.priceIssue]);
+const planState = ({ left, overBy, skills }) => ({ left, overBy, skills });
 
 test('Tokyo Racecourse × is owned until its removal is selected, including older Learn imports', () => {
   const removal = offer(200033, 50, null);
   const [chain] = tierChains([owned(200033), removal], catalog);
-  assert.deepEqual(purchasePlan([chain], [], 200), { left: 200, overBy: 0, skills: [{ id: 200033, level: 1 }] });
-  assert.deepEqual(purchasePlan([chain], [200033], 200), { left: 150, overBy: 0, skills: [] });
+  assert.deepEqual(planState(purchasePlan([chain], [], 200)), { left: 200, overBy: 0, skills: [{ id: 200033, level: 1 }] });
+  assert.deepEqual(planState(purchasePlan([chain], [200033], 200)), { left: 150, overBy: 0, skills: [] });
   assert.deepEqual(purchasePlan(tierChains([removal], catalog), [], 200).skills, [{ id: 200033, level: 1 }]);
   assert.deepEqual(chain.steps.filter(step => step.selectable).map(step => [step.id, step.total, !!step.estimated]),
     [[200033, 50, false], [200032, 140, true], [200031, 250, true]]);
@@ -47,7 +48,7 @@ test('Tokyo Racecourse ○ replaces the debuff and accounts for the removal once
   assert.equal(circle.total, 140);
   assert.equal(circle.estimated, true);
   assert.equal(priceAfterTier(chain, circle, 200033), 90);
-  assert.deepEqual(purchasePlan([chain], selectTier([200033], chain, 200032), 200),
+  assert.deepEqual(planState(purchasePlan([chain], selectTier([200033], chain, 200032), 200)),
     { left: 60, overBy: 0, skills: [{ id: 200032, level: 1 }] });
   assert.deepEqual(purchasePlan(tierChains([owned(200032), offer(200033, 50, null)], catalog), [], 200).skills,
     [{ id: 200032, level: 1 }]);
@@ -66,7 +67,7 @@ test('Escape Artist shows 252, then 126 after selecting Fast-Paced', () => {
   let selected = selectTier([], chain, 200542);
   assert.equal(priceAfterTier(chain, chain.steps[1], selected[0]), 126);
   selected = selectTier(selected, chain, 200541);
-  assert.deepEqual(purchasePlan(chains, selected, 200), {
+  assert.deepEqual(planState(purchasePlan(chains, selected, 200)), {
     left: -52, overBy: 52, skills: [{ id: 200541, level: 1 }],
   });
   assert.equal(purchasePlan(chains, selectTier(selected, chain), 200).left, 200);
@@ -148,13 +149,34 @@ test('a scanned double-circle price can establish the missing single-circle disc
   assert.equal(chain.steps[0].inferredFrom, 200181);
 });
 
-test('recovers a Max hint from an overlapping screenshot and flags an unreadable price', () => {
-  const unknown = { ...offer(201282, 108, null), hintUnreadable: true };
-  const noHint = tierChains([unknown], catalog);
-  assert.equal(purchasePlan(noHint, [201282], 200).left, null);
-  const withHint = tierChains([unknown, offer(201282, 108, 5)], catalog);
-  assert.equal(withHint[0].steps[0].total, 108);
-  assert.equal(withHint[0].steps[0].priceIssue, 'Price unverified');
+test('Focus at 84 SP recovers Hint Max from misread, unreadable or differing hint reads', () => {
+  const focus = { 1: { cost: 140, tier: null } };
+  for (const read of [offer(1, 84, 4), { ...offer(1, 84, null), hintUnreadable: true }]) {
+    const [chain] = tierChains([read], focus);
+    assert.deepEqual(costs(chain), [[1, 84, null]]);
+    assert.equal(chain.steps[0].hint, 5);
+    assert.equal(purchasePlan([chain], [1], 100).left, 16);
+  }
+  assert.deepEqual(costs(tierChains([offer(1, 74, 4)], focus)[0]), [[1, 91, 'Price mismatch']]);
+  assert.equal(tierChains([offer(1, 84, 4), offer(1, 91, 4)], focus)[0].steps[0].priceIssue, 'Price mismatch');
+  const [twoReads] = tierChains([offer(1, 84, 4), offer(1, 84, 5)], focus);
+  assert.deepEqual(costs(twoReads), [[1, 84, null]]);
+  assert.equal(twoReads.steps[0].hint, 5);
+});
+
+test('reconciled lower and gold prices preserve the full price and incremental upgrade', () => {
+  const [chain] = tierChains([offer(200541, 225, 4), offer(200542, 117, 3)], catalog);
+  assert.deepEqual(costs(chain), [[200542, 117, null], [200541, 225, null]]);
+  assert.deepEqual(chain.steps.map(step => step.hint), [4, 5]);
+  assert.equal(priceAfterTier(chain, chain.steps[1], 200542), 108);
+});
+
+test('removal scans reconcile hints and carry the verified removal cost into upgrades', () => {
+  const [chain] = tierChains([owned(200033), offer(200033, 30, 4), offer(200032, 120, null)], catalog);
+  const [removal, circle] = chain.steps.filter(step => step.selectable);
+  assert.deepEqual([removal.hint, removal.total, removal.priceIssue, circle.total], [5, 30, null, 120]);
+  assert.equal(priceAfterTier(chain, circle, 200033), 90);
+  assert.equal(tierChains([offer(200033, 29, 4)], catalog)[0].steps.find(step => step.removal).priceIssue, 'Price mismatch');
 });
 
 test('restores scans and keeps a finished Uma build without a budget or purchasable skills', () => {
@@ -162,7 +184,35 @@ test('restores scans and keeps a finished Uma build without a budget or purchasa
   const restored = restoreScreenshotImport(JSON.parse(JSON.stringify(scan)), catalog);
   assert.deepEqual(restored, { points: 252, observations: [fastPaced, escapeArtist], selected: [200541], ignored: ['Carnival Bonus'] });
   const finished = restoreScreenshotImport({ ...scan, points: null, observations: [owned(110681, 5), owned(200182), fastPaced] }, catalog);
-  assert.deepEqual(purchasePlan(tierChains(finished.observations, catalog), finished.selected, finished.points), {
+  assert.deepEqual(planState(purchasePlan(tierChains(finished.observations, catalog), finished.selected, finished.points)), {
     left: null, overBy: 0, skills: [{ id: 110681, level: 5 }, { id: 200182, level: 1 }],
   });
+});
+
+test('Buying uses the total across selected tiers and copies plain names and prices', () => {
+  const chains = tierChains([fastPaced, escapeArtist, owned(200033), offer(200033, 50, null)], catalog);
+  const plan = purchasePlan(chains, [200541, 200033], 250);
+  assert.equal(plan.spent, 302);
+  assert.equal(plan.left, -52);
+  assert.equal(plan.purchases.length, 2);
+  const names = { 200541: 'Escape Artist', 200033: 'Tokyo Racecourse ×' };
+  assert.equal(purchaseList(plan.purchases, id => names[id]), 'Escape Artist — 252 SP\nRemove Tokyo Racecourse × — 50 SP');
+});
+
+test('a bought tier is omitted from Available while other tiers remain selectable', () => {
+  const [chain] = tierChains([fastPaced, escapeArtist], catalog);
+  const [purchase] = purchasePlan([chain], [200541, 200542], 252).purchases;
+  assert.equal(purchase.id, 200541);
+  assert.deepEqual(availablePurchaseTiers(chain, purchase).map(step => step.id), [200542]);
+  assert.deepEqual(availablePurchaseTiers(chain).map(step => step.id), [200542, 200541]);
+  const [debuff] = tierChains([owned(200033), offer(200033, 50, null)], catalog);
+  const [removal] = purchasePlan([debuff], [200033], 250).purchases;
+  assert.equal(removal.removal, true);
+  assert(!availablePurchaseTiers(debuff, removal).some(step => step.id === removal.id));
+});
+
+test('manual skills augment a scan without replacing purchases or duplicating scanned tiers', () => {
+  const chains = tierChains([fastPaced, escapeArtist], catalog);
+  assert.deepEqual(importedBuildSkills({ selected: [200541], points: 252, manualSkills: [9, 9, 200542] }, chains, catalog),
+    [{ id: 9, level: 1 }, { id: 200541, level: 1 }]);
 });

@@ -31,6 +31,9 @@
       "allow": [
         {
           "url": "https://drafter.uma.guide/*"
+        },
+        {
+          "url": "https://ko-fi.com/kjuno*"
         }
       ]
     },
