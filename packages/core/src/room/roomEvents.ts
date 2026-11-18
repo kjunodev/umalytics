@@ -4,13 +4,60 @@ import { normalizePrematchRosterFromPlayers } from './playerExtraction';
 import { isDiscordSnowflake, UNKNOWN_PLAYER_NAME } from './rosterIdentity';
 import { getUmaDisplayName, normalizeUmaOutfitId, resolveDrafterImageUrl } from '../umas/umaPortraits';
 import { applyRunningStyles, normalizeRunningStyle, parseBlessing, parseMapRules, parseStyleAssignments } from './blessing';
+import type { UnrecognisedFeedFields } from './feedDiagnostics';
 
 type RoomRecord = Record<string, any>;
 const ROOM_EVENT_TYPES = new Set(['match.snapshot', 'room.presence.updated', 'participant.uma-assignments.snapshot', 'room.captain.changed']);
 
+// Decoder input names plus every key seen in Season 3 ranked and Quickplay draft snapshots
+// (public match reports, 2026-11-17), so only genuinely new fields are reported.
+// Only inspect these fixed containers. Team/seat maps and inner values stay opaque.
+const SNAPSHOT_EVENT_KEYS = new Set(['type', 'matchId', 'version', 'state']);
+const SNAPSHOT_KEYS = new Set(['phase', 'currentTeam', 'team1', 'team2', 'wildcardMap', 'rules', 'multiplayer',
+  'draftActionHistory', 'blessing', 'quickplay', 'seatPicks', 'participantUmaAssignments', 'mapRules', 'runningStyles',
+  'roomCodes', 'team1Ready', 'team2Ready', 'turnTimeBank', 'availableMaps', 'availableUmas', 'trainingTimer', 'pendingMatchReport',
+  'pickOrderHistoryText', 'confirmedMatchResults', 'participantUmaAssignmentRoster', 'participantUmaAssignmentReadiness']);
+const RULE_KEYS = new Set(['map', 'uma', 'maps', 'picks', 'bans', 'vetoes', 'mapVetoes', 'preset', 'variant', 'augments', 'rulesVersion']);
+const MAP_RULE_KEYS = new Set(['picksPerTeam', 'bansPerTeam', 'maxDirtPerTeam', 'maxPerDistanceCategory',
+  'maxPerDistanceCategoryOverrides', 'surfaceRestrictions', 'distanceRestrictions', 'wildcardMode']);
+const UMA_RULE_KEYS = new Set(['teamSize', 'preBansPerTeam', 'postBansPerTeam', 'preBanOrder', 'pickOwnership', 'picksBeforeVetoPerTeam']);
+const BLESSING_KEYS = new Set(['goddess', 'status', 'arabianCategory', 'selectedMapId', 'candidates', 'bans', 'lockedTeams',
+  'version', 'baseRules', 'assignedAt', 'deadlineAt', 'generation', 'resolvedAt']);
+const QUICKPLAY_KEYS = new Set(['seed', 'timers', 'rolling', 'banRolls', 'mapRolls', 'skippedBans', 'wildcardRolled', 'teamMapRollsCompleted']);
+const MULTIPLAYER_TEXT_KEYS = ['team1Name', 'team2Name', 'team1CaptainActorUserId', 'team2CaptainActorUserId'];
+const MULTIPLAYER_KEYS = new Set([...MULTIPLAYER_TEXT_KEYS, 'rankedQueueRoster', 'runningStylesEnabled', 'threeGoddessBlessingEnabled',
+  'roomId', 'enabled', 'matchFormat', 'lastCoinFlip', 'queueContext', 'turnDuration', 'hostActorUserId', 'draftCompletedAt',
+  'rankedRecoveryAt', 'lobbySidesSwapped', 'rankedTurnDeadline', 'rankedHandoffSource', 'rankedPolicyVersion', 'rankedRatingContext',
+  'playerTeamAssignments', 'trainingTimerDuration', 'raceStartTimerDuration', 'assignmentPolicyVersion', 'rankedQueueSideSelection',
+  'rankedReportingFallbackAt', 'captainOffers', 'quickplayTimers']);
+const ASSIGNMENT_KEYS = new Set(['team', 'finalTeam', 'selectedUmaId', 'runningStyle', 'slotIndex', 'discordId', 'displayName',
+  'role', 'updatedAt', 'actorUserId', 'participantKey']);
+
+function observeSnapshotFields(event: RoomRecord, state: RoomRecord, diagnostics: UnrecognisedFeedFields): void {
+  const observe = (value: unknown, known: ReadonlySet<string>) => {
+    if (!roomRecord(value)) return;
+    for (const name of Object.keys(value)) {
+      if (!known.has(name)) diagnostics.record(name, 'match.snapshot');
+    }
+  };
+  observe(event, SNAPSHOT_EVENT_KEYS);
+  observe(state, SNAPSHOT_KEYS);
+  if (roomRecord(state.rules)) {
+    observe(state.rules, RULE_KEYS);
+    observe(state.rules.map, MAP_RULE_KEYS);
+    observe(state.rules.uma, UMA_RULE_KEYS);
+  }
+  observe(state.blessing, BLESSING_KEYS);
+  observe(state.quickplay, QUICKPLAY_KEYS);
+  observe(state.multiplayer, MULTIPLAYER_KEYS);
+  if (Array.isArray(state.participantUmaAssignments)) {
+    for (const entry of state.participantUmaAssignments) observe(entry, ASSIGNMENT_KEYS);
+  }
+}
+
 /** Decode only the site's client-defined server-event envelope. Never scan
  * arbitrary objects for player arrays, chat messages, or saved credentials. */
-export function decodeRoomEvent(payload: unknown): RoomRecord | null {
+export function decodeRoomEvent(payload: unknown, diagnostics?: UnrecognisedFeedFields): RoomRecord | null {
   let event: unknown = payload;
   if (typeof event === 'string') {
     if (event.length > 2_000_000) return null;
@@ -22,7 +69,12 @@ export function decodeRoomEvent(payload: unknown): RoomRecord | null {
     if (event[0] !== 'server:event' || event.length !== 2) return null;
     event = event[1];
   }
-  if (!roomRecord(event) || !ROOM_EVENT_TYPES.has(event.type)) return null;
+  if (!roomRecord(event)) return null;
+  const type = event.type;
+  if (!ROOM_EVENT_TYPES.has(type)) {
+    diagnostics?.record(type, type);
+    return null;
+  }
   const matchId = normalizeMatchCode(event.matchId);
   if (matchId === undefined) return null;
   // Whitelist fields before crossing from the page into the extension.
@@ -31,6 +83,10 @@ export function decodeRoomEvent(payload: unknown): RoomRecord | null {
     if (!Number.isSafeInteger(event.version) || event.version < 0 || !roomRecord(event.state)) return null;
     const state = event.state;
     if (!roomRecord(state.team1) || !roomRecord(state.team2) || typeof state.phase !== 'string') return null;
+    if (diagnostics) {
+      try { observeSnapshotFields(event, state, diagnostics); }
+      catch { /* Diagnostic inspection must leave decoding unchanged. */ }
+    }
     return { ...base, version: event.version, state: {
       phase: state.phase.slice(0,40), currentTeam: isRoomTeam(state.currentTeam) ? state.currentTeam : undefined,
       team1: cleanDraftTeam(state.team1), team2: cleanDraftTeam(state.team2),
@@ -111,7 +167,7 @@ function cleanRules(value: unknown): RoomRecord | undefined {
 function cleanMultiplayer(value: unknown): RoomRecord {
   if (!roomRecord(value)) return {};
   const output: RoomRecord = {};
-  for (const key of ['team1Name','team2Name','team1CaptainActorUserId','team2CaptainActorUserId']) if (typeof value[key] === 'string') output[key] = value[key].slice(0,120);
+  for (const key of MULTIPLAYER_TEXT_KEYS) if (typeof value[key] === 'string') output[key] = value[key].slice(0,120);
   if (Array.isArray(value.rankedQueueRoster)) output.rankedQueueRoster = cleanPlayers(value.rankedQueueRoster);
   return output;
 }
@@ -128,8 +184,8 @@ export class RoomEventState {
   private rankedRosterSeen = false;
   private assignmentRosterSeen = { team1: false, team2: false };
 
-  apply(payload: unknown, expectedRoom?: string): { roster?: PrematchRoster; draft?: DraftSnapshot; reason: string } {
-    const event = decodeRoomEvent(payload);
+  apply(payload: unknown, expectedRoom?: string, diagnostics?: UnrecognisedFeedFields): { roster?: PrematchRoster; draft?: DraftSnapshot; reason: string } {
+    const event = decodeRoomEvent(payload, diagnostics);
     if (event === null) return { reason: 'unsupported-event' };
     // Unidentified /host pages must establish identity from visible room UI first.
     if (expectedRoom === undefined || event.matchId !== expectedRoom) return { reason: 'unrelated-room' };

@@ -24,6 +24,7 @@ function lifecycleHarness({ session = {}, local = {}, tabsQuery, failLocalKeys =
     registerExplorerService: () => {},
     isUmaLyticsMessage: () => true,
     getDiagnosticTrace: async () => ['trace'],
+    getUnrecognisedFeedFields: async () => [],
     getApiCooldown: () => undefined, restoreApiCooldown: () => {}, queueTeamIconRefresh: () => Promise.resolve(),
     extractMatchCodeFromUrl: url => url.split('/').at(-1),
     browser: {
@@ -91,8 +92,9 @@ test('with no remembered tab, roster messages wait for the startup reconnect to 
 
 test('a storage failure during startup does not break every later message', async () => {
   const h = lifecycleHarness({ failLocalKeys: ['profileRecovery', 'profileManualRefreshAt'] });
-  const trace = await h.send({ type: 'diagnostic-trace-requested' });
-  assert.deepEqual(Array.from(trace), ['trace']);
+  const report = await h.send({ type: 'diagnostic-trace-requested' });
+  assert.deepEqual(Array.from(report.trace), ['trace']);
+  assert.deepEqual(report.feedFields, []);
   await h.send({ type: 'prematch-roster-detected', roster: roster('ROOM01') }, 1);
   assert.equal(h.state.rosterWrites.length, 1);
   await tick();

@@ -1,4 +1,5 @@
 import { decodeRoomEvent, RoomEventState, summarizeRoomEvent } from '@umalytics/core/room/roomEvents';
+import { UnrecognisedFeedFields } from '@umalytics/core/room/feedDiagnostics';
 import { canReuseSyncedRoster } from '@umalytics/core/room/rosterIdentity';
 import { browser } from 'wxt/browser';
 import type { DraftSnapshot, PrematchRoster } from '@umalytics/shared';
@@ -146,6 +147,20 @@ function handleWindowMessage(message: unknown, matchCode?: string): Promise<void
 async function processWindowMessage(message: unknown, matchCode?: string): Promise<void> {
   if (!isContentScriptActive) {
     return;
+  }
+
+  if (isRecord(message) && message.hookVersion === 4) {
+    if (message.type === 'umalytics:room-feed-fields-ready') {
+      requestCapturedRoomEvents();
+      return;
+    }
+    if (message.type === 'umalytics:room-feed-fields') {
+      const diagnostics = new UnrecognisedFeedFields();
+      diagnostics.merge(message.fields);
+      const fields = diagnostics.snapshot();
+      if (fields.length) void sendDiagnosticEvent({ kind: 'feed-fields', fields }).catch(() => {});
+      return;
+    }
   }
 
   if (isRecord(message) && message.type === 'umalytics:room-event' && message.hookVersion === 4) {

@@ -5,6 +5,7 @@ import { registerHooks } from 'node:module';
 import { replayEnvelopes } from '../apps/desktop/scripts/replay-fixture.mjs';
 import { apiHarness } from './support/helpers.mjs';
 import { livePickEvent } from './fixtures/live-pick-history.mjs';
+import { extraFieldNames, feedFieldsEvent, hiddenValue } from './fixtures/room-feed-fields.mjs';
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
@@ -17,10 +18,26 @@ const hooks = registerHooks({
     return nextResolve(specifier, context);
   }
 });
-const { DesktopRoom } = await import('../apps/desktop/src/feed.ts');
+const { DesktopRoom, feedDiagnostics } = await import('../apps/desktop/src/feed.ts');
 const { decodeRoomEvent } = await import('../packages/core/src/room/roomEvents.ts');
 hooks.deregister();
 const fixture = JSON.parse(fs.readFileSync(new URL('./fixtures/casual-room-replay.json', import.meta.url)));
+
+test('desktop diagnostics count raw feed events once and retain the tally through a disconnect', () => {
+  const room = new DesktopRoom();
+  const event = feedFieldsEvent();
+  const message = { v: 1, roomCode: event.matchId, event };
+  room.apply(message);
+  room.apply(message);
+  assert.equal(room.state.draft.blessing.goddess, 'byerley-turk');
+  room.apply({ v: 1, type: 'left' });
+  const text = feedDiagnostics(undefined, room.unrecognisedFeedFields.snapshot());
+  const entries = JSON.parse(text)['Unrecognised feed fields'];
+  assert.deepEqual(entries.map(entry => entry.name), extraFieldNames);
+  assert(entries.every(entry => entry.count === 2 && entry.firstEventType === 'match.snapshot'));
+  assert(!text.includes(hiddenValue));
+  assert(!text.includes(event.matchId));
+});
 
 test('desktop live order uses the sanitized feed and ignores stale history', () => {
   const room = new DesktopRoom();

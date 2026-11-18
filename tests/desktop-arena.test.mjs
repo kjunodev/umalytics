@@ -13,10 +13,15 @@ function moduleWithMocks(file, imports) {
   return exports;
 }
 function feed() {
+  const { c } = roomHarness();
   class RoomEventState {
     apply(event, code) { this.matchCode = code; this.draft = event.draft; this.roster = event.roster; return { reason: 'match-snapshot' }; }
   }
-  return moduleWithMocks('../apps/desktop/src/feed.ts', { '@umalytics/core/room/roomEvents': { RoomEventState, decodeRoomEvent: roomHarness().c.decodeRoomEvent }, '@umalytics/core/umas/umaPortraits': { normalizeUmaOutfitId: id => id } });
+  return moduleWithMocks('../apps/desktop/src/feed.ts', {
+    '@umalytics/core/room/roomEvents': { RoomEventState, decodeRoomEvent: c.decodeRoomEvent },
+    '@umalytics/core/room/feedDiagnostics': { UnrecognisedFeedFields: vm.runInContext('UnrecognisedFeedFields', c) },
+    '@umalytics/core/umas/umaPortraits': { normalizeUmaOutfitId: id => id }
+  });
 }
 const draft = { teams: {
   team1: { umas: [{ kind: 'pick', team: 'team1', umaId: '100101', name: 'First', order: 1 }] },
@@ -49,7 +54,8 @@ test('pick strip never infers global order from per-team order numbers', () => {
 test('copy diagnostics excludes all source identifiers and accepts only known states and numeric counts', () => {
   const { feedDiagnostics } = feed();
   const diagnostic = feedDiagnostics({ state: 'port-in-use', accepted: 12, rejected: 1, discordId: '123456789012345678', token: 'secret', roomCode: 'PRIVATE' });
-  assert.deepEqual(JSON.parse(diagnostic), { app: 'UmaLytics', listener: '127.0.0.1:38917', state: 'port-in-use', accepted: 12, rejected: 1 });
+  assert.deepEqual(JSON.parse(diagnostic), { app: 'UmaLytics', listener: '127.0.0.1:38917',
+    state: 'port-in-use', accepted: 12, rejected: 1, 'Unrecognised feed fields': 'none' });
   assert(!/secret|PRIVATE|123456789012345678/.test(diagnostic));
   assert.equal(JSON.parse(feedDiagnostics({ state: 'secret', accepted: 'secret', rejected: -1 })).state, 'starting');
 });

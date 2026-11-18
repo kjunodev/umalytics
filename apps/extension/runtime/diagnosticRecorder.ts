@@ -1,11 +1,16 @@
 import { browser } from 'wxt/browser';
+import { UnrecognisedFeedFields, type UnrecognisedFeedField } from '@umalytics/core/room/feedDiagnostics';
 
 const TRACE_KEY = 'diagnosticTraceV1';
+const FEED_FIELDS_SESSION_KEY = 'unrecognisedFeedFields';
 const TRACE_LIMIT = 200;
 let trace: Record<string, string | number>[] = [];
 let loaded: Promise<void> | undefined;
 let flushTimer: ReturnType<typeof setTimeout> | undefined;
 let writes = Promise.resolve();
+const feedFields = new UnrecognisedFeedFields();
+let feedFieldsLoaded: Promise<void> | undefined;
+let feedFieldsWrites = Promise.resolve();
 
 /** Strict field/value allowlist: never store payloads, names, player identifiers,
  * URLs, chat text, request/assignment tokens, or arbitrary error strings. */
@@ -38,7 +43,21 @@ function loadTrace(): Promise<void> {
   }).catch(() => {});
 }
 
-export function recordDiagnostic(value: unknown): void {
+function loadFeedFields(): Promise<void> {
+  return feedFieldsLoaded ??= Promise.resolve(browser.storage.session?.get(FEED_FIELDS_SESSION_KEY)).then(values => {
+    feedFields.merge(values?.[FEED_FIELDS_SESSION_KEY]);
+  }).catch(() => {});
+}
+
+export function recordDiagnostic(value: unknown): void | Promise<void> {
+  if (value && typeof value === 'object' && 'kind' in value && value.kind === 'feed-fields' && 'fields' in value) {
+    feedFieldsWrites = feedFieldsWrites.then(async () => {
+      await loadFeedFields();
+      feedFields.merge(value.fields);
+      await browser.storage.session?.set({ [FEED_FIELDS_SESSION_KEY]: feedFields.snapshot() });
+    }).catch(() => {});
+    return feedFieldsWrites;
+  }
   const clean = sanitizeDiagnostic(value);
   if (!clean) return;
   void loadTrace().then(() => {
@@ -57,4 +76,10 @@ export function recordDiagnostic(value: unknown): void {
 export async function getDiagnosticTrace(): Promise<Record<string, string | number>[]> {
   await loadTrace();
   return trace.map(entry => ({ ...entry }));
+}
+
+export async function getUnrecognisedFeedFields(): Promise<UnrecognisedFeedField[]> {
+  await loadFeedFields();
+  await feedFieldsWrites;
+  return feedFields.snapshot();
 }

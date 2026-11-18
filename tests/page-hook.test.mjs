@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { evaluate, context, players, roomHarness, matchEvent } from './support/helpers.mjs';
+import { evaluate, context, contentRoomHarness, players, roomHarness, matchEvent } from './support/helpers.mjs';
+import { extraFieldNames, feedFieldsEvent, hiddenValue } from './fixtures/room-feed-fields.mjs';
 
 // The page hook runs as a MAIN-world content script; tests load its runtime directly.
 function hookHarness({href='https://drafter.uma.guide/host',room='M95Z2Z'}={}) {
@@ -87,4 +88,33 @@ test('live events are always forwarded; only the replay buffer drops older versi
   h.messages.length=0;
   h.c.replayRoomEvents({source:h.w,origin:h.w.location.origin,data:{type:'umalytics:request-room-events'}});
   assert.deepEqual(h.messages.map(m=>m.payload.version),[5]);
+});
+
+test('feed-field diagnostics cross into the content script once and stay out of room-event payloads', async () => {
+  const h = hookHarness({ room: 'FX3A2B' });
+  h.frame(feedFieldsEvent());
+  h.frame({ type: 'room.future.updated', privateValue: hiddenValue });
+  const replay = () => h.c.replayRoomEvents({ source: h.w, origin: h.w.location.origin, data: { type: 'umalytics:request-room-events' } });
+  replay();
+  replay();
+  h.frame(feedFieldsEvent());
+  const roomEvents = h.messages.filter(message => message.type === 'umalytics:room-event');
+  assert.equal(roomEvents.length, 4);
+  assert(roomEvents.every(message => message.payload.type === 'match.snapshot'));
+  assert(!JSON.stringify(h.messages).includes(hiddenValue));
+  assert(!JSON.stringify(roomEvents).includes('futureSnapshot'));
+  const diagnostics = h.messages.filter(message => message.type === 'umalytics:room-feed-fields');
+  assert.equal(diagnostics.length, 2);
+  assert.deepEqual(Array.from(diagnostics[0].fields, field => field.name), [...extraFieldNames, 'room.future.updated']);
+  assert.deepEqual(Array.from(diagnostics[1].fields, field => field.name), extraFieldNames);
+
+  const { c } = contentRoomHarness();
+  const forwarded = [];
+  c.sendDiagnosticEvent = async event => forwarded.push(event);
+  diagnostics[0].fields.push({ name: 'AB3-D9E', count: 1, firstEventType: 'match.snapshot', privateValue: hiddenValue });
+  for (const message of diagnostics) await c.handleWindowMessage(message);
+  assert.equal(forwarded.length, 2);
+  assert(forwarded.every(event => event.kind === 'feed-fields'));
+  assert.deepEqual(Array.from(forwarded[0].fields, field => field.name), [...extraFieldNames, 'room.future.updated']);
+  assert(!JSON.stringify(forwarded).includes(hiddenValue));
 });
