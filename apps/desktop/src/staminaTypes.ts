@@ -6,6 +6,7 @@ export interface Course {
   race_id: number; grade: number; time: number; month: number; instance_reason: string; unavailable_reason: string | null;
 }
 export interface CatalogSkill { id: number; name: string; hp_recovery: boolean; rarity: 'white' | 'gold' | 'unique'; icon_path: string | null }
+export const displaySkillName = (name: string) => name.replace(/ \(inherited\)$/, '');
 export interface HpEffect { value: number; conditional: boolean; other_runner: boolean }
 export interface CatalogUma {
   card_id: number;

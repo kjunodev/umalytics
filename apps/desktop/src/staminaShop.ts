@@ -1,7 +1,7 @@
 import { priceAfterTier, type SkillChain, type TierStep } from './staminaScreenshot';
-import type { Catalog, CatalogSkill, HpEffect } from './staminaTypes';
+import { displaySkillName, type Catalog, type CatalogSkill, type HpEffect } from './staminaTypes';
 
-export type ShopFilter = 'All' | 'Recoveries' | 'Gold' | 'Affordable';
+export type ShopFilter = 'All' | 'Recoveries' | 'Gold';
 export type ShopSort = 'name' | 'price' | 'recovery';
 
 export function hpPercent(value: number): string {
@@ -24,25 +24,25 @@ export function shopOffers(chains: SkillChain[], purchases: TierStep[], catalog:
       const positives = hp.filter(effect => effect.value > 0);
       const recovery = positives.length > 0 || (!step.removal && !!meta?.hp_recovery);
       const gold = !step.removal && meta?.rarity === 'gold';
-      const name = `${step.removal ? 'Remove ' : ''}${meta?.name ?? `Skill ${step.id}`}`;
+      const skillName = displaySkillName(meta?.name ?? `Skill ${step.id}`);
+      const name = step.removal ? `Remove ${skillName}` : skillName;
       const price = index === selected ? step.total : priceAfterTier(chain, step, paid?.id);
-      const extraCost = price === null ? null : index <= selected ? 0 : price;
+      const extraCost = index > selected ? price : null;
       const hpSort = positives.length ? Math.max(...positives.map(effect => effect.value))
         : hp.length ? Math.min(...hp.map(effect => effect.value)) : null;
-      return { chain, tiers, selected, index, step, name, meta, hp, recovery, gold, price, extraCost, hpSort };
+      return { chain, tiers, selected, index, step, name, skillName, meta, hp, recovery, gold, price, extraCost, hpSort };
     });
   });
 }
 
-export function filterShopOffers(offers: ReturnType<typeof shopOffers>, filter: ShopFilter, query: string, left: number | null, sort: ShopSort, descending: boolean) {
+export function filterShopOffers(offers: ReturnType<typeof shopOffers>, filter: ShopFilter, query: string, sort: ShopSort, descending: boolean) {
   const match = query.trim().toLocaleLowerCase();
   const compareAmount = (left: number | null, right: number | null) => {
     if (left === null || right === null) return Number(left === null) - Number(right === null);
     return (left - right) * (descending ? -1 : 1);
   };
   return offers.filter(offer => offer.name.toLocaleLowerCase().includes(match) &&
-    (filter === 'All' || filter === 'Recoveries' && offer.recovery || filter === 'Gold' && offer.gold
-      || filter === 'Affordable' && left !== null && offer.extraCost !== null && offer.extraCost <= left))
+    (filter === 'All' || filter === 'Recoveries' && offer.recovery || filter === 'Gold' && offer.gold))
     .sort((a, b) => {
       const name = a.name.localeCompare(b.name);
       if (sort === 'name') return name * (descending ? -1 : 1);

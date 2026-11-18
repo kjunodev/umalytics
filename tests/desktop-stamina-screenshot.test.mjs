@@ -149,13 +149,32 @@ test('a scanned double-circle price can establish the missing single-circle disc
   assert.equal(chain.steps[0].inferredFrom, 200181);
 });
 
-test('recovers a Max hint from an overlapping screenshot and flags an unreadable price', () => {
-  const unknown = { ...offer(201282, 108, null), hintUnreadable: true };
-  const noHint = tierChains([unknown], catalog);
-  assert.equal(purchasePlan(noHint, [201282], 200).left, null);
-  const withHint = tierChains([unknown, offer(201282, 108, 5)], catalog);
-  assert.equal(withHint[0].steps[0].total, 108);
-  assert.equal(withHint[0].steps[0].priceIssue, 'Price unverified');
+test('Focus at 84 SP recovers Hint Max from a misread or unreadable hint', () => {
+  const focus = { 1: { cost: 140, tier: null } };
+  for (const read of [offer(1, 84, 4), { ...offer(1, 84, null), hintUnreadable: true }]) {
+    const [chain] = tierChains([read], focus);
+    assert.deepEqual(costs(chain), [[1, 84, null]]);
+    assert.equal(chain.steps[0].hint, 5);
+    assert.equal(purchasePlan([chain], [1], 100).left, 16);
+  }
+  assert.deepEqual(costs(tierChains([offer(1, 74, 4)], focus)[0]), [[1, 91, 'Price mismatch']]);
+  assert.equal(tierChains([offer(1, 84, 4), offer(1, 91, 4)], focus)[0].steps[0].priceIssue, 'Price mismatch');
+  assert.equal(tierChains([offer(1, 84, 4), offer(1, 84, 5)], focus)[0].steps[0].priceIssue, 'Price mismatch');
+});
+
+test('reconciled lower and gold prices preserve the full price and incremental upgrade', () => {
+  const [chain] = tierChains([offer(200541, 225, 4), offer(200542, 117, 3)], catalog);
+  assert.deepEqual(costs(chain), [[200542, 117, null], [200541, 225, null]]);
+  assert.deepEqual(chain.steps.map(step => step.hint), [4, 5]);
+  assert.equal(priceAfterTier(chain, chain.steps[1], 200542), 108);
+});
+
+test('removal scans reconcile hints and carry the verified removal cost into upgrades', () => {
+  const [chain] = tierChains([owned(200033), offer(200033, 30, 4), offer(200032, 120, null)], catalog);
+  const [removal, circle] = chain.steps.filter(step => step.selectable);
+  assert.deepEqual([removal.hint, removal.total, removal.priceIssue, circle.total], [5, 30, null, 120]);
+  assert.equal(priceAfterTier(chain, circle, 200033), 90);
+  assert.equal(tierChains([offer(200033, 29, 4)], catalog)[0].steps.find(step => step.removal).priceIssue, 'Price mismatch');
 });
 
 test('restores scans and keeps a finished Uma build without a budget or purchasable skills', () => {

@@ -137,13 +137,13 @@ try {
     const page = await open('stamina-screenshot-import', 1120, 980, { compactThreshold: 440 });
     await nav(page, 'Stamina');
     const tab = page.getByRole('tab', { name: 'Build', exact: true });
-    const positions = () => page.evaluate(() => ['.stamina-toolbar', '.result-empty'].map(selector => {
-      const rect = document.querySelector(selector).getBoundingClientRect();
+    const position = () => page.evaluate(() => {
+      const rect = document.querySelector('.stamina-toolbar').getBoundingClientRect();
       const origin = document.querySelector('.stamina-layout').getBoundingClientRect();
       return [Math.round(rect.left - origin.left), Math.round(rect.top - origin.top), Math.round(rect.width)];
-    }).flat().join(','));
+    });
     await page.getByRole('button', { name: 'Import from screenshots' }).waitFor();
-    const originalPositions = await positions();
+    const originalPosition = await position();
     check(await tab.count() === 1 && await page.locator('.shop-budget').count() === 0, 'Build is available before applying a scan');
     await page.getByRole('button', { name: 'Assessment', exact: true }).click();
     await page.getByRole('button', { name: 'Import from screenshots' }).click();
@@ -188,7 +188,8 @@ try {
     const budget = shop.locator('.shop-budget');
     await budget.getByText('200 / 200 SP left', { exact: true }).waitFor();
     check(await tab.getAttribute('aria-selected') === 'true' && await panel.isVisible(), 'Applying a scan opens the Build tab in the build editor');
-    check(await positions() === originalPositions, 'Applying a scan keeps the toolbar and empty result in place');
+    check(JSON.stringify(await position()) === JSON.stringify(originalPosition) && await page.locator('.result-empty').count() === 0,
+      'Applying a scan keeps the toolbar in place and gives the empty result space to the shop');
     await shot(page, 'stamina-scanned-skills');
     check(await panel.getByRole('region', { name: 'Owned' }).locator('.build-skill-row').count() === 3, 'Career and Obtained rows are locked and deduplicated');
     const fastPaced = panel.getByRole('region', { name: 'Owned' }).locator('.build-skill-row').filter({ hasText: 'Fast-Paced' });
@@ -263,9 +264,10 @@ try {
     await shop.getByRole('option', { name: 'Replay Recovery II', exact: true }).click();
     check(await panel.getByRole('region', { name: 'Owned' }).getByText('Replay Recovery II', { exact: true }).count() === 1 &&
       await budget.getByText('80 / 200 SP left').count() === 1, 'A manual skill can augment a scan without spending SP');
-    const restoredPositions = await positions();
+    const restoredPosition = await position();
     await shop.getByRole('button', { name: 'Remove scan' }).click();
-    check(await budget.count() === 0 && await positions() === restoredPositions, 'Removing the scan clears the budget and keeps the main column in place');
+    check(await budget.count() === 0 && await page.locator('.result-empty').count() === 1 &&
+      JSON.stringify(await position()) === JSON.stringify(restoredPosition), 'Removing the scan restores the empty result and keeps the toolbar in place');
     const undo = page.getByRole('button', { name: 'Undo import' });
     await undo.click();
     check(await page.getByRole('spinbutton', { name: 'Stamina', exact: true }).inputValue() === '600' && await undo.count() === 0, 'Undo import restores the pre-import build after reload');
@@ -441,7 +443,8 @@ try {
   async function importShopShots() {
     for (const [width, height] of [[1280, 800], [1000, 700], [440, 860]]) {
       const name = scene => `import-shop-${scene}-${width}x${height}`;
-      const page = await open('stamina-import-shop', width, height, { compactThreshold: 440 });
+      const memory = width === 1280 ? { input: { build: { umaCardId: 103102, skills: [{ id: 110311, level: 5 }, { id: 910311, level: 1 }] } } } : undefined;
+      const page = await open('stamina-import-shop', width, height, { compactThreshold: 440 }, memory);
       await nav(page, 'Stamina');
       const editor = page.getByRole('complementary', { name: 'Build editor' });
       const shop = page.getByRole('region', { name: 'Skill shop' });
@@ -460,7 +463,14 @@ try {
         await page.waitForFunction(() => !!window.__SHOT_CONTROL__.scrolling);
       };
       await editor.waitFor();
-      check(await shop.count() === 0 && await editor.getByRole('button', { name: 'Add any skill' }).count() === 1, 'Manual Build has no shop');
+      check(await shop.count() === 0 && await editor.getByRole('button', { name: 'Add any skill' }).count() === 1 &&
+        await page.locator('.result-empty').count() === 1, 'Manual Build keeps the empty result with no shop');
+      if (width === 1280) {
+        const owned = editor.getByRole('region', { name: 'Owned' });
+        await owned.getByText('Unique', { exact: true }).waitFor();
+        check(await owned.getByText('Fresh☆Parlor', { exact: true }).count() === 2 && !(await owned.innerText()).includes('(inherited)'),
+          'Owned preserves both same-name skills and marks the original unique');
+      }
       await editor.scrollIntoViewIfNeeded();
       await shot(page, name('build-without-scan'));
       await openImport.click();
@@ -507,11 +517,23 @@ try {
       check(await match.evaluate(el => el === document.activeElement) && await shop.count() === 0, 'A queued unknown skill blocks apply and receives focus');
       await shot(page, name('blocked-apply'));
       await match.click();
-      await dialog.getByRole('combobox', { name: 'Search skills' }).fill('Fresh☆Parlor (inherited)');
-      await dialog.getByRole('option', { name: 'Fresh☆Parlor (inherited)', exact: true }).click();
+      const reviewSearch = dialog.getByRole('combobox', { name: 'Search skills' });
+      await reviewSearch.fill('Fresh☆Parlor');
+      check(await dialog.getByRole('option', { name: 'Fresh☆Parlor, unique skill', exact: true }).count() === 1,
+        'The review picker distinguishes the unique from the same-name inherited skill');
+      if (width === 1280) {
+        await guide.locator('li').first().dispatchEvent('pointerdown');
+        await reviewSearch.waitFor({ state: 'hidden' });
+        check(await dialog.isVisible(), 'An outside pointer down closes only the review picker');
+        await match.click();
+        await reviewSearch.fill('Fresh☆Parlor');
+      }
+      await dialog.getByRole('option', { name: 'Fresh☆Parlor', exact: true }).click();
+      check(await dialog.locator('.skill-chip').getByText('Fresh☆Parlor', { exact: true }).count() === 1, 'The selected chip uses the short name');
       check(/^Apply \d+ skills and stats$/.test(await apply.innerText()), 'Apply states the reviewed skill count and stats');
       await apply.click();
       await shop.waitFor();
+      check(await page.getByRole('region', { name: 'Result', exact: true }).count() === 0, 'The shop takes the main column before the first check');
       await editor.getByRole('button', { name: 'Open skill shop' }).click();
       check(await shop.evaluate(el => el === document.activeElement), 'Build’s shop link focuses the card');
       const shopScroll = shop.locator('.shop-scroll');
@@ -522,6 +544,37 @@ try {
       await shopScroll.evaluate(el => { el.scrollTop = 0; });
       await shot(page, name('shop-all'));
       const filter = shop.getByRole('group', { name: 'Filter skill offers' });
+      check((await filter.getByRole('button').allTextContents()).join(',') === 'All,Recoveries,Gold', 'The shop keeps all unaffordable offers visible');
+      check(await shop.locator('td[title="23 SP over"].muted').count() === 1 && await shop.locator('td[title$=" SP over"]').count() === 1 &&
+        await shop.getByRole('button', { name: 'Increase tier for Swinging Maestro', exact: true }).isEnabled(),
+        'Only the over-budget row is muted and it stays purchasable');
+      if (width === 1280) {
+        await shot(page, name('shop-before-check'));
+        const add = shop.getByRole('button', { name: 'Add any skill', exact: true });
+        const manualSearch = shop.getByRole('combobox', { name: 'Search skills' });
+        const cancel = shop.getByRole('button', { name: 'Cancel', exact: true });
+        await add.click();
+        await manualSearch.fill('Recovery');
+        await shot(page, name('skill-picker-open'));
+        await cancel.click();
+        await page.waitForFunction(() => document.activeElement?.textContent === 'Add any skill');
+        check(await add.evaluate(el => el === document.activeElement), 'Cancel returns focus to the shop Add button');
+        await add.click();
+        await manualSearch.press('Escape');
+        await page.waitForFunction(() => document.activeElement?.textContent === 'Add any skill');
+        check(await add.evaluate(el => el === document.activeElement), 'Escape returns focus to the shop Add button');
+        await add.click();
+        await filter.getByRole('button', { name: 'Gold', exact: true }).click();
+        await manualSearch.waitFor({ state: 'hidden' });
+        check(await filter.getByRole('button', { name: 'Gold', exact: true }).getAttribute('aria-pressed') === 'true', 'Outside click closes the picker and activates its target');
+        await filter.getByRole('button', { name: 'All', exact: true }).click();
+        await shop.getByRole('button', { name: 'Increase tier for Fresh☆Parlor', exact: true }).click();
+        await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+        await shop.getByRole('button', { name: 'Copy list', exact: true }).click();
+        await shop.getByText('List copied', { exact: true }).waitFor();
+        check(await page.evaluate(() => navigator.clipboard.readText()) === 'Fresh☆Parlor — 200 SP', 'Copy list uses the short name');
+        await shop.getByRole('button', { name: 'Decrease tier for Fresh☆Parlor', exact: true }).click();
+      }
       await filter.getByRole('button', { name: 'Recoveries', exact: true }).click();
       await shop.getByRole('button', { name: 'Recovery', exact: true }).click();
       const heal = shop.getByText('5.5% HP', { exact: true });
@@ -530,6 +583,7 @@ try {
       await shop.getByRole('button', { name: 'Run check', exact: true }).click();
       await page.locator('.stamina-headline').waitFor();
       check(await shop.getByRole('table').innerText() === hpBefore, 'A run leaves shop HP percentages unchanged');
+      check(await page.locator('.stamina-results + .skill-shop').count() === 1, 'A completed result appears above the shop');
       await shot(page, name('shop-recoveries'));
       await filter.getByRole('button', { name: 'All', exact: true }).click();
       const search = shop.getByRole('searchbox', { name: 'Search skill offers' });
@@ -538,7 +592,7 @@ try {
         'A drain is signed and tagged');
       await search.fill('');
       await shop.getByRole('button', { name: 'Increase tier for Swinging Maestro', exact: true }).click();
-      await shop.getByText('123 SP over budget', { exact: true }).waitFor();
+      await shop.getByText('23 SP over budget', { exact: true }).waitFor();
       check(await shop.getByText('1 · 323 SP', { exact: true }).count() === 1 && await shop.locator('tr[data-bought=true]').count() === 1,
         'A tier selection updates Buying, budget, and the highlighted row');
       await shopScroll.evaluate(el => { el.scrollTop = 0; });

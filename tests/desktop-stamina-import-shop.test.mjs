@@ -16,7 +16,8 @@ function load(name, imports = {}) {
 const plain = value => JSON.parse(JSON.stringify(value));
 const guide = load('staminaImportGuide');
 const prices = load('staminaScreenshot');
-const shop = load('staminaShop', { './staminaScreenshot': prices });
+const types = load('staminaTypes');
+const shop = load('staminaShop', { './staminaScreenshot': prices, './staminaTypes': types });
 const scan = (screen, n = 0, attributes = null) => ({ screen, skills: Array(n).fill({}), attributes });
 
 test('import guide tracks recognized screens and newly found rows independently of capture order', () => {
@@ -49,7 +50,7 @@ test('the import submit handler drains the scan before rechecking blockers and k
 
 const skills = [{ id: 1, name: 'Corner Recovery ○', rarity: 'white', hp_recovery: true },
   { id: 2, name: 'Swinging Maestro', rarity: 'gold', hp_recovery: true },
-  { id: 3, name: 'Plancha', rarity: 'unique', hp_recovery: false }, { id: 4, name: 'Unpriced', rarity: 'white' }];
+  { id: 3, name: 'Plancha (inherited)', rarity: 'white', hp_recovery: false }, { id: 4, name: 'Unpriced', rarity: 'white' }];
 const hp = (value, conditional = true, other_runner = false) => ({ value, conditional, other_runner });
 const points = { 1: { cost: 153, tier: { group: 1, rank: 1 } }, 2: { cost: 180, tier: { group: 1, rank: 2 } },
   3: { cost: 100, tier: null }, 4: { cost: null, tier: null } };
@@ -61,14 +62,16 @@ test('shop filters and sorts names, prices and HP, and checks the incremental co
   const plan = prices.purchasePlan(chains, [1], 340);
   const offers = shop.shopOffers(chains, plan.purchases, catalog);
   const list = (filter = 'All', query = '', sort = 'name', desc = false) =>
-    plain(shop.filterShopOffers(offers, filter, query, plan.left, sort, desc).map(row => row.step.id));
+    plain(shop.filterShopOffers(offers, filter, query, sort, desc).map(row => row.step.id));
   assert.deepEqual(list(), [1, 3, 2, 4]);
   assert.deepEqual(list('Recoveries', '', 'recovery', true), [2, 1]);
   assert.deepEqual(list('Gold'), [2]);
-  assert.deepEqual(list('Affordable', '', 'price'), [3, 1, 2]);
+  assert.deepEqual(list('All', '', 'price'), [3, 1, 2, 4]);
   assert.deepEqual(list('All', 'maestro'), [2]);
   assert.deepEqual(list('All', '', 'recovery'), [3, 1, 2, 4]);
-  assert.equal(offers.find(row => row.step.id === 2).price, 180);
+  assert.deepEqual(plain(offers.map(row => row.extraCost)), [null, 180, 100, null]);
+  assert.equal(offers.find(row => row.step.id === 3).name, 'Plancha');
+  assert.equal(catalog.skills[2].name, 'Plancha (inherited)');
   assert.deepEqual([plan.purchases.length, plan.spent, plan.left], [1, 153, 187]);
 });
 

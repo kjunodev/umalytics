@@ -5,7 +5,7 @@ import { SkillPicker } from './SkillPicker';
 import { StaminaUmaPicker } from './StaminaUmaPicker';
 import { importApplyLabel, importGuide, importGuideProgress, type ImportGuide } from './staminaImportGuide';
 import { purchasePlan, tierChains, type Observation, type Screen, type Screenshot, type ScreenshotImport } from './staminaScreenshot';
-import type { Catalog, StaminaEditorBuild } from './staminaTypes';
+import { displaySkillName, type Catalog, type StaminaEditorBuild } from './staminaTypes';
 
 const screens: Record<Screen, string> = {
   'attributes-numbers': 'Career Attributes · Number view',
@@ -238,7 +238,7 @@ export function StaminaScreenshotImport({ catalog, recent, recentUmas, onRecent,
   const ignored = [...new Set(rows.flatMap(row => {
     if (row.resolution === 'ignored_no_race_effect') return [row.raw_name];
     const id = resolved[row.key];
-    return id !== undefined && !canSimulate(id) ? [catalog.skills.find(skill => skill.id === id)?.name ?? row.raw_name] : [];
+    return id !== undefined && !canSimulate(id) ? [displaySkillName(catalog.skills.find(skill => skill.id === id)?.name ?? row.raw_name)] : [];
   }))];
   const unknown = rows.filter(row => row.resolution === null);
   const suggestions = unknown.flatMap(row => row.variant_choice?.suggested !== undefined && resolved[row.key] === undefined

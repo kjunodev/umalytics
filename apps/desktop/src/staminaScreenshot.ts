@@ -31,6 +31,7 @@ export interface ScreenshotImport {
 }
 
 export const hintDiscount = (hint: number | null) => [0, 10, 20, 30, 35, 40][hint ?? 0] ?? 0;
+const hintLevels = [null, 1, 2, 3, 4, 5];
 
 export function discountedPrice(base: number, hint: number | null): number {
   return Math.floor(base * (100 - hintDiscount(hint)) / 100);
@@ -70,6 +71,26 @@ export interface SkillChain {
   key: string;
   owned?: { id: number; level: number };
   steps: TierStep[];
+}
+
+function reconcileOffer(offers: Observation[], hint: number | null | undefined, prefix: number | null,
+  price: (hint: number | null | undefined) => number | null) {
+  const scanned = [...new Set(offers.flatMap(offer => offer.price === null ? [] : [offer.price]))].sort((a, b) => a - b);
+  const readHints = new Set(offers.filter(offer => !offer.hintUnreadable && !offer.hintConflict).map(offer => offer.hint));
+  const withPrerequisite = (own: number | null) => own === null || prefix === null ? null : own + prefix;
+  const tierPrice = price(hint);
+  const total = withPrerequisite(tierPrice);
+  const disputed = scanned.length > 1 || readHints.size > 1;
+  if (!disputed && scanned.length === 1 && prefix !== null && price(null) !== null) {
+    const observed = scanned[0]!;
+    const matches = hintLevels.filter(level => withPrerequisite(price(level)) === observed);
+    if (matches.length === 1) {
+      return { hint: matches[0]!, tierPrice: observed - prefix, total: observed, scanned, mismatch: false, verified: true };
+    }
+    // Rounding can give several hints the same price. Keep a matching read without guessing a hint.
+    return { hint, tierPrice, total, scanned, mismatch: matches.length === 0, verified: total === observed };
+  }
+  return { hint, tierPrice, total, scanned, mismatch: disputed, verified: false };
 }
 
 export function tierChains(rows: Observation[], catalog: ImportCatalog): SkillChain[] {
@@ -113,10 +134,9 @@ export function tierChains(rows: Observation[], catalog: ImportCatalog): SkillCh
     const removalId = ownedId !== undefined && ownedRank < 0 ? ownedId : undefined;
     const removalReads = removalId === undefined ? [] : seen.get(removalId)!.learn.filter(row => !row.owned);
     const removalAvailable = removalReads.length > 0 || ids.some(id => rank(id) > 0 && seen.get(id)!.learn.some(row => !row.owned));
-    const removalPrices = [...new Set(removalReads.flatMap(row => row.price === null ? [] : [row.price]))];
-    const removalHint = removalId === undefined ? null : hintFor(removalId);
-    const calculatedRemoval = removalId === undefined ? 0 : price(removalId, removalHint);
-    const removalPrice = removalPrices.length === 1 ? removalPrices[0]! : removalPrices.length === 0 ? calculatedRemoval : null;
+    const removal = removalId === undefined ? undefined : reconcileOffer(removalReads, hintFor(removalId), 0, hint => price(removalId, hint));
+    const removalPrice = removal === undefined ? 0 : removal.scanned.length > 1 ? null
+      : removal.total ?? (!removal.mismatch ? removal.scanned[0] ?? null : null);
     const lastOfferedRank = Math.max(ownedRank, ...ids.filter(id => seen.get(id)!.learn.length).map(rank));
     for (const id of (group === undefined ? [] : catalogGroups.get(group) ?? [])) {
       const hintFrom = catalog[id]?.hint_from;
@@ -152,7 +172,7 @@ export function tierChains(rows: Observation[], catalog: ImportCatalog): SkillCh
       const offers = seen.get(id)?.learn.filter(read => !read.owned) ?? [];
       if (!offers.length || offers.some(read => read.price === null || read.hintConflict || read.hintUnreadable ||
         (read.hint !== null && read.hint !== ownHint))) continue;
-      const hints = [null, 1, 2, 3, 4, 5].filter(hint => offers.every(read =>
+      const hints = hintLevels.filter(hint => offers.every(read =>
         discountedPrice(base, hint) === read.price! - own - knownTotal));
       if (hints.length !== 1) continue;
       const matches = candidates.get(lower) ?? [];
@@ -163,39 +183,40 @@ export function tierChains(rows: Observation[], catalog: ImportCatalog): SkillCh
       const first = matches[0]!;
       return matches.every(match => match.hint === first.hint) ? [[id, first] as const] : [];
     }));
-    const effectiveHint = (id: number) => inferred.has(id) ? inferred.get(id)!.hint : hintFor(id);
+    const priced = new Map<number, TierStep>();
+    const effectiveHint = (id: number) => {
+      if (inferred.has(id)) return inferred.get(id)!.hint;
+      const from = catalog[id]?.hint_from;
+      const lower = from === undefined ? undefined : priced.get(from);
+      if (lower?.tierPrice != null && (scannedHint(id) === undefined || !seen.get(id)?.learn.length)) return lower.hint;
+      return hintFor(id);
+    };
     const needsHint = (id: number) => !inferred.has(id) && needsObservation(id);
     const steps = ids.flatMap<TierStep>(id => {
       const reads = seen.get(id)?.learn ?? [];
       const offers = reads.filter(row => !row.owned);
-      const scanned = [...new Set(offers.flatMap(offer => offer.price === null ? [] : [offer.price]))].sort((a, b) => a - b);
       const prerequisites = prerequisitesFor(id);
-      const prices = prerequisites.map(lower => price(lower, effectiveHint(lower)));
+      const prices = prerequisites.map(lower => priced.get(lower)?.tierPrice ?? null);
       const prefix = removalPrice === null || prices.some(value => value === null) ? null : prices.reduce<number>((sum, value) => sum + (value ?? 0), removalPrice);
-      const withPrerequisite = (own: number | null) => own === null || prefix === null ? null : own + prefix;
-      const hint = effectiveHint(id);
-      const tierPrice = price(id, hint);
-      const total = withPrerequisite(tierPrice);
-      const mismatch = offers.some(offer => {
-        const calculated = withPrerequisite(price(id, offer.hintUnreadable ? hint : offer.hint));
-        return offer.price !== null && calculated !== null && offer.price !== calculated;
-      });
+      const { hint, tierPrice, total, scanned, mismatch, verified } = reconcileOffer(offers, effectiveHint(id), prefix, hint => price(id, hint));
       const isOwned = rank(id) <= ownedRank || rank(id) < 0;
-      const unverified = (!isOwned && (total === null || needsHint(id) || prerequisites.some(needsHint)))
-        || reads.some(row => row.hintUnreadable || row.hintConflict || (!row.owned && row.price === null));
+      const unverified = !verified && ((!isOwned && (total === null || needsHint(id) || prerequisites.some(needsHint)))
+        || reads.some(row => row.hintUnreadable || row.hintConflict || (!row.owned && row.price === null)));
       if (rank(id) < 0 && id !== removalId) return [];
       if (isOwned && id !== removalId && !seen.get(id)?.owned && !offers.length) return [];
       const step: TierStep = { id, rank: rank(id), owned: isOwned, selectable: !isOwned, hint: hint ?? null, tierPrice, total, scanned,
         inferredFrom: inferred.get(id)?.from,
         estimated: !isOwned && removalId !== undefined,
         priceIssue: mismatch ? 'Price mismatch' : unverified ? 'Price unverified' : null };
-      if (id !== removalId) return [step];
+      priced.set(id, step);
+      if (!removal || id !== removalId) return [step];
       const penalty = { ...step, total: null, tierPrice: null, scanned: [], priceIssue: null };
       if (!removalAvailable) return [penalty];
       return [
         penalty,
-        { ...step, rank: 0, owned: false, selectable: true, removal: true, total: removalPrice, tierPrice: removalPrice,
-          priceIssue: removalPrices.length !== 1 ? 'Price unverified' : calculatedRemoval !== null && calculatedRemoval !== removalPrice ? 'Price mismatch' : null },
+        { ...step, rank: 0, owned: false, selectable: true, removal: true, hint: removal.hint ?? null,
+          total: removalPrice, tierPrice: removalPrice, scanned: removal.scanned,
+          priceIssue: removal.mismatch ? 'Price mismatch' : removal.verified ? null : 'Price unverified' },
       ];
     });
     return { key, owned, steps };

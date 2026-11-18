@@ -135,7 +135,7 @@ progress { width: 100%; accent-color: var(--accent-blue); }
 .desktop-tool tbody :is(th, td) { font-size: 15px; }
 .current-row { background: var(--status-loss-bg); color: var(--accent-orange); }
 .run-details { font-size: 11px; }
-.stamina-results footer { color: var(--text-muted); font-size: 11px; line-height: 1.5; }
+.stamina-results footer, .stamina-main > footer { color: var(--text-muted); font-size: 11px; line-height: 1.5; }
 .result-empty { gap: 14px; }
 pre { white-space: pre-wrap; overflow-wrap: anywhere; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
@@ -248,7 +248,8 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; }
 .skill-chip .skill-level { display: flex; flex-direction: row; align-items: center; gap: 3px; font-size: 10px; }
 .skill-level select { width: 42px; padding: 0 2px; font-size: 12px; }
 .skill-typeahead { flex: 1 0 100%; min-width: 0; }
-.skill-typeahead > input { border-color: var(--accent-blue); border-radius: var(--radius-xl); }
+.skill-typeahead-search { display: flex; align-items: center; gap: 6px; }
+.skill-typeahead-search input { flex: 1; min-width: 0; }
 .skill-options { margin-top: 6px; max-height: 220px; overflow-y: auto; overscroll-behavior: contain; border: 1px solid var(--border-emphasis); border-radius: var(--radius-md); background: var(--bg-page); }
 .skill-options button { display: flex; width: 100%; align-items: center; text-align: left; gap: 8px; padding: 6px 8px; border: 0; border-radius: 0; font-size: 12px; white-space: normal; }
 .skill-options button > span:not(.skill-icon) { flex: 1; overflow-wrap: anywhere; }

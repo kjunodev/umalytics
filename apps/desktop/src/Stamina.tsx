@@ -204,6 +204,8 @@ export function Stamina({ draft, openDraft = 0, view, onViewChange, onDraftRunCh
   const worst = short.reduce<StaminaResult | undefined>((current, race) =>
     !current || (race.thresholds.joint ?? Infinity) > (current.thresholds.joint ?? Infinity) ? race : current, undefined);
   const assessment = view === 'assessment';
+  const shopBeforeCheck = shopScan && mode === 'any' && !result;
+  const credits = <footer>Simulated with uma-race-simulator (MIT). Game data © Cygames.</footer>;
   const runDisabled = !ready || (mode === 'draft' ? !draft || !races.some(r => r.race) : !selectedCourse || !!selectedCourse.unavailable_reason);
   const runLabel = mode === 'draft' ? `Run ${races.filter(r => r.race).length} races` : 'Run check';
   const changePresets = (next: PresetMemory) => { setPresets(next); if (presetWritable) void savePresets(next).then(() => setPresetError('')).catch(() => setPresetError('Presets could not be saved. Your edits are still available until reload.')); };
@@ -246,7 +248,7 @@ export function Stamina({ draft, openDraft = 0, view, onViewChange, onDraftRunCh
     {error && <div role="alert" className={`stamina-notice ${/cancelled/i.test(error) ? "cancelled" : "engine-error"}`}><b>{/cancelled/i.test(error) ? "Check cancelled" : "Engine error"}</b><p>{error}</p>{mode === "draft" && finished.length > 0 && <p>Finished races are kept below.</p>}</div>}{saveError && <p role="status" className="muted">{saveError}</p>}
     <div className={`stamina-workspace${catalog ? ' has-build' : ''}`}>
     <div className={`stamina-main${shopScan ? ' has-shop' : ''}`}>
-    <section className={`stamina-results${running && mode === 'any' && result ? ' previous-result' : ''}`} aria-label="Result">
+    {!shopBeforeCheck && <section className={`stamina-results${running && mode === 'any' && result ? ' previous-result' : ''}`} aria-label="Result">
       {mode === 'draft' ? !draft && !draftRun ? <div className="panel result-empty"><h2>No draft available</h2><p>Share a live room from Uma Drafter to check its races, or choose Any course.</p></div> : <>
         {draftRun && fingerprint !== draftRun.fingerprint && <p className="stale-notice" role="status">Draft changed since this run</p>}
         {detail !== undefined && draftRun?.results[detail] ? <>
@@ -298,12 +300,13 @@ export function Stamina({ draft, openDraft = 0, view, onViewChange, onDraftRunCh
       </div>}
       {ready && !buildCustomized && <p className="default-build-prompt">Using the default Pace build · <button type="button" aria-label="Edit default build" onClick={() => openBuild('build')}>Edit build</button></p>}
       {staleInputs && <p className="stale-notice" role="status">Inputs changed since this run. Run the check again to update.</p>}
-      <footer>Simulated with uma-race-simulator (MIT). Game data © Cygames.</footer>
-    </section>
+      {credits}
+    </section>}
     {catalog && shopScan && <StaminaSkillShop catalog={catalog} scan={shopScan} chains={importedChains} plan={plan}
       skillCount={input.build.skills.length} running={running} runDisabled={runDisabled || running} runLabel={runLabel} onRun={() => { void run(); }}
       onChange={selected => changeImport({ ...shopScan, selected })} onRemove={() => patch({ screenshotImport: undefined })}
       manualPicker={running ? null : manualPicker} shopRef={shop}/>}
+    {shopBeforeCheck && credits}
     </div>
     {catalog && <aside ref={drawer} className="build-drawer panel" data-tab={buildTab} aria-label="Build editor">
       {screenshotSkills && <div className="build-import-actions">

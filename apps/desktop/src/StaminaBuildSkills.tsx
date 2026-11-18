@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { HpAmounts, SkillIcon } from './SkillPicker';
 import { shopPrice } from './StaminaSkillShop';
 import { hintDiscount, purchasePlan, type ScreenshotImport, type SkillChain } from './staminaScreenshot';
-import type { Catalog, CatalogSkill, StaminaBuild } from './staminaTypes';
+import { displaySkillName, type Catalog, type CatalogSkill, type StaminaBuild } from './staminaTypes';
 
 type BuildSkills = StaminaBuild['skills'];
 
@@ -22,10 +22,11 @@ export function StaminaBuildSkills({ catalog, scan, chains, manual, uniques, pla
   onLevel: (id: number, level: number) => void;
 }) {
   const meta = new Map(catalog.skills.map(skill => [skill.id, skill]));
+  const name = (id: number) => displaySkillName(meta.get(id)?.name ?? `Skill ${id}`);
   const identity = (id: number, removal = false) => {
     const skill = meta.get(id);
     const hp = removal ? [] : catalog.hp_effects?.[id] ?? [];
-    return <span className="import-skill-name"><SkillIcon skill={skill}/><span>{removal ? 'Remove ' : ''}{skill?.name ?? `Skill ${id}`}</span>
+    return <span className="import-skill-name"><SkillIcon skill={skill}/><span>{removal ? 'Remove ' : ''}{name(id)}</span>
       {!removal && (skill?.hp_recovery || hp.some(effect => effect.value > 0)) && <small>Recovery</small>}
       {hp.some(effect => effect.value < 0) && <small className="import-warning">Drain</small>}
       {hp.length > 0 && <HpAmounts effects={hp}/>}
@@ -35,13 +36,14 @@ export function StaminaBuildSkills({ catalog, scan, chains, manual, uniques, pla
     if (!chain.owned || uniques.some(({ skill }) => skill.id === chain.owned?.id)) return [];
     return [{ skill: chain.owned, step: chain.steps.find(step => step.id === chain.owned?.id && step.owned), removal: chain.steps.find(step => step.removal) }];
   });
+  const ordinaryNames = new Set([...owned.map(({ skill }) => name(skill.id)), ...manual.map(skill => name(skill.id))]);
   const preview = plan.purchases.slice(0, 3);
   return <div className="skills-scroll" aria-label="Skills"><fieldset disabled={running} className="build-controls">
     {notice && <small className="muted" role="status">Local skill data unavailable. Using engine names without icons.</small>}
     <section className="skills-group" aria-label="Owned">
       <h3>Owned</h3>
-      {uniques.map(({ skill, meta }) => <div className="build-skill-row" key={skill.id}>{identity(skill.id)}
-        <label className="skill-level">Lv<select aria-label={`${meta.name} level`} value={skill.level} onChange={event => onLevel(skill.id, Number(event.target.value))}>{[1, 2, 3, 4, 5, 6].map(level => <option key={level}>{level}</option>)}</select></label>
+      {uniques.map(({ skill }) => <div className="build-skill-row" key={skill.id}>{identity(skill.id)}
+        <label className="skill-level">{ordinaryNames.has(name(skill.id)) && <span>Unique</span>} Lv<select aria-label={`${name(skill.id)} level`} value={skill.level} onChange={event => onLevel(skill.id, Number(event.target.value))}>{[1, 2, 3, 4, 5, 6].map(level => <option key={level}>{level}</option>)}</select></label>
       </div>)}
       {owned.map(({ skill, step, removal }) => <div className="build-skill-row" key={skill.id}>
         <span className="import-tier-identity">{identity(skill.id)}
@@ -65,7 +67,7 @@ export function StaminaBuildSkills({ catalog, scan, chains, manual, uniques, pla
       {manualPicker}
       {scan && <div className="scan-actions">
         {scan.ignored.length > 0 && <details><summary>Ignored · {scan.ignored.length} without race effects</summary>
-          <ul className="import-ignored">{scan.ignored.map(text => <li key={text}>{text}</li>)}</ul>
+          <ul className="import-ignored">{scan.ignored.map(text => <li key={text}>{displaySkillName(text)}</li>)}</ul>
         </details>}
         <button type="button" className="remove-scan" onClick={onRemoveScan}>Remove scan</button>
       </div>}

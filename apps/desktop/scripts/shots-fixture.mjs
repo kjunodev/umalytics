@@ -132,7 +132,7 @@ export const fullStatsScans = [
   ] }),
 ];
 export const shopScans = {
-  learn: scan('learn', { skill_points: 200, skills: [
+  learn: scan('learn', { skill_points: 300, skills: [
     ...fullStatsScans[2].skills,
     read('Corner Recovery ○', 200352, { cost: 153, hint: 1 }),
     read('Swinging Maestro', 200351, { cost: 323 }),
@@ -140,8 +140,8 @@ export const shopScans = {
     read('Go with the Flow', 200502, { cost: 120 }),
     read('Lane Legerdemain', 200501, { cost: 228, hint: 1 }),
   ] }),
-  extra: scan('learn', { skill_points: 200, skills: [read('Medium Corners ○', 201112, { cost: 100 })] }),
-  unknown: scan('learn', { skill_points: 200, skills: [read('Unmatched Heal', null)] }),
+  extra: scan('learn', { skill_points: 300, skills: [read('Medium Corners ○', 201112, { cost: 100 })] }),
+  unknown: scan('learn', { skill_points: 300, skills: [read('Unmatched Heal', null)] }),
 };
 export const finishedScans = [
   scan('finished-details', { ...finished, skills: [read('Bring on the Banquet!', 110681, { level: 5 }), read('Fast-Paced', 200542)] }),

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { formatStamina as number, higherTargetStamina, noRecoveryStamina, raceName, staminaMargin, staminaTableRows } from './staminaAnswers';
 import { passes } from './staminaDraft';
 import type { StaminaView } from './staminaState';
-import { courseLabel, groundNames, weatherNames, seasonNames, type StaminaResult, type CatalogSkill, roleNames, strategy } from './staminaTypes';
+import { courseLabel, displaySkillName, groundNames, weatherNames, seasonNames, type StaminaResult, type CatalogSkill, roleNames, strategy } from './staminaTypes';
 
 function Curve({ result }: { result: StaminaResult }) {
   const ref = useRef<SVGSVGElement>(null);
@@ -70,7 +70,7 @@ export function StaminaResults({ result, view, skills }: { result: StaminaResult
   const pass = passes(result);
   const withoutRecoveries = noRecoveryStamina(result);
   const higherTarget = higherTargetStamina(result);
-  const skillName = (id: number) => skills.find(skill => skill.id === id)?.name ?? `Skill ${id}`;
+  const skillName = (id: number) => displaySkillName(skills.find(skill => skill.id === id)?.name ?? `Skill ${id}`);
   const recoveries = result.heal_equivalents.filter(heal => heal.stamina > 0).map(heal => skillName(heal.skill_id));
   const assessment = view === 'assessment';
   const race = raceName(result.course);
