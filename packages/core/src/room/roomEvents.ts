@@ -9,21 +9,29 @@ import type { UnrecognisedFeedFields } from './feedDiagnostics';
 type RoomRecord = Record<string, any>;
 const ROOM_EVENT_TYPES = new Set(['match.snapshot', 'room.presence.updated', 'participant.uma-assignments.snapshot', 'room.captain.changed']);
 
-// Decoder input names plus known Season 3 protocol fields from draft snapshots.
+// Decoder input names plus every key seen in Season 3 ranked and Quickplay draft snapshots
+// (public match reports, 2026-11-17), so only genuinely new fields are reported.
 // Only inspect these fixed containers. Team/seat maps and inner values stay opaque.
 const SNAPSHOT_EVENT_KEYS = new Set(['type', 'matchId', 'version', 'state']);
 const SNAPSHOT_KEYS = new Set(['phase', 'currentTeam', 'team1', 'team2', 'wildcardMap', 'rules', 'multiplayer',
-  'draftActionHistory', 'blessing', 'quickplay', 'seatPicks', 'participantUmaAssignments', 'mapRules', 'runningStyles']);
+  'draftActionHistory', 'blessing', 'quickplay', 'seatPicks', 'participantUmaAssignments', 'mapRules', 'runningStyles',
+  'roomCodes', 'team1Ready', 'team2Ready', 'turnTimeBank', 'availableMaps', 'availableUmas', 'trainingTimer', 'pendingMatchReport',
+  'pickOrderHistoryText', 'confirmedMatchResults', 'participantUmaAssignmentRoster', 'participantUmaAssignmentReadiness']);
 const RULE_KEYS = new Set(['map', 'uma', 'maps', 'picks', 'bans', 'vetoes', 'mapVetoes', 'preset', 'variant', 'augments', 'rulesVersion']);
 const MAP_RULE_KEYS = new Set(['picksPerTeam', 'bansPerTeam', 'maxDirtPerTeam', 'maxPerDistanceCategory',
   'maxPerDistanceCategoryOverrides', 'surfaceRestrictions', 'distanceRestrictions', 'wildcardMode']);
 const UMA_RULE_KEYS = new Set(['teamSize', 'preBansPerTeam', 'postBansPerTeam', 'preBanOrder', 'pickOwnership', 'picksBeforeVetoPerTeam']);
 const BLESSING_KEYS = new Set(['goddess', 'status', 'arabianCategory', 'selectedMapId', 'candidates', 'bans', 'lockedTeams',
   'version', 'baseRules', 'assignedAt', 'deadlineAt', 'generation', 'resolvedAt']);
-const QUICKPLAY_KEYS = new Set(['seed', 'timers', 'rolling', 'banRolls']);
+const QUICKPLAY_KEYS = new Set(['seed', 'timers', 'rolling', 'banRolls', 'mapRolls', 'skippedBans', 'wildcardRolled', 'teamMapRollsCompleted']);
 const MULTIPLAYER_TEXT_KEYS = ['team1Name', 'team2Name', 'team1CaptainActorUserId', 'team2CaptainActorUserId'];
-const MULTIPLAYER_KEYS = new Set([...MULTIPLAYER_TEXT_KEYS, 'rankedQueueRoster', 'runningStylesEnabled', 'threeGoddessBlessingEnabled']);
-const ASSIGNMENT_KEYS = new Set(['team', 'finalTeam', 'selectedUmaId', 'runningStyle', 'slotIndex', 'discordId', 'displayName']);
+const MULTIPLAYER_KEYS = new Set([...MULTIPLAYER_TEXT_KEYS, 'rankedQueueRoster', 'runningStylesEnabled', 'threeGoddessBlessingEnabled',
+  'roomId', 'enabled', 'matchFormat', 'lastCoinFlip', 'queueContext', 'turnDuration', 'hostActorUserId', 'draftCompletedAt',
+  'rankedRecoveryAt', 'lobbySidesSwapped', 'rankedTurnDeadline', 'rankedHandoffSource', 'rankedPolicyVersion', 'rankedRatingContext',
+  'playerTeamAssignments', 'trainingTimerDuration', 'raceStartTimerDuration', 'assignmentPolicyVersion', 'rankedQueueSideSelection',
+  'rankedReportingFallbackAt', 'captainOffers', 'quickplayTimers']);
+const ASSIGNMENT_KEYS = new Set(['team', 'finalTeam', 'selectedUmaId', 'runningStyle', 'slotIndex', 'discordId', 'displayName',
+  'role', 'updatedAt', 'actorUserId', 'participantKey']);
 
 function observeSnapshotFields(event: RoomRecord, state: RoomRecord, diagnostics: UnrecognisedFeedFields): void {
   const observe = (value: unknown, known: ReadonlySet<string>) => {

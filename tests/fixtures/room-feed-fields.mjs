@@ -19,3 +19,22 @@ export function feedFieldsEvent(withExtras = true) {
   }
   return event;
 }
+
+// Every key seen in Season 3 ranked and Quickplay draft snapshots (public reports, 2026-11-17),
+// with placeholder values. None of these may be reported as unrecognised.
+export function season3KnownKeysEvent() {
+  const event = feedFieldsEvent(false);
+  const { state } = event;
+  const fill = (container, keys) => keys.forEach(key => { if (!(key in container)) container[key] = hiddenValue; });
+  fill(state, ['roomCodes', 'team1Ready', 'team2Ready', 'turnTimeBank', 'availableMaps', 'availableUmas', 'trainingTimer',
+    'pendingMatchReport', 'pickOrderHistoryText', 'confirmedMatchResults', 'participantUmaAssignmentRoster', 'participantUmaAssignmentReadiness']);
+  fill(state.quickplay, ['mapRolls', 'skippedBans', 'wildcardRolled', 'teamMapRollsCompleted']);
+  fill(state.multiplayer, ['roomId', 'enabled', 'matchFormat', 'lastCoinFlip', 'queueContext', 'turnDuration', 'hostActorUserId',
+    'draftCompletedAt', 'rankedRecoveryAt', 'lobbySidesSwapped', 'rankedTurnDeadline', 'rankedHandoffSource', 'rankedPolicyVersion',
+    'rankedRatingContext', 'playerTeamAssignments', 'trainingTimerDuration', 'raceStartTimerDuration', 'assignmentPolicyVersion',
+    'rankedQueueSideSelection', 'rankedReportingFallbackAt', 'captainOffers', 'quickplayTimers']);
+  fill(state.rules.map, ['wildcardMode']);
+  fill(state.rules.uma, ['pickOwnership', 'picksBeforeVetoPerTeam']);
+  for (const entry of state.participantUmaAssignments) fill(entry, ['role', 'updatedAt', 'actorUserId', 'participantKey']);
+  return event;
+}

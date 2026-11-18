@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import { roomHarness } from './support/helpers.mjs';
-import { extraFieldNames, feedFieldsEvent, hiddenValue } from './fixtures/room-feed-fields.mjs';
+import { extraFieldNames, feedFieldsEvent, hiddenValue, season3KnownKeysEvent } from './fixtures/room-feed-fields.mjs';
 
 test('decoder reports exactly the new field names and leaves the decoded event unchanged', () => {
   const { c } = roomHarness();
@@ -54,4 +54,21 @@ test('tally filters identity-shaped names, truncates and keeps counting retained
   assert.equal(entries[1].count, 2);
   assert(entries.every(({ name }) => name.length <= 64 && /^[A-Za-z0-9_.-]+$/.test(name) && !blocked.includes(name)));
   assert(!c.formatUnrecognisedFeedFields(entries).includes(hiddenValue));
+});
+
+test('keys already seen in Season 3 ranked and Quickplay snapshots are not reported', () => {
+  const { c } = roomHarness();
+  const fields = vm.runInContext('new UnrecognisedFeedFields()', c);
+  c.decodeRoomEvent(season3KnownKeysEvent(), fields);
+  assert.equal(fields.snapshot().length, 0);
+});
+
+test('six-character camelCase field names are kept while match-code-shaped names are dropped', () => {
+  const { c } = roomHarness();
+  const fields = vm.runInContext('new UnrecognisedFeedFields()', c);
+  const event = feedFieldsEvent(false);
+  Object.assign(event.state, { groups: hiddenValue, seasonId: hiddenValue, '5HQKZG': hiddenValue, REXQAB: hiddenValue, ab3d9e: hiddenValue });
+  event.state.multiplayer.status = hiddenValue;
+  c.decodeRoomEvent(event, fields);
+  assert.deepEqual(Array.from(fields.snapshot(), ({ name }) => name).sort(), ['groups', 'seasonId', 'status']);
 });

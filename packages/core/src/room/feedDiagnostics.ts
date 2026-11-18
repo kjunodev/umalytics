@@ -10,10 +10,14 @@ export interface UnrecognisedFeedField {
   firstEventType: string;
 }
 
+// Six-character keys such as roomId, status or timers are real field names; only upper-case or
+// digit-bearing six-character strings (5HQKZG, ab3d9e) are treated as match codes.
+const looksLikeMatchCode = (value: string) => (value === value.toUpperCase() || /\d/.test(value)) && normalizeMatchCode(value) !== undefined;
+
 function feedFieldName(value: unknown): string | undefined {
   if (typeof value !== 'string' || !value || /[^A-Za-z0-9_.-]/.test(value) ||
       /^\d+$/.test(value) || /^[a-f0-9]{32}$/i.test(value) ||
-      isRawPlayerIdentifier(value) || normalizeMatchCode(value) !== undefined) return undefined;
+      isRawPlayerIdentifier(value) || looksLikeMatchCode(value)) return undefined;
   return value.slice(0, NAME_LENGTH);
 }
 
