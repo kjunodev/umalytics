@@ -3,6 +3,7 @@ import pool from '../src-tauri/data/drafter-map-pool-global.json' with { type: '
 import { replayEnvelopes } from './replay-fixture.mjs';
 import fixture from '../../../tests/fixtures/casual-room-replay.json' with { type: 'json' };
 import { season3Match } from '../../../tests/fixtures/season3-matches.mjs';
+import { quickplayCode, quickplayMatch } from '../../../tests/fixtures/quickplay-match.mts';
 
 // Completed Season 3 matches for the History blessing scenes.
 export const season3Codes = { BRB001: 'godolphin-barb', ARB001: 'darley-arabian', TRK001: 'byerley-turk' };
@@ -178,6 +179,7 @@ export function apiResponse(url, scene) {
     }) };
   }
   const season3Code = parsed.pathname.match(/^\/api\/matches\/([A-Z0-9]{6})$/)?.[1];
+  if (season3Code === quickplayCode) return quickplayMatch({ hideAssignments: true });
   if (season3Code && season3Codes[season3Code]) return season3Match(season3Codes[season3Code], { code: season3Code });
   if (parsed.pathname === '/api/matches/ABC123') {
     const savedSide = (offset) => ({ ...side(offset, 5), bannedMaps: [],

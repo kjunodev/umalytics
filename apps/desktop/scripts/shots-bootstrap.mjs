@@ -1,10 +1,16 @@
 import { draftSnapshotFixture } from '../../../tests/fixtures/stamina-draft.mjs';
+import { quickplayCode, quickplaySnapshotEvent } from '../../../tests/fixtures/quickplay-match.mts';
 import { releaseOrder } from '../../../packages/core/src/umas/umaReleaseOrder';
 import { mockIPC, mockWindows, mockConvertFileSrc } from '@tauri-apps/api/mocks';
 import { emit } from '@tauri-apps/api/event';
 import { apiResponse, catalog, finishedScans, fullStatsScans, learnOnlyScans, messages, screenshotCatalog, screenshotScans, shopScans, staminaResult } from './shots-fixture.mjs';
 
 const scene = window.__SHOT_SCENE__ ?? 'lobby';
+const forcedBy = scene === 'experimental-debug' ? 'debug' : null;
+const screenshotImportSetting = () => {
+  const saved = (localStorage.getItem('shots:screenshot-import') ?? (scene === 'experimental-scan' ? 'true' : 'false')) === 'true';
+  return { saved, enabled: saved || !!forcedBy, forcedBy };
+};
 const requests = new Map();
 const stores = new Map([[1, 'shell.json'], [2, 'profiles.json']]);
 const calls = [];
@@ -45,7 +51,8 @@ mockIPC(async (command, args) => {
   if (command === 'plugin:window|set_size') { await window.__resizeShot__(args.value.toJSON().Logical); return; }
   if (command === 'start_feed') {
     if (!['empty', 'port-in-use', 'draft-loading', 'feed-error'].includes(scene)) setTimeout(async () => {
-      for (const original of messages) {
+      const feed = scene === 'quickplay' ? [{ v: 1, roomCode: quickplayCode, event: quickplaySnapshotEvent() }] : messages;
+      for (const original of feed) {
         const serialized = JSON.stringify(original);
         const message = scene === 'profile-worst' ? JSON.parse(serialized.replaceAll('Replay Player 1', 'BEWARE OF CRYPTO SCAMMER ISHI'))
           : scene === 'profile-unlinked' ? JSON.parse(serialized.replaceAll('100000000000000301', 'unlinked')) : original;
@@ -55,6 +62,11 @@ mockIPC(async (command, args) => {
     }, 0);
     else window.__SHOT_CONTROL__.feedReady = true;
     return { state: scene === 'empty' ? 'listening' : scene === 'port-in-use' ? 'port-in-use' : scene === 'feed-error' ? 'error' : 'connected', accepted: scene === 'empty' ? 0 : messages.length, rejected: 0 };
+  }
+  if (command === 'get_screenshot_import_setting') return screenshotImportSetting();
+  if (command === 'set_screenshot_import_setting') {
+    localStorage.setItem('shots:screenshot-import', String(args.enabled));
+    return screenshotImportSetting();
   }
   if (command === 'engine_catalog') {
     if (scene === 'stamina-missing-engine') throw 'UmaLytics engine data is missing at C:\\UmaLytics\\resources\\engine-data.';
@@ -67,6 +79,7 @@ mockIPC(async (command, args) => {
     if (['stamina-screenshot-import', 'stamina-finished-import', 'stamina-learn-import', 'stamina-capture', 'stamina-full-stats', 'stamina-import-shop'].includes(scene)) {
       return { ...screenshotCatalog, screenshot_import_enabled: !localStorage.getItem('shots:hide-screenshot-import') };
     }
+    if (scene.startsWith('experimental-')) return { ...screenshotCatalog, screenshot_import_enabled: screenshotImportSetting().enabled };
     return scene === 'stamina-no-data' ? { ...catalog, local_skill_data: false, local_skill_count: 0, local_icon_count: 0, skills: catalog.skills.map(s => ({ ...s, icon_path: null })) } : catalog;
   }
   if (command === 'scan_stamina_screenshot') {

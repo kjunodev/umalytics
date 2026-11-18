@@ -1314,7 +1314,7 @@ pub async fn engine_catalog(
     app: tauri::AppHandle,
     access: tauri::State<'_, crate::ScreenshotImportAccess>,
 ) -> Result<Catalog, String> {
-    let screenshot_import_enabled = cfg!(windows) && access.0;
+    let screenshot_import_enabled = cfg!(windows) && access.enabled();
     tauri::async_runtime::spawn_blocking(move || {
         use tauri::Manager;
         let mut catalog = engine()?.catalog.clone();
@@ -1337,7 +1337,7 @@ pub async fn scan_stamina_screenshot(
     request: tauri::ipc::Request<'_>,
     access: tauri::State<'_, crate::ScreenshotImportAccess>,
 ) -> Result<ocr::Import, String> {
-    if !access.0 {
+    if !access.enabled() {
         return Err("Screenshot import is unavailable.".into());
     }
     let bytes = ocr::screenshot_bytes(request.body())?;
@@ -1351,7 +1351,7 @@ pub async fn capture_stamina_screenshot(
     from_button: bool,
     access: tauri::State<'_, crate::ScreenshotImportAccess>,
 ) -> Result<ocr::Import, String> {
-    if !access.0 {
+    if !access.enabled() {
         return Err("Screenshot import is unavailable.".into());
     }
     tauri::async_runtime::spawn_blocking(move || {
@@ -1370,7 +1370,7 @@ pub async fn set_stamina_capture_hotkey(
     access: tauri::State<'_, crate::ScreenshotImportAccess>,
     shortcut: tauri::State<'_, capture::CaptureShortcut>,
 ) -> Result<(), String> {
-    if !access.0 {
+    if !access.enabled() {
         return Err("Screenshot import is unavailable.".into());
     }
     if enabled {
@@ -1391,7 +1391,7 @@ pub fn scan_stamina_while_scrolling(
     access: tauri::State<'_, crate::ScreenshotImportAccess>,
     scans: tauri::State<'_, capture::ScrollingScans>,
 ) -> Result<(), String> {
-    if !access.0 {
+    if !access.enabled() {
         return Err("Screenshot import is unavailable.".into());
     }
     use tauri::Manager;
@@ -1412,7 +1412,7 @@ pub fn stop_stamina_scrolling_scan(
     access: tauri::State<'_, crate::ScreenshotImportAccess>,
     scans: tauri::State<'_, capture::ScrollingScans>,
 ) -> Result<(), &'static str> {
-    if !access.0 {
+    if !access.enabled() {
         return Err("Screenshot import is unavailable.");
     }
     if drain {

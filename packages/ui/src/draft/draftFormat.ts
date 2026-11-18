@@ -1,5 +1,4 @@
 import type {
-  DraftMapSelection,
   DraftSnapshot,
   DraftTeamSnapshot,
   DraftUmaActionKind,
@@ -44,7 +43,8 @@ export function isDraftStageComplete(
   return TEAM_IDS.every((teamId) => countDraftUmaKind(teams[teamId], kind) >= requiredCount);
 }
 
-export function getDraftStages(initialPickCount: number): DraftStage[] {
+export function getDraftStages(initialPickCount: number, vetoCount = 1): DraftStage[] {
+  if (vetoCount === 0) return [{ key: 'picks', label: `Picks 1–${initialPickCount}` }];
   return [
     { key: 'picks', label: `Picks 1–${initialPickCount}` },
     { key: 'vetoes', label: 'Vetoes' },
@@ -54,6 +54,7 @@ export function getDraftStages(initialPickCount: number): DraftStage[] {
 
 export function getDraftStageIndex(snapshot: DraftSnapshot, initialPickCount: number): number {
   const vetoCount = snapshot.rules?.vetoes ?? 1;
+  if (vetoCount === 0) return 0;
 
   if (!isDraftStageComplete(snapshot.teams, 'pick', initialPickCount)) {
     return 0;
@@ -146,9 +147,9 @@ export function buildDraftRaceCards(
 ): Array<DraftRaceCard | undefined> {
   const picked = TEAM_IDS.flatMap((teamId) =>
     teams[teamId].maps
-      .filter((map): map is DraftMapSelection & { order: number } => map.status === 'selected' && map.order !== undefined)
+      .filter((map) => map.status === 'selected')
       .map((map) => ({ map, team: teamId }))
-  ).sort((left, right) => left.map.order - right.map.order);
+  ).sort((left, right) => (left.map.order ?? Infinity) - (right.map.order ?? Infinity));
 
   return getDraftSlots(picked, totalMapSlots).map((entry, index) =>
     entry === undefined ? undefined : { n: index + 1, team: entry.team, tiebreaker: false, map: entry.map }

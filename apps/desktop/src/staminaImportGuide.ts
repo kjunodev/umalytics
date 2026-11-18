@@ -13,7 +13,7 @@ export const importGuide = {
   finished: {
     label: 'A finished Uma',
     steps: [
-      "Open the Uma's **Umamusume Details** from your Veteran List and click the **Skills** tab.",
+      "After the career ends, click **Details** on the career results screen, then the **Skills** tab.",
       'Click **Start scanning** and scroll the skill list to the end.',
       'Click **Apply to build**.',
     ],

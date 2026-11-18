@@ -118,6 +118,7 @@ export function parseHistoricalMatch(value: unknown, requestedCode: string): His
     teams: { team1: { id: 'team1', name: roster.teams!.team1.name, maps: [], umas: [] }, team2: { id: 'team2', name: roster.teams!.team2.name, maps: [], umas: [] } },
     rules: { maps: count(mapRules.picksPerTeam, 0), picks: count(umaRules.teamSize, 0), bans: count(umaRules.preBansPerTeam, 0), vetoes: count(umaRules.postBansPerTeam, 0), mapVetoes: count(mapRules.bansPerTeam, 1) }
   };
+  if (report.queueContext === 'quickplay' || rules.variant === 'quickplay') draft.queueContext = 'quickplay';
   for (const team of ['team1', 'team2'] as const) {
     const raw = record(saved[team]), target = draft.teams[team];
     const mapPicks = actions.filter(action => action.action === 'map-pick');

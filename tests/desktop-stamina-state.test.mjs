@@ -132,6 +132,17 @@ test('hidden screenshot drafts are ignored and survive saves in either race mode
   assert.equal((await loadStaminaMemory(enabled)).input.screenshotImport, undefined);
 });
 
+test('turning off import saves the loaded build and current scan over an older stored scan', async () => {
+  const scan = { points: 200, observations: [{ id: 2, owned: true, level: 1, price: null, hint: null }], ignored: [], selected: [] };
+  const enabled = { ...catalog, screenshot_import_enabled: true, screenshot_skills: { 2: { cost: 180, tier: null } } };
+  stored = { input: { screenshotImport: { ...scan, points: 50 } } };
+  const memory = restoreStaminaMemory({ input: { build: { stats: { stamina: 720 } }, screenshotImport: scan } }, enabled);
+  await saveStaminaMemory(memory, false);
+  assert.equal(stored.input.build.stats.stamina, 720);
+  assert.equal(stored.input.build.skills[0].id, 2);
+  assert.equal(stored.input.screenshotImport.points, 200);
+});
+
 test('Undo import restores the previous build and selected scan after a reload', () => {
   const scan = { points: 200, observations: [{ id: 2, owned: false, level: null, price: 180, hint: null }], ignored: [], selected: [2] };
   const enabled = { ...catalog, umas: [], screenshot_import_enabled: true, screenshot_skills: { 2: { cost: 180, tier: null } } };

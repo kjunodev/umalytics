@@ -34,8 +34,8 @@ function Segments({ label, value, options, onChange }: { label: string; value: n
   return <div className="field"><span>{label}</span><div className="seg" role="group" aria-label={label}>{options.map((name, i) => <button type="button" key={name} aria-pressed={value === i + 1} onClick={() => onChange(i + 1)}>{name}</button>)}</div></div>;
 }
 
-export function Stamina({ draft, openDraft = 0, view, onViewChange, onDraftRunChange, onDataError }: {
-  draft?: DraftSnapshot; openDraft?: number; view: StaminaView; onViewChange: (view: StaminaView) => void;
+export function Stamina({ draft, openDraft = 0, view, onViewChange, onDraftRunChange, onDataError, catalogRevision }: {
+  draft?: DraftSnapshot; openDraft?: number; view: StaminaView; onViewChange: (view: StaminaView) => void; catalogRevision: number;
   onDraftRunChange?: (run: DraftRun | undefined) => void; onDataError: (failed: boolean) => void;
 }) {
   const [catalog, setCatalog] = useState<Catalog>();
@@ -115,6 +115,17 @@ export function Stamina({ draft, openDraft = 0, view, onViewChange, onDraftRunCh
     })().catch(reason => { if (!disposed) setError(String(reason)); });
     return () => { disposed = true; stops.forEach(stop => stop()); if (active.current) void invoke('cancel_stamina_check').catch(() => {}); active.current = null; };
   }, []);
+
+  useEffect(() => {
+    if (!catalogRevision || !ready) return;
+    let disposed = false;
+    void invoke<Catalog>('engine_catalog').then(data => {
+      if (disposed) return;
+      setCatalog(data);
+      if (!data.screenshot_import_enabled) setImportOpen(false);
+    }).catch(() => { if (!disposed) setError('Unable to refresh the stamina catalog.'); });
+    return () => { disposed = true; };
+  }, [catalogRevision, ready]);
 
   useEffect(() => {
     if (ready) void saveStaminaMemory({ input: anyInput, draftInput, recent, recentUmas, view, buildTab, buildCustomized, courseChoices }, !!screenshotSkills).then(() => setSaveError('')).catch(() => setSaveError('Inputs could not be saved. Your current build is still available.'));

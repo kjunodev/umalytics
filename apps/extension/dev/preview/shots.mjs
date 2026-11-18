@@ -15,6 +15,7 @@ import assert from 'node:assert/strict';
 import { createServer } from 'vite';
 import { chromium } from 'playwright';
 import { checkGeometry, checkHeader, checkUmasScene, checkOpenMenu, checkTeamIconTooltip } from './geometry.mjs';
+import { quickplayLayoutFailures } from '../../../../tests/support/quickplay-layout.mjs';
 import { HEADER_COMPACT_MIN_WIDTH, HEADER_FULL_MIN_WIDTH, HEADER_ROW_HEIGHT, HEADER_MIN_SLACK, UI_SCALES } from '@umalytics/ui/common/headerLayout';
 
 const dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -43,7 +44,9 @@ const SCENES = [
   { name: 'history-draft', query: 'mode=history&scene=draft&draft=complete' },
   // Season 3 blessing scenes cover the widths where the Races column is narrowest and widest.
   ...['barb', 'arabian', 'turk'].map(draft => ({ name: `draft-${draft}`, query: `mode=live&scene=draft&draft=${draft}`, sizes: BLESSING_SIZES })),
-  { name: 'history-draft-turk', query: 'mode=history&scene=draft&draft=turk', sizes: BLESSING_SIZES }
+  { name: 'history-draft-turk', query: 'mode=history&scene=draft&draft=turk', sizes: BLESSING_SIZES },
+  { name: 'draft-quickplay', query: 'mode=live&scene=draft&draft=quickplay' },
+  { name: 'history-draft-quickplay', query: 'mode=history&scene=draft&draft=quickplay' }
 ];
 
 function argValue(name) {
@@ -102,6 +105,7 @@ async function runCase(page, baseUrl, { uiSize, scene, size }) {
   }
   await page.waitForTimeout(50);
   const geometry = await page.evaluate(checkGeometry);
+  if (scene.name.endsWith('quickplay')) geometry.failures.push(...await quickplayLayoutFailures(page));
   const header = await page.evaluate(checkHeader, HEADER_LIMITS);
   geometry.failures.push(...header.failures.map(failure => `${failure} at ${size.name} ${uiSize}`));
   if (scene.name === 'lobby' || scene.name === 'history-lobby') {

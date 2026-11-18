@@ -1,35 +1,14 @@
 #![cfg_attr(all(not(debug_assertions), not(test)), windows_subsystem = "windows")]
 
+mod experimental;
 mod feed;
 mod resources;
 mod stamina;
 mod wire;
 
+use experimental::ScreenshotImportAccess;
 use feed::{Feed, FeedStatus};
 use tauri::Manager;
-
-struct ScreenshotImportAccess(bool);
-
-fn screenshot_import_enabled(debug: bool, experimental: Option<&std::ffi::OsStr>) -> bool {
-    debug || experimental == Some(std::ffi::OsStr::new("1"))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn screenshot_import_is_opt_in_for_release_and_always_on_in_debug() {
-        for flag in [None, Some(""), Some("0"), Some("true"), Some("1")] {
-            let experimental = flag.map(std::ffi::OsStr::new);
-            assert_eq!(
-                screenshot_import_enabled(false, experimental),
-                flag == Some("1")
-            );
-            assert!(screenshot_import_enabled(true, experimental));
-        }
-    }
-}
 
 #[tauri::command]
 async fn start_feed(
@@ -40,10 +19,6 @@ async fn start_feed(
 }
 
 fn main() {
-    let screenshot_import = ScreenshotImportAccess(screenshot_import_enabled(
-        cfg!(debug_assertions),
-        std::env::var_os("UMALYTICS_EXPERIMENTAL").as_deref(),
-    ));
     let builder = tauri::Builder::default();
     #[cfg(windows)]
     let builder = builder
@@ -63,13 +38,15 @@ fn main() {
         .plugin(tauri_plugin_process::init())
         .setup(|app| {
             resources::initialize(app.path().resource_dir().map_err(|error| error.to_string()));
+            app.manage(ScreenshotImportAccess::load(app.handle()));
             Ok(())
         })
         .manage(Feed::default())
-        .manage(screenshot_import)
         .manage(stamina::Checks::default())
         .invoke_handler(tauri::generate_handler![
             start_feed,
+            experimental::get_screenshot_import_setting,
+            experimental::set_screenshot_import_setting,
             stamina::engine_catalog,
             #[cfg(windows)]
             stamina::scan_stamina_screenshot,

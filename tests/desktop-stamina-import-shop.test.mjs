@@ -20,6 +20,14 @@ const types = load('staminaTypes');
 const shop = load('staminaShop', { './staminaScreenshot': prices, './staminaTypes': types });
 const scan = (screen, n = 0, attributes = null) => ({ screen, skills: Array(n).fill({}), attributes });
 
+test('finished Uma guide starts at career results and keeps the scan and apply steps', () => {
+  assert.deepEqual(plain(guide.importGuide.finished.steps), [
+    'After the career ends, click **Details** on the career results screen, then the **Skills** tab.',
+    'Click **Start scanning** and scroll the skill list to the end.',
+    'Click **Apply to build**.',
+  ]);
+});
+
 test('import guide tracks recognized screens and newly found rows independently of capture order', () => {
   const progress = (flow, screens) => plain(guide.importGuideProgress(flow, screens));
   assert.deepEqual(progress('career', []), [false, false, false, false]);

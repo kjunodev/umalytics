@@ -91,7 +91,7 @@ export function decodeRoomEvent(payload: unknown, diagnostics?: UnrecognisedFeed
       phase: state.phase.slice(0,40), currentTeam: isRoomTeam(state.currentTeam) ? state.currentTeam : undefined,
       team1: cleanDraftTeam(state.team1), team2: cleanDraftTeam(state.team2),
       wildcardMap: cleanItem(state.wildcardMap), rules: cleanRules(state.rules),
-      multiplayer: cleanMultiplayer(state.multiplayer),
+      multiplayer: cleanMultiplayer(state.multiplayer, state.rules?.variant),
       ...seasonThreeFields(state),
       ...(Array.isArray(state.draftActionHistory) ? { draftActionHistory: cleanActionHistory(state.draftActionHistory) } : {})
     }};
@@ -164,9 +164,10 @@ function cleanRules(value: unknown): RoomRecord | undefined {
   const count = (n: unknown, fallback: number) => typeof n === 'number' && Number.isInteger(n) && n >= 0 && n <= 32 ? n : fallback;
   return { maps: count(value.map?.picksPerTeam ?? value.maps,4), picks: count(value.uma?.teamSize ?? value.picks,6), bans: count(value.uma?.preBansPerTeam ?? value.bans,2), vetoes: count(value.uma?.postBansPerTeam ?? value.vetoes,1), mapVetoes: count(value.map?.bansPerTeam ?? value.mapVetoes,1) };
 }
-function cleanMultiplayer(value: unknown): RoomRecord {
-  if (!roomRecord(value)) return {};
+function cleanMultiplayer(value: unknown, rulesVariant: unknown): RoomRecord {
   const output: RoomRecord = {};
+  if (rulesVariant === 'quickplay' || (roomRecord(value) && value.queueContext === 'quickplay')) output.queueContext = 'quickplay';
+  if (!roomRecord(value)) return output;
   for (const key of MULTIPLAYER_TEXT_KEYS) if (typeof value[key] === 'string') output[key] = value[key].slice(0,120);
   if (Array.isArray(value.rankedQueueRoster)) output.rankedQueueRoster = cleanPlayers(value.rankedQueueRoster);
   return output;
@@ -320,6 +321,7 @@ function draftFromRoomState(state: RoomRecord, matchCode: string, version: numbe
   if (Array.isArray(state.runningStyles)) applyRunningStyles(teams, state.runningStyles);
   return { matchCode, version, phase: state.phase, currentTeam: isRoomTeam(state.currentTeam) ? state.currentTeam : undefined,
     source: 'synced-draft-state', teams, updatedAt: Date.now(), rules: state.rules,
+    ...(state.multiplayer.queueContext === 'quickplay' ? { queueContext: 'quickplay' } : {}),
     ...(state.blessing ? { blessing: state.blessing } : {}), ...(state.mapRules ? { mapRules: state.mapRules } : {}),
     ...(state.wildcardMap ? { tiebreakerMap: { name: state.wildcardMap.track ?? state.wildcardMap.name, details: mapDetails(state.wildcardMap), ...mapFields(state.wildcardMap) } } : {}) };
 }

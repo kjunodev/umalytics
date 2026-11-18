@@ -118,7 +118,7 @@ export function saveStaminaMemory(memory: StaminaMemory, screenshotImportEnabled
         if (!current) continue;
         for (const field of ['screenshotImport', 'importUndo'] as const) {
           const hidden = object(previous[key])[field];
-          if (hidden !== undefined) Object.assign(current, { [field]: hidden });
+          if (current[field] === undefined && hidden !== undefined) Object.assign(current, { [field]: hidden });
         }
       }
     }
