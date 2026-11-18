@@ -120,3 +120,23 @@ test('shared Quickplay team panels have five picks and three bans, including leg
     }
   }
 });
+
+test('Quickplay History orders races by the map rolls, or alternates teams without them', () => {
+  const context = historyContext();
+  const raceOrder = draft => Object.values(draft.teams).flatMap(side => side.maps.map(map => ({ team: side.id, name: map.name, order: map.order })))
+    .sort((a, b) => a.order - b.order).map(({ team, name }) => `${team}:${name}`);
+
+  const alternating = context.parseHistoricalMatch(quickplayMatch(), quickplayCode).draft;
+  assert.deepEqual(raceOrder(alternating), ['team1:Tokyo', 'team2:Hanshin', 'team1:Nakayama', 'team2:Kyoto', 'team1:Ohi', 'team2:Sapporo']);
+
+  const rolled = quickplayMatch();
+  const snapshot = rolled.report.draftSnapshot;
+  const roll = (team, map, rollIndex) => ({ kind: 'map-roll', team, mapId: snapshot[team].pickedMaps.find(m => m.name === map).id, rollIndex });
+  snapshot.quickplay = { mapRolls: [
+    { kind: 'wildcard-roll', mapId: snapshot.wildcardMap.id, rollIndex: 0 },
+    roll('team2', 'Kyoto', 1), roll('team1', 'Ohi', 2), roll('team2', 'Sapporo', 3),
+    roll('team1', 'Tokyo', 4), roll('team2', 'Hanshin', 5), roll('team1', 'Nakayama', 6),
+  ] };
+  assert.deepEqual(raceOrder(context.parseHistoricalMatch(rolled, quickplayCode).draft),
+    ['team2:Kyoto', 'team1:Ohi', 'team2:Sapporo', 'team1:Tokyo', 'team2:Hanshin', 'team1:Nakayama']);
+});

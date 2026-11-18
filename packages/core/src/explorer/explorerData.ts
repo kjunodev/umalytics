@@ -119,14 +119,21 @@ export function parseHistoricalMatch(value: unknown, requestedCode: string): His
     rules: { maps: count(mapRules.picksPerTeam, 0), picks: count(umaRules.teamSize, 0), bans: count(umaRules.preBansPerTeam, 0), vetoes: count(umaRules.postBansPerTeam, 0), mapVetoes: count(mapRules.bansPerTeam, 1) }
   };
   if (report.queueContext === 'quickplay' || rules.variant === 'quickplay') draft.queueContext = 'quickplay';
+  const mapPicks = actions.filter(action => action.action === 'map-pick');
+  // Quickplay rolls maps instead of picking them: race order is the roll order.
+  const mapRolls = rows(record(saved.quickplay).mapRolls).filter(roll => roll.kind === 'map-roll')
+    .sort((a, b) => (typeof a.rollIndex === 'number' ? a.rollIndex : 0) - (typeof b.rollIndex === 'number' ? b.rollIndex : 0));
   for (const team of ['team1', 'team2'] as const) {
     const raw = record(saved[team]), target = draft.teams[team];
-    const mapPicks = actions.filter(action => action.action === 'map-pick');
     for (const [key, status] of [['pickedMaps', 'selected'], ['bannedMaps', 'vetoed']] as const) {
-      for (const map of rows(raw[key])) {
-        const order = mapPicks.findIndex(action => action.actorTeam === team && record(action.map).id === map.id);
-        target.maps.push(mapSelection(map, team, status, order < 0 ? undefined : order + 1));
-      }
+      rows(raw[key]).forEach((map, index) => {
+        const picked = mapPicks.findIndex(action => action.actorTeam === team && record(action.map).id === map.id);
+        const rolled = status === 'selected' && !mapPicks.length ? mapRolls.findIndex(roll => roll.team === team && roll.mapId === map.id) : -1;
+        // Without picks or rolls, alternate team 1 and team 2 like the live view does.
+        const order = picked >= 0 ? picked + 1 : rolled >= 0 ? rolled + 1
+          : status === 'selected' && !mapPicks.length ? index * 2 + (team === 'team1' ? 1 : 2) : undefined;
+        target.maps.push(mapSelection(map, team, status, order));
+      });
     }
     target.maps.sort((a, b) => (a.order ?? 99) - (b.order ?? 99));
     for (const [key, kind] of [['pickedUmas', 'pick'], ['preBannedUmas', 'ban'], ['bannedUmas', 'veto']] as const) {
