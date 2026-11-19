@@ -85,6 +85,13 @@ jobs:
       - run: cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml --locked
       - name: Build universal app and disk image without updater signing secrets
         run: pnpm --filter @umalytics/desktop tauri build --target universal-apple-darwin --bundles app,dmg --config '{"bundle":{"createUpdaterArtifacts":false}}'
+      # Test build for Mac testers; download it from this run's Summary page.
+      - uses: actions/upload-artifact@v7
+        with:
+          name: umalytics-macos-dmg
+          path: apps/desktop/src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
+          if-no-files-found: error
+          retention-days: 14
   verify:
     runs-on: ubuntu-latest
     steps:
