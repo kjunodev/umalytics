@@ -70,7 +70,7 @@ pub fn skill_path(
 
 pub fn skill_dir() -> PathBuf {
     #[cfg(debug_assertions)]
-    let fallback = std::env::var_os("USERPROFILE").map(|home| {
+    let fallback = std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" }).map(|home| {
         PathBuf::from(home).join("Documents/Coding Projects/UmaLytics-GameData/gametora")
     });
     #[cfg(not(debug_assertions))]

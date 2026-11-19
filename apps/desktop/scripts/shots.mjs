@@ -4,10 +4,13 @@ import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { createServer } from 'vite';
-import { chromium } from 'playwright';
+import { chromium, webkit } from 'playwright';
+
+const browserName = process.env.DESKTOP_SHOTS_BROWSER ?? 'chromium';
+if (!['chromium', 'webkit'].includes(browserName)) throw new Error(`Unsupported shots browser: ${browserName}`);
 
 const root = fileURLToPath(new URL('../', import.meta.url));
-const out = path.resolve(process.env.DESKTOP_SHOTS_DIR ?? path.join(root, '.shots'));
+const out = path.resolve(process.env.DESKTOP_SHOTS_DIR ?? path.join(root, '.shots', browserName));
 await fs.mkdir(out, { recursive: true });
 const server = await createServer({ root, cacheDir: path.join(out, '.vite'), configFile: false, server: { host: '127.0.0.1', port: 0,
   watch: { ignored: ['**/src-tauri/**', '**/.shots/**'] }, fs: { allow: [path.resolve(root, '../..')] } },
@@ -35,8 +38,18 @@ const portraitDir = process.env.DESKTOP_SHOTS_PORTRAITS;
 const teamLogo = await fs.readFile(path.join(root, 'src-tauri/icons/icon.png'));
 try {
   await server.listen();
-  browser = await chromium.launch({ headless: true });
+  browser = await ({ chromium, webkit }[browserName]).launch({ headless: true });
   const origin = server.resolvedUrls.local[0];
+  async function allowClipboard(page) {
+    if (browserName === 'chromium') return page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+    // Playwright WebKit has no clipboard permission API. Exercise copy payloads in memory.
+    await page.evaluate(() => {
+      let text = '';
+      Object.defineProperty(navigator, 'clipboard', { configurable: true, value: {
+        writeText: async value => { text = value; }, readText: async () => text,
+      } });
+    });
+  }
   async function nav(page, name) {
     if (['Lobby', 'Draft', 'Umas'].includes(name)) {
       if (await page.locator('.sidebar').count()) await page.locator('.sidebar').getByRole('button', { name: 'Live', exact: true }).click();
@@ -173,6 +186,7 @@ try {
     await reviewPicker.getByRole('searchbox').waitFor();
     await page.keyboard.press('Escape');
     await reviewPicker.waitFor({ state: 'hidden' });
+    await page.waitForFunction(() => document.activeElement?.matches('.screenshot-dialog .stamina-uma-trigger'));
     check(await dialog.isVisible() && await reviewUma.evaluate(el => el === document.activeElement), 'Esc closes only the Uma picker and returns focus to the import review');
     await dialog.getByRole('button', { name: 'Remove screenshot 2' }).click();
     await dialog.getByRole('button', { name: 'Remove screenshot 6' }).click();
@@ -238,12 +252,12 @@ try {
     const narrowLayout = await narrowPanel.evaluate(element => {
       const initial = element.scrollTop;
       element.scrollTop = element.scrollHeight;
-      const scrolls = element.scrollTop > initial;
+      const reachable = element.scrollHeight <= element.clientHeight || element.scrollTop > initial;
       element.scrollTop = initial;
       const noOverflow = [element, ...element.querySelectorAll('td, th')].every(row => row.scrollWidth <= row.clientWidth + 1);
-      return { scrolls, noOverflow, scale: devicePixelRatio };
+      return { reachable, noOverflow, scale: devicePixelRatio };
     });
-    check(narrowLayout.scale === 1.25 && narrowLayout.scrolls && narrowLayout.noOverflow, 'Scanned skill rows fit and scroll inside the editor at 440px and 125% scaling');
+    check(narrowLayout.scale === 1.25 && narrowLayout.reachable && narrowLayout.noOverflow, `Scanned skill rows remain reachable without horizontal overflow at 440px and 125% scaling: ${JSON.stringify(narrowLayout)}`);
     await shop.scrollIntoViewIfNeeded();
     await narrowPanel.evaluate(element => { element.scrollTop = 0; });
     await shot(page, 'stamina-scanned-skills-440');
@@ -571,7 +585,7 @@ try {
         check(await filter.getByRole('button', { name: 'Gold', exact: true }).getAttribute('aria-pressed') === 'true', 'Outside click closes the picker and activates its target');
         await filter.getByRole('button', { name: 'All', exact: true }).click();
         await shop.getByRole('button', { name: 'Increase tier for Fresh☆Parlor', exact: true }).click();
-        await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+        await allowClipboard(page);
         await shop.getByRole('button', { name: 'Copy list', exact: true }).click();
         await shop.getByText('List copied', { exact: true }).waitFor();
         check(await page.evaluate(() => navigator.clipboard.readText()) === 'Fresh☆Parlor — 200 SP', 'Copy list uses the short name');
@@ -766,18 +780,24 @@ try {
       check(await buying.getByText('Go with the Flow', { exact: true }).count() === 1 &&
         await shop.locator('tr[data-bought=true]').getByText('Go with the Flow', { exact: true }).count() === 1, 'Buying preview and the purchased shop row agree');
       check(await shop.getByText('1 · 120 SP', { exact: true }).count() === 1 && await editor.getByText('Remove · 50 SP').count() === 1, 'Buying total and Owned debuff removal price are visible');
-      await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+      await allowClipboard(page);
       await shop.getByRole('button', { name: 'Copy list' }).click();
       await shop.getByText('List copied', { exact: true }).waitFor();
       check(await page.evaluate(() => navigator.clipboard.readText()) === 'Go with the Flow — 120 SP', 'Copy list writes plain names and prices');
       await editor.scrollIntoViewIfNeeded();
       await scroll.evaluate(el => { el.scrollTop = 0; });
+      const shopScroll = shop.locator('.shop-scroll');
+      // Font metrics differ across engines: use a shorter window if all offers fit.
+      const fullViewport = page.viewportSize();
+      await shot(page, name('build-with-scan'));
+      if (await shopScroll.evaluate(el => el.scrollHeight <= el.clientHeight)) {
+        await page.setViewportSize({ ...fullViewport, height: fullViewport.height - 160 });
+      }
       const positions = () => page.evaluate(() => ['.build-attributes', '.shop-budget'].map(selector => document.querySelector(selector).getBoundingClientRect().top));
       const pinned = await positions();
-      await shot(page, name('build-with-scan'));
-      const shopScroll = shop.locator('.shop-scroll');
       await shopScroll.evaluate(el => { el.scrollTop = el.scrollHeight; });
       check(await shopScroll.evaluate(el => el.scrollTop > 0) && (await positions()).join(',') === pinned.join(','), 'Attributes and SP stay pinned when offers scroll');
+      await page.setViewportSize(fullViewport);
       await editor.getByRole('button', { name: 'Open skill shop' }).click();
       check(await shop.evaluate(el => el === document.activeElement), 'Open skill shop focuses the main column');
       await shot(page, name('build-available'));
@@ -795,7 +815,8 @@ try {
       await page.close();
     }
   }
-  if (importShopOnly) await importShopShots();
+  if (process.env.DESKTOP_SHOTS_SCENES === 'platform') { /* Run the platform matrix below. */ }
+  else if (importShopOnly) await importShopShots();
   else if (redesignOnly) await staminaRedesignShots();
   else if (importOnly) await importShots();
   else if (drawerOnly) await (await import('./shots-player-drawer.mjs')).runPlayerDrawerShots({ open, nav, shot, check });
@@ -1015,7 +1036,7 @@ try {
     check(await page.locator('#settings-about b').first().innerText() === 'UmaLytics 0.1.0' && await page.locator('#settings-about .about-credits li').count() === 4, 'About shows the app version and bundled data credits');
     await shot(page, `settings-about-${width}x${height}`);
     await page.locator('.content').evaluate(el => { el.scrollTop = 0; });
-    await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+    await allowClipboard(page);
     await page.getByRole('button', { name: 'Copy diagnostics', exact: true }).click();
     await page.getByText('Diagnostics copied', { exact: true }).waitFor();
     check(!/100000000000000|CAS7R1|token|discord/i.test(await page.evaluate(() => navigator.clipboard.readText())), 'Settings diagnostics use the counts-only port screen payload');
@@ -1382,7 +1403,7 @@ try {
     check((await page.locator('.draft-race-table').innerText()).includes('Unknown fixture course'), 'Unknown course preserves raw text');
     await page.getByRole('complementary', { name: 'Build editor' }).getByRole('tab', { name: 'Build', exact: true }).click();
     await shot(page, 'stamina-unknown-draft-' + width + 'x' + height);
-    await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+    await allowClipboard(page);
     await page.getByRole('button', { name: 'Copy diagnostics', exact: true }).click();
     await page.getByText('Diagnostics copied', { exact: true }).waitFor();
     const courseDiagnostic = await page.evaluate(() => navigator.clipboard.readText());
@@ -1520,7 +1541,7 @@ try {
     await missingEngine.getByRole('heading', { name: 'UmaLytics could not load its race data.' }).waitFor();
     check(await missingEngine.getByRole('button', { name: 'Run check', exact: true }).count() === 0, 'Missing engine blocks stamina checks');
     await shot(missingEngine, 'stamina-missing-engine-1000x700');
-    await missingEngine.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+    await allowClipboard(missingEngine);
     await missingEngine.getByRole('button', { name: 'Copy details', exact: true }).click();
     await missingEngine.getByText('Details copied', { exact: true }).waitFor();
     check((await missingEngine.evaluate(() => navigator.clipboard.readText())).includes('engine-data'), 'Copy details includes the IPC error');
@@ -1627,6 +1648,7 @@ try {
   await nav(compact, 'Draft');
   await compact.getByRole('button', { name: 'Compact', exact: true }).click();
   await compact.evaluate(async () => { const c = window.__SHOT_CONTROL__, m = c.draftMessage(false, 1002); m.roomCode = 'XYZ789'; m.event.matchId = 'XYZ789'; await c.emit('feed-message', m); });
+  await compact.locator('.compact-stamina-strip').waitFor({ state: 'hidden' });
   check(await compact.locator('.compact-stamina-strip').count() === 0, 'Draft runs never leak to another match');
   await compact.getByRole('button', { name: 'Pin on top', exact: true }).click();
   check(await compact.getByRole('button', { name: 'Pin on top', exact: true }).getAttribute('aria-pressed') === 'true', 'Pin toggled');
@@ -1702,7 +1724,7 @@ try {
         if (scene === 'draft-loading') await state.locator('.draft-loading').waitFor();
         await shot(state, `draft-${scene}-${width}x${height}`);
         if (scene === 'port-in-use') {
-          await state.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+          await allowClipboard(state);
           await state.getByRole('button', { name: 'Copy diagnostics', exact: true }).click();
           await state.getByText('Diagnostics copied', { exact: true }).waitFor();
           const diagnostic = await state.evaluate(() => navigator.clipboard.readText());
@@ -1736,6 +1758,9 @@ try {
   if (!staminaOnly && !arenaOnly && !statesOnly && !dataOnly && !usabilityOnly) await (await import('./shots-updater.mjs')).runUpdateShots({ open, nav, shot, check });
   if (!staminaOnly && !arenaOnly && !statesOnly && !dataOnly && !usabilityOnly) await (await import('./shots-blessing.mjs')).runBlessingShots({ open, nav, shot, check });
   if (!staminaOnly && !arenaOnly && !statesOnly && !dataOnly && !usabilityOnly) await runDesktopPrepShots({ open, nav, shot, check });
+  }
+  if (!process.env.DESKTOP_SHOTS_SCENES || process.env.DESKTOP_SHOTS_SCENES === 'platform') {
+    await (await import('../../../tests/support/desktop-platform-shots.mjs')).runPlatformShots({ open, nav, shot, check });
   }
   check(failures.length === 0, failures.join('\n'));
   console.log(`${checks} checks passed; screenshots: ${out}`);

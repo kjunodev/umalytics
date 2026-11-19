@@ -3,7 +3,7 @@
 [![Verify build](https://github.com/kjunodev/umalytics/actions/workflows/verify.yml/badge.svg)](https://github.com/kjunodev/umalytics/actions/workflows/verify.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-A scouting companion for [Uma Drafter](https://drafter.uma.guide), as a browser extension or a Windows desktop app. It shows who you are playing, how they perform and what the draft looks like, and the desktop app adds a stamina checker for your own builds.
+A scouting companion for [Uma Drafter](https://drafter.uma.guide), as a browser extension or a Windows and macOS desktop app. It shows who you are playing, how they perform and what the draft looks like, and the desktop app adds a stamina checker for your own builds.
 
 ![The UmaLytics lobby with a player's details open: stats, an Uma table and match history](docs/images/lobby-drawer.png)
 
@@ -16,7 +16,7 @@ A scouting companion for [Uma Drafter](https://drafter.uma.guide), as a browser 
 | Chrome, Edge, Brave, Opera GX | [Chromium ZIP](https://github.com/kjunodev/umalytics/releases/tag/v0.5.5), loaded as an unpacked extension |
 | Firefox 128 or later, LibreWolf | [Firefox ZIP](https://github.com/kjunodev/umalytics/releases/tag/v0.5.5), loaded as a temporary add-on (unsigned, so load it again after a browser restart) |
 
-**Desktop app (Windows, beta):** download `UmaLytics_<version>_x64-setup.exe` from the newest entry in [desktop releases](https://github.com/kjunodev/umalytics/releases?q=desktop&expanded=true) and run it. It updates itself after that. It shows your Uma Drafter room live when local sharing is turned on in Uma Drafter, and includes the stamina checker, Players, History and the Umas catalog.
+**Desktop app (Windows and macOS, beta):** Windows users download `UmaLytics_<version>_x64-setup.exe` from the newest entry in [desktop releases](https://github.com/kjunodev/umalytics/releases?q=desktop&expanded=true) and run it. For macOS 14 or later (Apple Silicon and Intel), download the universal `.dmg` and drag UmaLytics into Applications before opening it. See the first-launch instructions below. It updates itself after that. Screenshot import is Windows only. It shows your Uma Drafter room live when local sharing is turned on in Uma Drafter, and includes the stamina checker, Players, History and the Umas catalog.
 
 Step-by-step instructions: [Install or update UmaLytics](docs/INSTALL.md). Release history: [CHANGELOG](CHANGELOG.md) for the extension, [desktop releases](https://github.com/kjunodev/umalytics/releases?q=desktop&expanded=true) for the app.
 

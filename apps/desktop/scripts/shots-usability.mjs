@@ -23,7 +23,7 @@ export async function runUsabilityShots({ open, nav, shot, check }) {
     await page.evaluate(async () => { const c = window.__SHOT_CONTROL__, m = structuredClone(c.messages.at(-1)); m.event.version = 4000; await c.emit('feed-message', m); });
     check(await page.getByRole('group', { name: 'Live view' }).getByRole('button', { name: 'Umas', exact: true }).getAttribute('aria-pressed') === 'true', 'Manual choice survives updates in the same phase');
     await page.evaluate(async () => { const c = window.__SHOT_CONTROL__, m = structuredClone(c.messages.at(-1)); m.event.version = 4001; m.event.state.phase = 'map-pick'; await c.emit('feed-message', m); });
-    await page.getByRole('group', { name: 'Live view' }).getByRole('button', { name: 'Draft', exact: true }).waitFor();
+    await page.locator('[aria-label="Live view"] button[aria-pressed="true"]').filter({ hasText: /^Draft$/ }).waitFor();
     check(await page.getByRole('group', { name: 'Live view' }).getByRole('button', { name: 'Draft', exact: true }).getAttribute('aria-pressed') === 'true', 'Phase changes follow the draft');
     await nav(page, 'Lobby');
     await page.getByRole('button', { name: 'Open details for Replay Player 1', exact: true }).click();
@@ -52,6 +52,7 @@ export async function runUsabilityShots({ open, nav, shot, check }) {
     await page.keyboard.press('Escape');
     check(await page.locator('.arena-card-hit').first().evaluate(el => el === document.activeElement), 'Escape restores focus to the player card');
     await page.locator('.arena-card .team-icon img').first().evaluate(img => img.dispatchEvent(new Event('error')));
+    await page.waitForFunction(() => document.querySelectorAll('.arena-card .team-icon').length === 9);
     check(await page.locator('.arena-card .team-icon').count() === 9, 'Failed logos render nothing');
     const start = await page.evaluate(() => window.__SHOT_CONTROL__.calls.length);
     await nav(page, 'Players'); await page.locator('.table-player').first().waitFor();

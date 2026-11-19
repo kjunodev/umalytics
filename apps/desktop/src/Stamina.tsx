@@ -325,7 +325,7 @@ export function Stamina({ draft, openDraft = 0, view, onViewChange, onDraftRunCh
           {input.importUndo && <button type="button" disabled={running} onClick={() => { setInput(undoScreenshotBuild); openBuild('build'); }}>Undo import</button>}
       </div>}
       <div className="drawer-tabs" role="tablist" aria-label="Build panel">{(Object.keys(buildTabLabels) as BuildTab[]).map(tab =>
-        <button key={tab} id={`build-tab-${tab}`} type="button" role="tab" disabled={running} aria-selected={buildTab === tab} aria-controls="stamina-build-tab" onClick={() => openBuild(tab)}>{buildTabLabels[tab]}</button>)}</div>
+        <button key={tab} id={`build-tab-${tab}`} type="button" role="tab" disabled={running} aria-selected={buildTab === tab} aria-controls="stamina-build-tab" onClick={event => { event.currentTarget.focus(); openBuild(tab); }}>{buildTabLabels[tab]}</button>)}</div>
       <div key={buildTab} className="build-body" id="stamina-build-tab" role="tabpanel" aria-labelledby={`build-tab-${buildTab}`}>
         {buildTab === 'build' ? <>
           <fieldset disabled={running} className="build-controls build-attributes" aria-label="Attributes">

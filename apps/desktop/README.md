@@ -58,11 +58,13 @@ are disabled, and requests identify `UmaLytics-Desktop/<version>`. Persistent
 profile storage uses the store plugin; session caches remain in memory.
 History never supplies statistics or badges.
 
-Frontend screenshots and interaction checks run locally with mocked Tauri IPC:
+Frontend screenshots and interaction checks use mocked Tauri IPC, locally and in Windows CI:
 
 ```powershell
 pnpm --version # must be 9.15.4, with the PATH above
-pnpm --filter @umalytics/desktop exec playwright install chromium
+pnpm --filter @umalytics/desktop exec playwright install chromium webkit
+pnpm --filter @umalytics/desktop shots
+$env:DESKTOP_SHOTS_BROWSER = 'webkit'
 pnpm --filter @umalytics/desktop shots
 ```
 
@@ -72,13 +74,13 @@ and Stamina at 1280×800 and 1000×700, compact Lobby/drawer/Draft at 440×860,
 the 5/4/3/2-column Lobby layouts, all live feed states and the three Draft phases.
 Pick order is shown only when the received snapshot includes complete explicit
 Uma pick history; per-team slot numbers never establish global order.
-Screenshots go to `.shots/` (or `DESKTOP_SHOTS_DIR`). It rejects horizontal
+Screenshots go to `.shots/chromium/` or `.shots/webkit/` (or `DESKTOP_SHOTS_DIR`). The platform matrix covers every main screen, the Uma and player dialogs, and the race popover at both full window sizes and Small/Default/Large UI sizes, with screenshot import unsupported. Use `DESKTOP_SHOTS_SCENES=platform` for that matrix alone. It rejects horizontal
 overflow, unexpected column counts, clipped text (including every
 select option), unexpected external requests, and page errors, and
 checks scope changes, persistence, skill editing, stale results and cancellation.
 All replay accounts and simulation results in this harness are synthetic.
 Window resizing and pin checks use mocked IPC; verify actual OS behavior in
-`tauri dev` before release. These checks are not part of CI.
+`tauri dev` before release. WebKit clipboard payload checks use an in-memory clipboard because Playwright WebKit has no clipboard permission API; verify the native clipboard on macOS.
 
 ```powershell
 cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml --locked
@@ -86,9 +88,10 @@ cargo clippy --manifest-path apps/desktop/src-tauri/Cargo.toml --locked -- -D wa
 ```
 
 `pnpm build:all` builds only the two extension targets.
-`pnpm build:desktop` builds the desktop frontend, independently versioned at 0.1.0.
-Native builds use the Tauri CLI and create a per-user Windows NSIS installer.
-Updater artifacts are signed with the Tauri updater key. Beta installers have no Authenticode signature.
+`pnpm build:desktop` builds the independently versioned desktop frontend.
+Native builds use the Tauri CLI: Windows produces the per-user NSIS installer.
+On macOS, install both Rust targets with `rustup target add aarch64-apple-darwin x86_64-apple-darwin`, then run `pnpm --filter @umalytics/desktop tauri build --target universal-apple-darwin` to produce a universal app and DMG for macOS 14+. The platform config is merged automatically; Windows settings stay in `tauri.conf.json`.
+Updater artifacts are signed with the Tauri updater key. Windows installers have no Authenticode signature; the macOS app is ad-hoc signed and not notarized. The independent macOS CI job builds the universal app with updater artifacts disabled, without signing secrets.
 
 Arena tokens and font faces live in `src/tokens.css`; desktop styles live in
 `src/arena.css`. Saira Condensed, Barlow and Geist Mono are bundled under
@@ -220,7 +223,7 @@ measurement fixture, not a toolbar choice. Average remains the default.
    The script updates the Cargo pin and lockfile, prepares the bundled engine
    resources, and lists skill and card changes. Add `--refresh-gametora` to
    update the bundled skill metadata, icons, and source credits.
-4. Run the desktop checks, including `pnpm --filter @umalytics/desktop test`,
+4. Run the desktop checks, including `pnpm test`,
    and verify the new card and unique in the Build tab. Follow the desktop
    release procedure when the data update is scheduled for release.
 
@@ -236,7 +239,7 @@ Never commit the private key. The public key in `tauri.conf.json` is safe to com
    rejects drift. Add `release-notes/<version>.md` with user-facing changes.
 2. Merge the reviewed change to `main`. **Build desktop release** runs on a
    desktop package change, or can be dispatched on `main`. It creates a draft
-   `desktop-v<version>` containing the NSIS installer, `.sig`, and `latest.json`.
+   `desktop-v<version>` containing the NSIS installer, universal macOS DMG, signed `.app.tar.gz`, signatures, and `latest.json`. The prepare job creates the draft once; Windows builds first, then macOS merges its platforms into the same draft manifest.
    A published version is immutable; retries of an existing draft use its original
    source commit. The extension release and GitHub latest release stay untouched.
 3. Install the previous desktop version. Download the draft installer while
@@ -244,7 +247,7 @@ Never commit the private key. The public key in `tauri.conf.json` is safe to com
    preferences, stamina checks and skill icons. Use a clean Windows user profile
    with no development folders or `UMALYTICS_GAMEDATA_DIR`. Check that the app
    installs under `%LOCALAPPDATA%` without an administrator prompt. Draft download
-   URLs are private: the public update feed cannot serve a draft.
+   URLs are private: the public update feed cannot serve a draft. On macOS, test on a clean profile without development data, drag the app into Applications before launching it, and verify the same saved-data and update behavior on Apple Silicon and Intel. See [installation instructions](../../docs/INSTALL.md) for first-launch approval.
 4. Before publishing, verify the actual signed updater path on an isolated test
    machine: install the previous build, serve the draft installer, signature and
    manifest from a temporary HTTPS endpoint, and use a test-only build of that
@@ -253,20 +256,20 @@ Never commit the private key. The public key in `tauri.conf.json` is safe to com
    behavior. Do not change the permanent feed for this test or commit the endpoint.
 5. After Sean has tested the draft, run **Publish desktop update** on `main` with
    the exact version. It publishes `desktop-v<version>` as non-latest, validates
-   versioned NSIS URLs and signature assets, then copies `latest.json` with
+   the required signed Windows NSIS entries and any macOS entries (both architectures and their `-app` aliases must reference this release’s signed `.app.tar.gz`), then copies every validated platform in `latest.json` with
    `--clobber` to the published, non-latest **Desktop updater feed** release
    (`desktop-updater`). A retry repairs the feed if publishing succeeded but the
    upload failed. Older versions cannot replace a newer feed.
 6. Confirm the permanent feed and perform an update from the previous production
    version. Never publish a version again with different bytes.
 
-The release runner uses Node 24, pnpm 9.15.4, Windows Rust MSVC, and the GitHub
+The release runners use Node 24, pnpm 9.15.4, Windows Rust MSVC or macOS Rust with both Apple targets, and the GitHub
 secrets `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`.
 Local installer builds use `pnpm.cmd --filter @umalytics/desktop tauri build`;
 without a local signing key, the installer may build but signed artifacts cannot
 be validated. Never substitute a new production key for local testing.
 
-Beta installers are unsigned: Windows SmartScreen may show **More info → Run
+Windows beta installers are unsigned: SmartScreen may show **More info → Run
 anyway** when a downloaded installer is manually launched. In-app updates verify
 the Tauri signature. This does not give the installer Authenticode reputation.
 

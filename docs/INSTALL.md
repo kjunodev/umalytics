@@ -8,6 +8,17 @@
 
 Updates download in the background and show an Update and restart banner. An update waits until the current live room ends, and Restart now is always available. To uninstall, use Windows' Installed apps list.
 
+## Desktop app (macOS 14 or later)
+
+The universal app supports Apple Silicon and Intel Macs. Screenshot import and game capture are Windows only; the other desktop features are available on macOS.
+
+1. Download the universal `.dmg` from [desktop releases](https://github.com/kjunodev/umalytics/releases?q=desktop&expanded=true).
+2. Open the disk image and drag **UmaLytics into Applications before opening it**. Running from the disk image prevents in-app updates from installing.
+3. Open UmaLytics from Applications. The beta is ad-hoc signed but not notarized, so macOS blocks the first launch. Open **System Settings > Privacy & Security**, click **Open Anyway**, and confirm once.
+4. To see your room live, turn on local sharing in Uma Drafter and join a room.
+
+Updates use the same Update and restart banner as on Windows. To uninstall, quit UmaLytics and move it from Applications to the Trash. For stored data locations, see [Privacy](../PRIVACY.md#desktop-app).
+
 ## Browser extension
 
 Download the Chromium or Firefox package linked from the README. Extract it into a permanent folder; manifest.json is at the root of the extracted package.

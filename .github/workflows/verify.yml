@@ -20,9 +20,9 @@ jobs:
           HEAD: ${{ github.sha }}
         run: |
           if [[ -z "$BASE" || "$BASE" =~ ^0+$ ]]; then
-            paths=$(git ls-tree -r --name-only "$HEAD" -- apps/desktop/ packages/core/)
+            paths=$(git ls-tree -r --name-only "$HEAD" -- apps/desktop/ packages/core/ packages/shared/ packages/ui/ tests/desktop* tests/support/desktop* .github/workflows/verify.yml .github/workflows/desktop-release.yml)
           else
-            paths=$(git diff --name-only "$BASE" "$HEAD" -- apps/desktop/ packages/core/)
+            paths=$(git diff --name-only "$BASE" "$HEAD" -- apps/desktop/ packages/core/ packages/shared/ packages/ui/ tests/desktop* tests/support/desktop* .github/workflows/verify.yml .github/workflows/desktop-release.yml)
           fi
           if [[ -n "$paths" ]]; then echo "changed=true" >> "$GITHUB_OUTPUT"; fi
   desktop:
@@ -46,6 +46,45 @@ jobs:
           workspaces: apps/desktop/src-tauri -> target
       - run: cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml --locked
       - run: cargo clippy --manifest-path apps/desktop/src-tauri/Cargo.toml --locked -- -D warnings
+      - run: pnpm --filter @umalytics/desktop exec playwright install chromium webkit
+      - name: Desktop Chromium and WebKit layout
+        run: |
+          pnpm --filter @umalytics/desktop shots
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $env:DESKTOP_SHOTS_BROWSER = 'webkit'
+          pnpm --filter @umalytics/desktop shots
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: desktop-layout-shots
+          path: apps/desktop/.shots
+          if-no-files-found: ignore
+          include-hidden-files: true
+          retention-days: 7
+  desktop-macos:
+    needs: desktop-changes
+    if: needs.desktop-changes.outputs.changed == 'true'
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 9.15.4
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/desktop/src-tauri -> target
+      - run: pnpm install --frozen-lockfile
+      - run: node apps/desktop/scripts/prepare-resources.mjs
+      - run: cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml --locked
+      - name: Build universal app without updater signing secrets
+        run: pnpm --filter @umalytics/desktop tauri build --target universal-apple-darwin --bundles app --config '{"bundle":{"createUpdaterArtifacts":false}}'
   verify:
     runs-on: ubuntu-latest
     steps:
