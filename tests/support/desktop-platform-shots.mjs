@@ -39,7 +39,11 @@ export async function runPlatformShots({ open, nav, shot, check }) {
       await page.getByText('Replay Champion', { exact: true }).waitFor();
       await shot(page, `platform-player-dialog-${suffix}`);
       await page.keyboard.press('Escape');
-      check(await player.evaluate(element => element === document.activeElement), 'Closing player details restores focus to the card in WebKit');
+      // The drawer hands focus back in its unmount cleanup; wait for that instead of racing it.
+      await page.getByText('Replay Champion', { exact: true }).waitFor({ state: 'hidden' });
+      const restored = await page.waitForFunction(element => element === document.activeElement, await player.elementHandle(), { timeout: 2000 })
+        .then(() => true, () => false);
+      check(restored, 'Closing player details restores focus to the card in WebKit');
       await page.close();
     }
   }
