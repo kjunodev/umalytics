@@ -9,7 +9,8 @@ const scene = window.__SHOT_SCENE__ ?? 'lobby';
 const forcedBy = scene === 'experimental-debug' ? 'debug' : null;
 const screenshotImportSetting = () => {
   const saved = (localStorage.getItem('shots:screenshot-import') ?? (scene === 'experimental-scan' ? 'true' : 'false')) === 'true';
-  return { saved, enabled: saved || !!forcedBy, forcedBy };
+  const supported = !scene.startsWith('unsupported-');
+  return { supported, saved, enabled: supported && (saved || !!forcedBy), forcedBy };
 };
 const requests = new Map();
 const stores = new Map([[1, 'shell.json'], [2, 'profiles.json']]);
@@ -24,7 +25,13 @@ const draftMessage = (partial, version = 1001) => {
   const side = team => ({ pickedMaps: snapshot.teams[team].maps.map(raw), bannedMaps: [], pickedUmas: [], bannedUmas: [], preBannedUmas: [] });
   return { v: 1, roomCode: 'ABC123', event: { type: 'match.snapshot', matchId: 'ABC123', version, state: { phase: snapshot.phase, team1: side('team1'), team2: side('team2'), wildcardMap: snapshot.tiebreakerMap ? raw(snapshot.tiebreakerMap) : undefined } } };
 };
-window.__SHOT_CONTROL__ = { calls, emit, draftMessage, messages, slow: false, feedReady: false };
+// Manual fixture events resolve after React can commit and run its effects.
+// IPC delivery alone does not mean that the rendered state has caught up.
+const emitAfterRender = async (...args) => {
+  await emit(...args);
+  await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+};
+window.__SHOT_CONTROL__ = { calls, emit: emitAfterRender, draftMessage, messages, slow: false, feedReady: false };
 mockWindows('main');
 mockConvertFileSrc('windows');
 mockIPC(async (command, args) => {
@@ -65,10 +72,13 @@ mockIPC(async (command, args) => {
   }
   if (command === 'get_screenshot_import_setting') return screenshotImportSetting();
   if (command === 'set_screenshot_import_setting') {
+    if (!screenshotImportSetting().supported) throw 'Screenshot import is unsupported on this platform.';
     localStorage.setItem('shots:screenshot-import', String(args.enabled));
     return screenshotImportSetting();
   }
   if (command === 'engine_catalog') {
+    if (scene.startsWith('unsupported-')) return { ...catalog, screenshot_import_enabled: false,
+      local_skill_path: '/Users/Player/Library/Application Support/guide.umalytics.desktop/skill-data' };
     if (scene === 'stamina-missing-engine') throw 'UmaLytics engine data is missing at C:\\UmaLytics\\resources\\engine-data.';
     if (scene === 'stamina-redesign') {
       const extra = releaseOrder.filter(card => card.variant && !screenshotCatalog.umas.some(uma => uma.name === card.name)).slice(0, 60);

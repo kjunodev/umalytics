@@ -16,8 +16,10 @@ test('desktop package is the Tauri version source and Cargo stays in sync', () =
 });
 test('release manifest must reference an existing signed installer on the versioned release', () => {
   const installer = 'UmaLytics_0.1.0_x64-setup.exe';
-  const assets = [installer, `${installer}.sig`, 'latest.json'];
-  const manifest = { version: '0.1.0', notes: 'Notes', platforms: { 'windows-x86_64': { signature: 'signature', url: `https://github.com/kjunodev/umalytics/releases/download/desktop-v0.1.0/${installer}` } } };
+  const archive = 'UmaLytics_universal.app.tar.gz';
+  const assets = [installer, `${installer}.sig`, archive, `${archive}.sig`, 'latest.json'];
+  const asset = name => ({ signature: 'signature', url: `https://github.com/kjunodev/umalytics/releases/download/desktop-v0.1.0/${name}` });
+  const manifest = { version: '0.1.0', notes: 'Notes', platforms: { 'windows-x86_64': asset(installer), 'darwin-aarch64': asset(archive), 'darwin-x86_64': asset(archive) } };
   validateManifest(manifest, '0.1.0', assets);
   assert.throws(() => validateManifest(manifest, '0.2.0', assets));
   assert.throws(() => validateManifest(manifest, '0.1.0', [installer]));

@@ -95,8 +95,9 @@ impl ScreenshotImportAccess {
 
     fn setting(&self, saved: bool) -> ScreenshotImportSetting {
         ScreenshotImportSetting {
+            supported: cfg!(windows),
             saved,
-            enabled: self.enabled(),
+            enabled: cfg!(windows) && self.enabled(),
             forced_by: self.forced_by,
         }
     }
@@ -105,6 +106,7 @@ impl ScreenshotImportAccess {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct ScreenshotImportSetting {
+    supported: bool,
     saved: bool,
     enabled: bool,
     forced_by: Option<ForceSource>,
@@ -124,6 +126,9 @@ pub(crate) fn set_screenshot_import_setting(
     access: tauri::State<'_, ScreenshotImportAccess>,
     enabled: bool,
 ) -> Result<ScreenshotImportSetting, String> {
+    if !cfg!(windows) {
+        return Err("Screenshot import is unsupported on this platform.".into());
+    }
     let mut saved = access.saved.lock().map_err(|error| error.to_string())?;
     write_choice(&settings_path(&app)?, enabled)?;
     *saved = enabled;

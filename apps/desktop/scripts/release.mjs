@@ -25,12 +25,20 @@ export function validateVersion(version) {
 export function validateManifest(manifest, version, assets) {
   if (manifest.version !== version || !manifest.notes?.trim()) throw new Error('Updater manifest version or release notes are missing');
   const platforms = Object.entries(manifest.platforms ?? {});
-  if (!platforms.length) throw new Error('Updater manifest has no platforms');
+  if (!platforms.some(([platform]) => /^windows-x86_64(?:-nsis)?$/.test(platform))) throw new Error('Updater manifest must include a signed Windows NSIS entry');
+  // Both Mac architectures must stay in the feed, or installed Mac copies silently stop updating.
+  for (const required of ['darwin-aarch64', 'darwin-x86_64']) {
+    if (!platforms.some(([platform]) => platform === required)) throw new Error(`Updater manifest must include the macOS ${required} entry`);
+  }
   for (const [platform, item] of platforms) {
-    if (!/^windows-x86_64(?:-nsis)?$/.test(platform)) throw new Error(`Unexpected updater target: ${platform}`);
+    const windows = /^windows-x86_64(?:-nsis)?$/.test(platform);
+    const darwin = /^darwin-(?:aarch64|x86_64)(?:-app)?$/.test(platform);
+    if (!windows && !darwin) throw new Error(`Unexpected updater target: ${platform}`);
     const prefix = `https://github.com/${repository}/releases/download/desktop-v${version}/`;
-    if (!item.url?.startsWith(prefix) || !item.url.endsWith('.exe') || !item.signature?.trim()) throw new Error('Updater must use a signed versioned NSIS asset');
+    const suffix = windows ? '.exe' : '.app.tar.gz';
+    if (!item?.url?.startsWith(prefix) || !item.url.endsWith(suffix) || !item.signature?.trim()) throw new Error(`Updater must use a signed versioned ${windows ? 'NSIS' : 'macOS app archive'} asset`);
     const name = decodeURIComponent(item.url.slice(prefix.length));
+    if (name.includes('/') || name.includes('\\')) throw new Error('Updater asset must be a release filename');
     if (!assets.includes(name) || !assets.includes(`${name}.sig`)) throw new Error('Updater installer or signature asset is missing');
   }
 }
@@ -99,6 +107,7 @@ async function main(command, requestedVersion) {
     const file = `${process.env.RUNNER_TEMP}/latest.json`;
     writeFileSync(file, raw);
     gh('release', 'upload', 'desktop-updater', file, '--clobber', '--repo', repository);
+    console.log(`Published desktop ${version} updater platforms: ${Object.keys(manifest.platforms).join(', ')}`);
   } else throw new Error('Unknown desktop release command');
 }
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) await main(...process.argv.slice(2));

@@ -37,6 +37,31 @@ fn main() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .setup(|app| {
+            #[cfg(target_os = "macos")]
+            {
+                use tauri::menu::{Menu, PredefinedMenuItem, Submenu};
+                let menu = Menu::with_items(app, &[
+                    &Submenu::with_items(app, "UmaLytics", true, &[
+                        &PredefinedMenuItem::about(app, None, None)?,
+                        &PredefinedMenuItem::separator(app)?,
+                        &PredefinedMenuItem::hide(app, None)?,
+                        &PredefinedMenuItem::hide_others(app, None)?,
+                        &PredefinedMenuItem::show_all(app, None)?,
+                        &PredefinedMenuItem::separator(app)?,
+                        &PredefinedMenuItem::quit(app, None)?,
+                    ])?,
+                    &Submenu::with_items(app, "Edit", true, &[
+                        &PredefinedMenuItem::undo(app, None)?,
+                        &PredefinedMenuItem::redo(app, None)?,
+                        &PredefinedMenuItem::separator(app)?,
+                        &PredefinedMenuItem::cut(app, None)?,
+                        &PredefinedMenuItem::copy(app, None)?,
+                        &PredefinedMenuItem::paste(app, None)?,
+                        &PredefinedMenuItem::select_all(app, None)?,
+                    ])?,
+                ])?;
+                app.set_menu(menu)?;
+            }
             resources::initialize(app.path().resource_dir().map_err(|error| error.to_string()));
             app.manage(ScreenshotImportAccess::load(app.handle()));
             Ok(())

@@ -15,6 +15,9 @@ fn screenshot_import_respects_the_saved_choice_and_both_overrides() {
             assert!(debug.enabled());
             assert_eq!(debug.setting(saved).forced_by, Some(ForceSource::Debug));
             assert_eq!(release.setting(saved).saved, saved);
+            assert_eq!(release.setting(saved).supported, cfg!(windows));
+            assert_eq!(release.setting(saved).enabled, cfg!(windows) && release.enabled());
+            assert_eq!(debug.setting(saved).enabled, cfg!(windows));
         }
     }
 }
