@@ -26,6 +26,10 @@ export function validateManifest(manifest, version, assets) {
   if (manifest.version !== version || !manifest.notes?.trim()) throw new Error('Updater manifest version or release notes are missing');
   const platforms = Object.entries(manifest.platforms ?? {});
   if (!platforms.some(([platform]) => /^windows-x86_64(?:-nsis)?$/.test(platform))) throw new Error('Updater manifest must include a signed Windows NSIS entry');
+  // Both Mac architectures must stay in the feed, or installed Mac copies silently stop updating.
+  for (const required of ['darwin-aarch64', 'darwin-x86_64']) {
+    if (!platforms.some(([platform]) => platform === required)) throw new Error(`Updater manifest must include the macOS ${required} entry`);
+  }
   for (const [platform, item] of platforms) {
     const windows = /^windows-x86_64(?:-nsis)?$/.test(platform);
     const darwin = /^darwin-(?:aarch64|x86_64)(?:-app)?$/.test(platform);

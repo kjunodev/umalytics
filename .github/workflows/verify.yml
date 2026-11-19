@@ -83,8 +83,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: node apps/desktop/scripts/prepare-resources.mjs
       - run: cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml --locked
-      - name: Build universal app without updater signing secrets
-        run: pnpm --filter @umalytics/desktop tauri build --target universal-apple-darwin --bundles app --config '{"bundle":{"createUpdaterArtifacts":false}}'
+      - name: Build universal app and disk image without updater signing secrets
+        run: pnpm --filter @umalytics/desktop tauri build --target universal-apple-darwin --bundles app,dmg --config '{"bundle":{"createUpdaterArtifacts":false}}'
   verify:
     runs-on: ubuntu-latest
     steps:

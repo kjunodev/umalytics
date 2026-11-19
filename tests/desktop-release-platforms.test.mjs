@@ -16,11 +16,21 @@ const universal = () => ({ ...manifest(), platforms: { ...manifest().platforms,
   'darwin-aarch64-app': entry(archive), 'darwin-x86_64-app': entry(archive),
 } });
 
-test('desktop updater accepts Windows alone and Windows plus both universal macOS targets', () => {
-  validateManifest(manifest(), version, assets);
+test('desktop updater accepts Windows plus both universal macOS targets', () => {
   validateManifest(universal(), version, assets);
   for (const platform of ['windows-x86_64', 'windows-x86_64-nsis']) {
-    validateManifest({ ...manifest(), platforms: { [platform]: entry(installer) } }, version, assets);
+    const { platforms } = universal();
+    const other = platform === 'windows-x86_64' ? 'windows-x86_64-nsis' : 'windows-x86_64';
+    delete platforms[other];
+    validateManifest({ ...universal(), platforms }, version, assets);
+  }
+});
+
+test('a feed without both macOS architectures is rejected so Mac copies keep updating', () => {
+  assert.throws(() => validateManifest(manifest(), version, assets), /macOS darwin-aarch64 entry/);
+  for (const platform of ['darwin-aarch64', 'darwin-x86_64']) {
+    const missing = universal(); delete missing.platforms[platform];
+    assert.throws(() => validateManifest(missing, version, assets), new RegExp(`macOS ${platform} entry`));
   }
 });
 
